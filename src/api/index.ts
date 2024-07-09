@@ -1,7 +1,10 @@
 import express, { Express, Request, Response } from "express";
+import dotenv from 'dotenv'
+
+dotenv.config();
 
 const app: Express = express();
-const port = 3000;
+const port = process.env.SERVER_PORT;
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Express + TypeScript on Vercel Server");
