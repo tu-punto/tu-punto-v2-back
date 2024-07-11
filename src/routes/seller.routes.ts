@@ -5,7 +5,7 @@ sellerRouter.get('/', (req: Request, res: Response) => {
     res.send("GET Sellers")
 })
 
-sellerRouter.post('/registerSeller', (req: Request, res: Response) => {
+sellerRouter.post('/register', (req: Request, res: Response) => {
     res.send("POST Sellers")
 })
 
