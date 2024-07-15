@@ -1,12 +1,9 @@
 import { Request, Response, Router } from "express";
+import { getSellers, registerSeller } from "../controllers/seller.controller";
 
 const sellerRouter = Router();
-sellerRouter.get('/', (req: Request, res: Response) => {
-    res.send("GET Sellers")
-})
+sellerRouter.get('/', getSellers)
 
-sellerRouter.post('/register', (req: Request, res: Response) => {
-    res.send("POST Sellers")
-})
+sellerRouter.post('/register', registerSeller)
 
 export default sellerRouter;

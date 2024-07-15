@@ -9,6 +9,7 @@ import { ComprobanteEntradaEntity } from './ComprobanteEntradaEntity';
 import { ComprobantePago } from '../../models/ComprobantePago';
 import { TrabajadorEntity } from './TrabajadorEntity';
 import { PedidoEntity } from './PedidoEntity';
+import { ComprobantePagoEntity } from './ComprobantePagoEntity';
 
 @Entity({name:'Vendedor'})
 export class VendedorEntity implements IVendedor{
@@ -67,13 +68,14 @@ export class VendedorEntity implements IVendedor{
     @Column()
     deuda!: number;
 
-    @Column({nullable:false})
+    // TODO PONER NULLABLE EN FALSE
+    @Column({nullable:true})
     id_Trabajador!: number;
 
     @OneToMany(() => ComprobanteEntradaEntity, comprobanteEntradaEntity => comprobanteEntradaEntity.vendedor)
     comprobante_Entrada!: IComprobanteEntrada[];
 
-    @OneToMany(() => ComprobantePago, comprobantePago => comprobantePago.vendedor)
+    @OneToMany(() => ComprobantePagoEntity, comprobantePago => comprobantePago.vendedor)
     comprobante_Pago!: IComprobantePago[];
 
     @ManyToOne(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.vendedor)
