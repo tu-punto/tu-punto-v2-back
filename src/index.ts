@@ -1,9 +1,9 @@
 import express, { Express, Request, Response } from "express";
 import dotenv from 'dotenv'
+import cors from 'cors'
 import sellerRouter from "./routes/seller.routes";
 import productRouter from "./routes/products.routes";
 import AppDataSource from "./config/dataSource";
-import { json } from "stream/consumers";
 
 dotenv.config();
 
@@ -12,6 +12,7 @@ AppDataSource.initialize().then(() => {
   const port = process.env.SERVER_PORT;
 
   app.use(express.json())
+  app.use(cors())
  
   app.use('/seller',sellerRouter)
   app.use('/product',productRouter)
