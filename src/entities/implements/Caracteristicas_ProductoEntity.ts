@@ -9,7 +9,7 @@ import { CaracteristicasEntity } from './CaracteristicasEntity';
 export class Caracteristicas_ProductoEntity implements ICaracteristicas_Producto{
     
     @PrimaryColumn({nullable:false})
-    id_Caracteristica!: number;
+    id_Caracteristicas!: number;
 
     @PrimaryColumn({nullable:false})
     id_Producto!: number;
