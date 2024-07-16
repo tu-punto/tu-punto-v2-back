@@ -38,22 +38,22 @@ export class VendedorEntity implements IVendedor{
     @Column({type: 'varchar'})
     mail!: string;
 
-    @Column()
+    @Column({ default: 0 })
     alquiler!: number;
 
-    @Column()
+    @Column({ default: 0 })
     exhibicion!: number;
 
-    @Column()
+    @Column({ default: 0 })
     delivery!: number;
 
-    @Column()
+    @Column({ default: 0 })
     adelanto_servicio!: number;
 
-    @Column()
+    @Column({ default: 0 })
     comision_porcentual!: number;
 
-    @Column()
+    @Column({ default: 0 })
     comision_fija!: number;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
@@ -65,11 +65,10 @@ export class VendedorEntity implements IVendedor{
     @Column()
     almacen_caja!: number;
 
-    @Column()
+    @Column({ default: 0 })
     deuda!: number;
 
-    // TODO PONER NULLABLE EN FALSE
-    @Column({nullable:true})
+    @Column({nullable: false})
     id_Trabajador!: number;
 
     @OneToMany(() => ComprobanteEntradaEntity, comprobanteEntradaEntity => comprobanteEntradaEntity.vendedor)
