@@ -14,6 +14,9 @@ export class Caracteristicas_ProductoEntity implements ICaracteristicas_Producto
     @PrimaryColumn({nullable:false})
     id_Producto!: number;
 
+    @Column({nullable: false})
+    value!: string;
+
     @OneToMany(() => CaracteristicasEntity, caracteristicas => caracteristicas.caracteristicas_Producto)
     @JoinColumn({ name: 'id_Caracteristica'})
     caracteristicas!: ICaracteristicas[];

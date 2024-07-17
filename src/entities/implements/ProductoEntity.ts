@@ -33,18 +33,14 @@ export class ProductoEntity implements IProducto{
     id_Categoria!: number;
     
     @Column({nullable:false})
-    id_Caracteristicas!: number;
-    
-    @Column({nullable:false})
     id_Vendedor!: number;
 
     @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.producto)
     @JoinColumn({ name: 'id_Vendedor'})
     vendedor!: IVendedor;
 
-    @ManyToOne(() => Caracteristicas_ProductoEntity, caracteristicas_ProductoEntity => caracteristicas_ProductoEntity.producto)
-    @JoinColumn({ name: 'id_Caracteristicas'})
-    caracteristicas_producto!: ICaracteristicas_Producto;
+    @OneToMany(() => Caracteristicas_ProductoEntity, caracteristicaProducto => caracteristicaProducto.producto)
+    caracteristicas_producto!: ICaracteristicas_Producto[];
     
     @ManyToOne(() => CategoriaEntity, categoriaEntity => categoriaEntity.producto)
     @JoinColumn({ name: 'id_Categoria'})

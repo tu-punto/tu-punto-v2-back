@@ -12,11 +12,10 @@ export class Producto{
     fecha_De_Ingreso: Date;
     imagen: string;
     id_Categoria: number;
-    id_Caracteristicas: number;
     id_Vendedor: number;
 
     vendedor: IVendedor;
-    caracteristicas_producto: ICaracteristicas_Producto;
+    caracteristicas_producto: ICaracteristicas_Producto[];
     categoria: ICategoria;
     venta: IVenta[];
     producto_Sucursal?: IProducto_Sucursal[];
@@ -28,7 +27,6 @@ export class Producto{
         this.fecha_De_Ingreso= iProducto.fecha_De_Ingreso;
         this.imagen= iProducto.imagen;
         this.id_Categoria= iProducto.id_Categoria;
-        this.id_Caracteristicas= iProducto.id_Caracteristicas;
         this.id_Vendedor= iProducto.id_Vendedor;
         this.vendedor= iProducto.vendedor;
         this.caracteristicas_producto= iProducto.caracteristicas_producto;

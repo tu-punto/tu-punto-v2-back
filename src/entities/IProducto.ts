@@ -11,11 +11,10 @@ export interface IProducto{
     fecha_De_Ingreso: Date;
     imagen: string;
     id_Categoria: number;
-    id_Caracteristicas: number;
     id_Vendedor: number;
 
     vendedor: IVendedor;
-    caracteristicas_producto: ICaracteristicas_Producto;
+    caracteristicas_producto: ICaracteristicas_Producto[];
     categoria: ICategoria;
     venta: IVenta[];
     producto_Sucursal?: IProducto_Sucursal[];

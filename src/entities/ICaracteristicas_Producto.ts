@@ -6,6 +6,8 @@ export interface ICaracteristicas_Producto{
     id_Caracteristica: number;
     id_Producto: number;
 
+    value: string;
+
     caracteristicas: ICaracteristicas[];
     producto: IProducto[];
 }
