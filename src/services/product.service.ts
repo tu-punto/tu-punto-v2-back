@@ -1,0 +1,13 @@
+import { ProductRepository } from "../repository/product.repository";
+
+const getAllProducts = async () => {
+    return await ProductRepository.findAll();
+};
+
+const registerProduct = async (product: any) => {
+    return await ProductRepository.registerProduct(product);
+};
+export const ProductService ={
+    getAllProducts,
+    registerProduct
+}
