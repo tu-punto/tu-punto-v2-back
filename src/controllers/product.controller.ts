@@ -23,3 +23,28 @@ export const registerProduct = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 }
+
+export const getFeatures = async (req: Request, res: Response) => {
+    const id:number = parseInt(req.params.id)
+    try{
+        const features = await ProductService.getFeaturesById(id)
+        console.log(features)
+        res.json(features)
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+        
+    }
+}
+
+export const addFeatureToProduct = async (req: Request, res: Response) => {
+    const {productId, featureId, value} = req.body
+    try {
+        const featureProduct = await ProductService.addFeatureToProduct(productId, featureId, value)
+        res.json(featureProduct)
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
+               
+    }
+}
