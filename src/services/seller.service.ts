@@ -1,5 +1,5 @@
 import { Vendedor } from "../models/Vendedor"
-import { SellerRepository } from "../repository/seller.repository"
+import { SellerRepository } from "../repositories/seller.repository"
 
 
 const getAllSellers = async () => {

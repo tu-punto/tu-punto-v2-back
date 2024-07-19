@@ -1,4 +1,4 @@
-import { FeatureRepository } from "../repository/feature.repository";
+import { FeatureRepository } from "../repositories/feature.repository";
 
 const getAllFeatures = async () => {
     return await FeatureRepository.findAll();

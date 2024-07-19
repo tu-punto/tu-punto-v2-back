@@ -1,4 +1,4 @@
-import { ProductRepository } from "../repository/product.repository";
+import { ProductRepository } from "../repositories/product.repository";
 
 const getAllProducts = async () => {
     return await ProductRepository.findAll();
