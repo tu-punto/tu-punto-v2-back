@@ -33,8 +33,6 @@ export class Producto_SucursalEntity implements IProducto_Sucursal{
     @JoinColumn({ name: 'id_Sucursal'})
     sucursal!: ISucursal;
 
-    @OneToMany(() => IngresoEntity, ingresoEntity => ingresoEntity.producto_Sucursal)
-    @JoinColumn({ name: 'id_Ingreso'})
-    ingreso!: IIngreso[];
+    
 
 }

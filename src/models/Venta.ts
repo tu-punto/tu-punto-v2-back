@@ -3,20 +3,17 @@ import { IProducto } from "../entities/IProducto";
 import { IVenta } from "../entities/IVenta";
 
 export class Venta{
-    //dos afk
-    id_Producto: number;
-    id_Pedido: number;
+    idVenta: number
     cantidad: number;
     precio_Unitario: number;
     utilidad: number;
     utilidad_Extra: number;
 
-    producto: IProducto[];
-    pedido: IPedido[];
+    producto: IProducto;
+    pedido: IPedido;
 
     constructor(iVenta: IVenta){
-        this.id_Producto= iVenta.id_Producto;
-        this.id_Pedido= iVenta.id_Pedido;
+        this.idVenta = iVenta.idVenta
         this.cantidad= iVenta.cantidad;
         this.precio_Unitario= iVenta.precio_Unitario;
         this.utilidad= iVenta.utilidad;

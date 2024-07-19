@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn,  Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryColumn,  Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, ManyToMany, JoinTable } from 'typeorm';
 import { IIngreso } from "../IIngreso";
 import { IProducto_Sucursal } from "../IProducto_Sucursal";
 import { Producto_SucursalEntity } from './Producto_SucursalEntity';
@@ -15,7 +15,7 @@ export class IngresoEntity implements IIngreso{
     @Column({type: 'varchar'})
     estado!: string;
 
-    @OneToMany(() => Producto_SucursalEntity, producto_SucursalEntity => producto_SucursalEntity.ingreso)
+    @ManyToMany(() => Producto_SucursalEntity)
+    @JoinTable()
     producto_Sucursal!: IProducto_Sucursal[];
-
 }
