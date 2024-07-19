@@ -4,6 +4,8 @@ import cors from 'cors'
 import sellerRouter from "./routes/seller.routes";
 import productRouter from "./routes/products.routes";
 import AppDataSource from "./config/dataSource";
+import featureRouter from "./routes/feature.routes";
+import categoryRouter from "./routes/category,routes";
 
 dotenv.config();
 
@@ -16,6 +18,8 @@ AppDataSource.initialize().then(() => {
  
   app.use('/seller',sellerRouter)
   app.use('/product',productRouter)
+  app.use('/feature',featureRouter)
+  app.use('/category',categoryRouter)
 
   app.listen(port, () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);
