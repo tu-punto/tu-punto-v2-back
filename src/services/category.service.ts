@@ -1,5 +1,5 @@
-import { CategoryRepository } from "../repository/category.repository"
-import categoryRouter from "../routes/category,routes";
+import { CategoryRepository } from "../repositories/category.repository";
+
 
 const getAllCategories = async () => {
     return await CategoryRepository.findAll();

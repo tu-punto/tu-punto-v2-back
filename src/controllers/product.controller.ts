@@ -61,3 +61,15 @@ export const getProductCategory = async (req: Request, res: Response) => {
         
     }
 }
+
+export const getProductById = async (req: Request, res: Response) => {
+    const {id} = req.params
+    try{
+        const product = await ProductService.getProductById(parseInt(id))
+        res.json(product)
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ msg: 'Internal Server Error', error });
+        
+    }
+}

@@ -1,7 +1,5 @@
-
-import { Caracteristicas } from "../models/Caracteristicas";
-import { FeatureRepository } from "../repository/feature.repository";
-import { ProductRepository } from "../repository/product.repository";
+import { FeatureRepository } from "../repositories/feature.repository";
+import { ProductRepository } from "../repositories/product.repository";
 
 interface Feature{
     feature: string,
