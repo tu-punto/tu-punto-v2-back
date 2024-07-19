@@ -1,21 +1,20 @@
 import { ICaracteristicas } from "../entities/ICaracteristicas";
 import { ICaracteristicas_Producto } from "../entities/ICaracteristicas_Producto";
+import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity";
+import { ProductoEntity } from "../entities/implements/ProductoEntity";
 import { IProducto } from "../entities/IProducto";
 
 export class Caracteristicas_Producto{
-    //las dos fk
-    id_Caracteristicas: number;
-    id_Producto: number;
+    
 
-    caracteristicas: ICaracteristicas[];
-    producto: IProducto[];
-
-    value: string
+    caracteristicaProductoId: number
+    value: string;
+    caracteristica: CaracteristicasEntity
+    producto: ProductoEntity
 
     constructor(iCaracteristicas_Producto: ICaracteristicas_Producto){
-        this.id_Caracteristicas = iCaracteristicas_Producto.id_Caracteristicas;
-        this.id_Producto = iCaracteristicas_Producto.id_Producto;
-        this.caracteristicas = iCaracteristicas_Producto.caracteristicas;
+        this.caracteristicaProductoId = iCaracteristicas_Producto.caracteristicaProductoId
+        this.caracteristica = iCaracteristicas_Producto.caracteristica;
         this.producto = iCaracteristicas_Producto.producto;
         this.value = iCaracteristicas_Producto.value
     }

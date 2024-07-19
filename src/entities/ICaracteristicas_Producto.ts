@@ -1,13 +1,11 @@
 import { ICaracteristicas } from "./ICaracteristicas";
+import { CaracteristicasEntity } from "./implements/CaracteristicasEntity";
+import { ProductoEntity } from "./implements/ProductoEntity";
 import { IProducto } from "./IProducto";
 
 export interface ICaracteristicas_Producto{
-    // Dos fk
-    id_Caracteristicas: number;
-    id_Producto: number;
-
+    caracteristicaProductoId: number
     value: string;
-
-    caracteristicas: ICaracteristicas[];
-    producto: IProducto[];
+    caracteristica: CaracteristicasEntity
+    producto: ProductoEntity
 }
