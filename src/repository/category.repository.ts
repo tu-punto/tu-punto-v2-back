@@ -15,7 +15,16 @@ const registerCategory = async (category: ICategoria): Promise<Categoria> => {
     return new Categoria(savedCategory);
 }
 
+const getCategoryById = async(id: number) => {
+    return await categoryRepository.findOne({
+        where: {
+            id_Categoria: id
+        }
+    })
+}
+
 export const CategoryRepository = {
     findAll,
-    registerCategory
+    registerCategory,
+    getCategoryById
 };

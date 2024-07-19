@@ -56,9 +56,17 @@ const addFeatureToProduct = async (productId: number, featureId: number, value: 
 
 }
 
+const getProductById = async (productId: number) => {
+    const product = await ProductRepository.findById(productId)
+    if(!product)
+        throw new Error("Doesn't exist such product with that id")
+    return product
+}
+
 export const ProductService ={
     getAllProducts,
     registerProduct,
     getFeaturesById,
-    addFeatureToProduct
+    addFeatureToProduct,
+    getProductById
 }

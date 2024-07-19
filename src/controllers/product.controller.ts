@@ -1,5 +1,6 @@
-import { Request, Response } from "express";
+import e, { Request, Response } from "express";
 import { ProductService } from "../services/product.service";
+import { CategoryService } from "../services/category.service";
 export const getProduct = async (req: Request, res: Response) =>{
     try {
         const products = await ProductService.getAllProducts();
@@ -28,7 +29,6 @@ export const getFeatures = async (req: Request, res: Response) => {
     const id:number = parseInt(req.params.id)
     try{
         const features = await ProductService.getFeaturesById(id)
-        console.log(features)
         res.json(features)
     } catch (error) {
         console.error(error);
@@ -46,5 +46,18 @@ export const addFeatureToProduct = async (req: Request, res: Response) => {
         console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
                
+    }
+}
+
+export const getProductCategory = async (req: Request, res: Response) => {
+    const {id} = req.params
+    try{
+        const product = await ProductService.getProductById(parseInt(id))
+        const category = await CategoryService.getCategoryById(product.id_Categoria)
+        res.json(category)
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
+        
     }
 }
