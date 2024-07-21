@@ -2,7 +2,7 @@ import { IPedido } from "./IPedido";
 import { IVendedor } from "./IVendedor";
 
 export interface ITrabajador{
-    id_Trabajador: number;
+    id_trabajador: number;
     nombre: string;
     numero: number;
     rol: string;

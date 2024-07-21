@@ -7,7 +7,7 @@ import { ProductoEntity } from './ProductoEntity';
 export class CategoriaEntity implements ICategoria{
     
     @PrimaryGeneratedColumn()
-    id_Categoria!: number;
+    id_categoria!: number;
 
     @Column({type: 'varchar'})
     categoria!: string;

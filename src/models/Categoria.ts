@@ -2,13 +2,13 @@ import { ICategoria } from "../entities/ICategoria";
 import { IProducto } from "../entities/IProducto";
 
 export class Categoria{
-    id_Categoria: number;
+    id_categoria: number;
     categoria: string;
 
     producto?: IProducto[];
 
     constructor(iCategoria: ICategoria){
-        this.id_Categoria= iCategoria.id_Categoria;
+        this.id_categoria= iCategoria.id_categoria;
         this.categoria= iCategoria.categoria;
         this.producto= iCategoria.producto;
     }

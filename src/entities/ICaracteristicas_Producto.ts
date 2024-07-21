@@ -4,7 +4,7 @@ import { ProductoEntity } from "./implements/ProductoEntity";
 import { IProducto } from "./IProducto";
 
 export interface ICaracteristicas_Producto{
-    caracteristicaProductoId: number
+    caracteristica_producto_id: number
     value: string;
     caracteristica: CaracteristicasEntity
     producto: ProductoEntity

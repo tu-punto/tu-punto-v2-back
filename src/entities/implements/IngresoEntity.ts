@@ -7,15 +7,15 @@ import { Producto_SucursalEntity } from './Producto_SucursalEntity';
 export class IngresoEntity implements IIngreso{
 
     @PrimaryGeneratedColumn()
-    id_Ingreso!: number;
+    id_ingreso!: number;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
-    fecha_Ingreso!: Date;
+    fecha_ingreso!: Date;
     
     @Column({type: 'varchar'})
     estado!: string;
 
     @ManyToMany(() => Producto_SucursalEntity)
     @JoinTable()
-    producto_Sucursal!: IProducto_Sucursal[];
+    producto_sucursal!: IProducto_Sucursal[];
 }

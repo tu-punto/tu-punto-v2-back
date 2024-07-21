@@ -15,7 +15,7 @@ import { Producto_SucursalEntity } from './Producto_SucursalEntity';
 export class ProductoEntity implements IProducto{
     
     @PrimaryGeneratedColumn()
-    id_Producto!: number;
+    id_producto!: number;
     
     @Column({type: 'varchar'})
     nombre_producto!: string;
@@ -24,16 +24,16 @@ export class ProductoEntity implements IProducto{
     precio!: number;
     
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
-    fecha_De_Ingreso!: Date;
+    fecha_de_ingreso!: Date;
     
     @Column({type: 'varchar'})
     imagen!: string;
     
     @Column({nullable:false})
-    id_Categoria!: number;
+    id_categoria!: number;
     
     @Column({nullable:false})
-    id_Vendedor!: number;
+    id_vendedor!: number;
 
     @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.producto)
     @JoinColumn({ name: 'id_Vendedor'})
@@ -50,6 +50,6 @@ export class ProductoEntity implements IProducto{
     venta!: IVenta[];
 
     @OneToMany(() => Producto_SucursalEntity, producto_SucursalEntity => producto_SucursalEntity.producto)
-    producto_Sucursal!: IProducto_Sucursal[];
+    producto_sucursal!: IProducto_Sucursal[];
 
 }

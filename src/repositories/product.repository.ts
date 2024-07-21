@@ -18,7 +18,7 @@ const findAll = async (): Promise<ProductoEntity[]> => {
 const findById = async (productoId: number): Promise<ProductoEntity | null> => {
     return await productRepository.findOne({
         where: {
-            id_Producto: productoId
+            id_producto: productoId
         }
     })
 }

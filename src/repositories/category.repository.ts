@@ -18,7 +18,7 @@ const registerCategory = async (category: ICategoria): Promise<Categoria> => {
 const getCategoryById = async(id: number) => {
     return await categoryRepository.findOne({
         where: {
-            id_Categoria: id
+            id_categoria: id
         }
     })
 }

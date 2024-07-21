@@ -53,7 +53,7 @@ export const getProductCategory = async (req: Request, res: Response) => {
     const {id} = req.params
     try{
         const product = await ProductService.getProductById(parseInt(id))
-        const category = await CategoryService.getCategoryById(product.id_Categoria)
+        const category = await CategoryService.getCategoryById(product.id_categoria)
         res.json(category)
     } catch (error) {
         console.log(error);

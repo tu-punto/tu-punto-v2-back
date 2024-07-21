@@ -9,7 +9,7 @@ import { PedidoEntity } from './PedidoEntity';
 export class SucursalEntity implements ISucursal{
 
     @PrimaryGeneratedColumn()
-    id_Sucursal!: number;
+    id_sucursal!: number;
 
     @Column({type: 'varchar'})
     nombre!: string;
@@ -24,10 +24,10 @@ export class SucursalEntity implements ISucursal{
     telefono!: number;
 
     @Column({nullable:false})
-    id_Trabajador!: number;
+    id_trabajador!: number;
 
     @OneToMany(() => Producto_SucursalEntity, producto_SucursalEntity => producto_SucursalEntity.sucursal)
-    producto_Sucursal!: IProducto_Sucursal[];
+    producto_sucursal!: IProducto_Sucursal[];
 
     @ManyToOne(() => PedidoEntity, productoEntity => productoEntity.sucursal)
     @JoinColumn({ name: 'id_Trabajador'})

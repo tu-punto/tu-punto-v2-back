@@ -11,25 +11,25 @@ import { IngresoEntity } from './IngresoEntity';
 export class Producto_SucursalEntity implements IProducto_Sucursal{
     
     @PrimaryColumn({nullable:false})
-    id_Producto!: number;
+    id_producto!: number;
 
     @PrimaryColumn({nullable:false})
-    id_Sucursal!: number;
+    id_sucursal!: number;
 
     @Column({nullable:false})
-    id_Ingreso!: number;
+    id_ingreso!: number;
 
     @Column()
-    cantidad_Por_Sucursal!: number;
+    cantidad_por_sucursal!: number;
     
     @Column()
-    numero_Caja!: number;
+    numero_caja!: number;
 
-    @ManyToOne(() => ProductoEntity, productoEntity => productoEntity.producto_Sucursal)
+    @ManyToOne(() => ProductoEntity, productoEntity => productoEntity.producto_sucursal)
     @JoinColumn({ name: 'id_Producto'})
     producto!: IProducto;
     
-    @ManyToOne(() => SucursalEntity, sucursalEntity => sucursalEntity.producto_Sucursal)
+    @ManyToOne(() => SucursalEntity, sucursalEntity => sucursalEntity.producto_sucursal)
     @JoinColumn({ name: 'id_Sucursal'})
     sucursal!: ISucursal;
 

@@ -7,13 +7,13 @@ import { ICaracteristicas_Producto } from '../ICaracteristicas_Producto';
 export class CaracteristicasEntity implements ICaracteristicas{
     
     @PrimaryGeneratedColumn()
-    id_Caracteristicas!: number;
+    id_caracteristicas!: number;
     
     @Column({type: 'varchar'})
     nombre!: string;
     
     @OneToMany(() => Caracteristicas_ProductoEntity, caracteristicaProducto => caracteristicaProducto.caracteristica)
-    caracteristicas_Producto!: Caracteristicas_ProductoEntity[];
+    caracteristicas_producto!: Caracteristicas_ProductoEntity[];
 
 
 }

@@ -6,32 +6,32 @@ import { IVendedor } from "../entities/IVendedor";
 import { IVenta } from "../entities/IVenta";
 
 export class Producto{
-    id_Producto: number;
+    id_producto: number;
     nombre_producto: string;
     precio: number;
-    fecha_De_Ingreso: Date;
+    fecha_de_ingreso: Date;
     imagen: string;
-    id_Categoria: number;
-    id_Vendedor: number;
+    id_categoria: number;
+    id_vendedor: number;
 
     vendedor: IVendedor;
     caracteristicas_producto: ICaracteristicas_Producto[];
     categoria: ICategoria;
     venta: IVenta[];
-    producto_Sucursal?: IProducto_Sucursal[];
+    producto_sucursal?: IProducto_Sucursal[];
 
     constructor(iProducto: IProducto){
-        this.id_Producto= iProducto.id_Producto;
+        this.id_producto= iProducto.id_producto;
         this.nombre_producto= iProducto.nombre_producto;
         this.precio= iProducto.precio;
-        this.fecha_De_Ingreso= iProducto.fecha_De_Ingreso;
+        this.fecha_de_ingreso= iProducto.fecha_de_ingreso;
         this.imagen= iProducto.imagen;
-        this.id_Categoria= iProducto.id_Categoria;
-        this.id_Vendedor= iProducto.id_Vendedor;
+        this.id_categoria= iProducto.id_categoria;
+        this.id_vendedor= iProducto.id_vendedor;
         this.vendedor= iProducto.vendedor;
         this.caracteristicas_producto= iProducto.caracteristicas_producto;
         this.categoria= iProducto.categoria;
         this.venta= iProducto.venta;
-        this.producto_Sucursal= iProducto.producto_Sucursal; 
+        this.producto_sucursal= iProducto.producto_sucursal; 
     }
 }

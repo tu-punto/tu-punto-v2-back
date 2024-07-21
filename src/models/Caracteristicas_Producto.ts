@@ -5,15 +5,13 @@ import { ProductoEntity } from "../entities/implements/ProductoEntity";
 import { IProducto } from "../entities/IProducto";
 
 export class Caracteristicas_Producto{
-    
-
-    caracteristicaProductoId: number
+    caracteristica_producto_id: number
     value: string;
     caracteristica: CaracteristicasEntity
     producto: ProductoEntity
 
     constructor(iCaracteristicas_Producto: ICaracteristicas_Producto){
-        this.caracteristicaProductoId = iCaracteristicas_Producto.caracteristicaProductoId
+        this.caracteristica_producto_id = iCaracteristicas_Producto.caracteristica_producto_id
         this.caracteristica = iCaracteristicas_Producto.caracteristica;
         this.producto = iCaracteristicas_Producto.producto;
         this.value = iCaracteristicas_Producto.value

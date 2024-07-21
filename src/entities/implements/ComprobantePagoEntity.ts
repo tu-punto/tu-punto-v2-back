@@ -7,7 +7,7 @@ import { VendedorEntity } from './VendedorEntity';
 export class ComprobantePagoEntity implements IComprobantePago{
 
     @PrimaryGeneratedColumn()
-    id_Comprobante_Pago!: number;
+    id_comprobante_pago!: number;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     fecha_emision!: Date;
@@ -25,9 +25,9 @@ export class ComprobantePagoEntity implements IComprobantePago{
     total_adelantos!: number;
 
     @Column({nullable:false})
-    id_Vendedor!: number;
+    id_vendedor!: number;
 
-    @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.comprobante_Pago)
+    @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.comprobante_pago)
     @JoinColumn({ name: 'id_Vendedor'})
     vendedor!: IVendedor;
 }

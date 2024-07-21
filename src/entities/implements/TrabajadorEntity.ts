@@ -9,7 +9,7 @@ import { PedidoEntity } from './PedidoEntity';
 export class TrabajadorEntity implements ITrabajador{
     
     @PrimaryGeneratedColumn()
-    id_Trabajador!: number;
+    id_trabajador!: number;
 
     @Column({type: 'varchar'})
     nombre!: string;

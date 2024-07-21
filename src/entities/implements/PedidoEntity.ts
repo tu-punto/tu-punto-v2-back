@@ -13,55 +13,55 @@ import { TrabajadorEntity } from './TrabajadorEntity';
 export class PedidoEntity implements IPedido{
     
     @PrimaryGeneratedColumn()
-    id_Pedido!: number;
+    id_pedido!: number;
 
     @Column({type: 'varchar'})
-    tipo_De_Pago!: string;
+    tipo_de_pago!: string;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
-    fecha_Pedido!: Date;
+    fecha_pedido!: Date;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
-    hora_Entrega_Acordada!: Date;
+    hora_entrega_acordada!: Date;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
-    hora_Entrega_Real!: Date;
+    hora_entrega_real!: Date;
 
     @Column({type: 'varchar'})
     observaciones!: string;
 
     @Column({type: 'varchar'})
-    lugar_Entrega!: string;
+    lugar_entrega!: string;
 
     @Column()
-    costo_Delivery!: number;
+    costo_delivery!: number;
 
     @Column()
-    cargo_Delivery!: number;
+    cargo_delivery!: number;
 
     @Column({type: 'varchar'})
-    estado_Pedido!: string;
+    estado_pedido!: string;
 
     @Column()
-    adelanto_Cliente!: number;
+    adelanto_cliente!: number;
 
     @Column()
-    pagado_Al_Vendedor!: number;
+    pagado_al_vendedor!: number;
 
     @Column()
-    subtotal_Qr!: number;
+    subtotal_qr!: number;
 
     @Column()
-    subtotal_Efectivo!: number;
+    subtotal_efectivo!: number;
 
     @Column({nullable:false})  
-    id_Vendedor!: number;
+    id_vendedor!: number;
 
     @Column({nullable:false})  
-    id_Trabajador!: number;
+    id_trabajador!: number;
 
     @Column({nullable:false})  
-    id_Sucursal!: number;
+    id_sucursal!: number;
 
     @OneToMany(() => VentaEntity, ventaEntity => ventaEntity.pedido)
     venta!: IVenta[];

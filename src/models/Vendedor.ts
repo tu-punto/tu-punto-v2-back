@@ -6,7 +6,7 @@ import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
 
 export class Vendedor{
-    id_Vendedor: number;
+    id_vendedor: number;
     marca: string;
     nombre: string;
     apellido: string;
@@ -24,16 +24,16 @@ export class Vendedor{
     fecha_vigencia: Date;
     almacen_caja: number;
     deuda: number;
-    id_Trabajador: number;
+    id_trabajador: number;
 
-    comprobante_Entrada?:IComprobanteEntrada[];
-    comprobante_Pago?:IComprobantePago[];
+    comprobante_entrada?:IComprobanteEntrada[];
+    comprobante_pago?:IComprobantePago[];
     trabajador: ITrabajador;
     pedido?: IPedido[];
     producto?: IProducto[];
 
     constructor(iVendedor: IVendedor){
-        this.id_Vendedor= iVendedor.id_Vendedor;
+        this.id_vendedor= iVendedor.id_vendedor;
         this.marca= iVendedor.marca;
         this.nombre= iVendedor.nombre;
         this.apellido= iVendedor.apellido;
@@ -51,9 +51,9 @@ export class Vendedor{
         this.fecha_vigencia= iVendedor.fecha_vigencia;
         this.almacen_caja= iVendedor.almacen_caja;
         this.deuda= iVendedor.deuda;
-        this.id_Trabajador= iVendedor.id_Trabajador;
-        this.comprobante_Entrada= iVendedor.comprobante_Entrada;
-        this.comprobante_Pago= iVendedor.comprobante_Pago;
+        this.id_trabajador= iVendedor.id_trabajador;
+        this.comprobante_entrada= iVendedor.comprobante_entrada;
+        this.comprobante_pago= iVendedor.comprobante_pago;
         this.trabajador= iVendedor.trabajador;
         this.pedido= iVendedor.pedido;
         this.producto= iVendedor.producto;

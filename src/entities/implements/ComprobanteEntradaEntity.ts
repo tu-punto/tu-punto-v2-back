@@ -7,7 +7,7 @@ import { VendedorEntity } from './VendedorEntity';
 export class ComprobanteEntradaEntity implements IComprobanteEntrada{
     
     @PrimaryGeneratedColumn()
-    id_Comprobante_Entrada!: number;
+    id_comprobante_entrada!: number;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     fecha_emision!: Date;
@@ -19,9 +19,9 @@ export class ComprobanteEntradaEntity implements IComprobanteEntrada{
     comprobante_pdf!: string;
 
     @Column({nullable:false})   
-    id_Vendedor!: number;
+    id_vendedor!: number;
 
-    @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.comprobante_Entrada)
+    @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.comprobante_entrada)
     @JoinColumn({ name: 'id_Vendedor'})
     vendedor!: IVendedor;
 

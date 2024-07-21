@@ -9,7 +9,7 @@ const featureRepository = AppDataSource.getRepository(CaracteristicasEntity)
 const findById = async (featureId: number): Promise<CaracteristicasEntity | null> => {
     return featureRepository.findOne({
         where: {
-            id_Caracteristicas: featureId
+            id_caracteristicas: featureId
         }
     })
 }

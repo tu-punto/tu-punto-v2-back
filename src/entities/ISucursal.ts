@@ -2,13 +2,13 @@ import { IPedido } from "./IPedido";
 import { IProducto_Sucursal } from "./IProducto_Sucursal";
 
 export interface ISucursal{
-    id_Sucursal: number;
+    id_sucursal: number;
     nombre: string;
     direccion: string;
     ciudad: string;
     telefono: number;
-    id_Trabajador: number;
+    id_trabajador: number;
 
-    producto_Sucursal?: IProducto_Sucursal[];
+    producto_sucursal?: IProducto_Sucursal[];
     pedido: IPedido;
 }

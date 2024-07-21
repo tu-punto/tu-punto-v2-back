@@ -3,7 +3,7 @@ import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
 
 export class Trabajador{
-    id_Trabajador: number;
+    id_trabajador: number;
     nombre: string;
     numero: number;
     rol: string;
@@ -13,7 +13,7 @@ export class Trabajador{
     pedido?: IPedido[];
 
     constructor(iTrabajador: ITrabajador){
-        this.id_Trabajador= iTrabajador.id_Trabajador;
+        this.id_trabajador= iTrabajador.id_trabajador;
         this.nombre= iTrabajador.nombre;
         this.numero= iTrabajador.numero;
         this.rol= iTrabajador.rol;

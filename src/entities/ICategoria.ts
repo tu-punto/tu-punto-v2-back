@@ -1,7 +1,7 @@
 import { IProducto } from "./IProducto";
 
 export interface ICategoria{
-    id_Categoria: number;
+    id_categoria: number;
     categoria: string;
 
     producto?: IProducto[];

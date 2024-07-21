@@ -15,7 +15,7 @@ import { ComprobantePagoEntity } from './ComprobantePagoEntity';
 export class VendedorEntity implements IVendedor{
     
     @PrimaryGeneratedColumn()
-    id_Vendedor!: number;
+    id_vendedor!: number;
 
     @Column({type: 'varchar'})
     marca!: string;
@@ -69,13 +69,13 @@ export class VendedorEntity implements IVendedor{
     deuda!: number;
 
     @Column({nullable: false})
-    id_Trabajador!: number;
+    id_trabajador!: number;
 
     @OneToMany(() => ComprobanteEntradaEntity, comprobanteEntradaEntity => comprobanteEntradaEntity.vendedor)
-    comprobante_Entrada!: IComprobanteEntrada[];
+    comprobante_entrada!: IComprobanteEntrada[];
 
     @OneToMany(() => ComprobantePagoEntity, comprobantePago => comprobantePago.vendedor)
-    comprobante_Pago!: IComprobantePago[];
+    comprobante_pago!: IComprobantePago[];
 
     @ManyToOne(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.vendedor)
     @JoinColumn({ name: 'id_Trabajador'})

@@ -5,18 +5,18 @@ import { IVendedor } from "./IVendedor";
 import { IVenta } from "./IVenta";
 
 export interface IProducto{
-    id_Producto: number;
+    id_producto: number;
     nombre_producto: string;
     precio: number;
-    fecha_De_Ingreso: Date;
+    fecha_de_ingreso: Date;
     imagen: string;
-    id_Categoria: number;
-    id_Vendedor: number;
+    id_categoria: number;
+    id_vendedor: number;
 
     vendedor: IVendedor;
     caracteristicas_producto: ICaracteristicas_Producto[];
     categoria: ICategoria;
     venta: IVenta[];
-    producto_Sucursal?: IProducto_Sucursal[];
+    producto_sucursal?: IProducto_Sucursal[];
 
 }

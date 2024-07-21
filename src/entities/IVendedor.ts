@@ -5,7 +5,7 @@ import { IProducto } from "./IProducto";
 import { ITrabajador } from "./ITrabajador";
 
 export interface IVendedor{
-    id_Vendedor: number;
+    id_vendedor: number;
     marca: string;
     nombre: string;
     apellido: string;
@@ -24,10 +24,10 @@ export interface IVendedor{
     almacen_caja: number;
     deuda: number;
     //TODO QUITAR LOS NULLS DE ID_TRABAJADOR Y DE TRABAJADOR
-    id_Trabajador: number;
+    id_trabajador: number;
 
-    comprobante_Entrada?:IComprobanteEntrada[];
-    comprobante_Pago?:IComprobantePago[];
+    comprobante_entrada?:IComprobanteEntrada[];
+    comprobante_pago?:IComprobantePago[];
     trabajador: ITrabajador;
     pedido?: IPedido[];
     producto?: IProducto[];

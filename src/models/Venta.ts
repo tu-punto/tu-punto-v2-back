@@ -3,21 +3,21 @@ import { IProducto } from "../entities/IProducto";
 import { IVenta } from "../entities/IVenta";
 
 export class Venta{
-    idVenta: number
+    id_venta: number
     cantidad: number;
-    precio_Unitario: number;
+    precio_unitario: number;
     utilidad: number;
-    utilidad_Extra: number;
+    utilidad_extra: number;
 
     producto: IProducto;
     pedido: IPedido;
 
     constructor(iVenta: IVenta){
-        this.idVenta = iVenta.idVenta
+        this.id_venta = iVenta.id_venta
         this.cantidad= iVenta.cantidad;
-        this.precio_Unitario= iVenta.precio_Unitario;
+        this.precio_unitario= iVenta.precio_unitario;
         this.utilidad= iVenta.utilidad;
-        this.utilidad_Extra= iVenta.utilidad_Extra;
+        this.utilidad_extra= iVenta.utilidad_extra;
         this.producto= iVenta.producto;
         this.pedido= iVenta.pedido;
     }
