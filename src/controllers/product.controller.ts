@@ -38,9 +38,9 @@ export const getFeatures = async (req: Request, res: Response) => {
 }
 
 export const addFeatureToProduct = async (req: Request, res: Response) => {
-    const {productId, featureId, value} = req.body
+    const {productId, feature} = req.body
     try {
-        const featureProduct = await ProductService.addFeatureToProduct(productId, featureId, value)
+        const featureProduct = await ProductService.addFeatureToProduct(productId, feature)
         res.json(featureProduct)
     } catch (error) {
         console.error(error);

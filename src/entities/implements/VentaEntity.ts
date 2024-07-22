@@ -29,7 +29,7 @@ export class VentaEntity implements IVenta{
         referencedColumnName: "id_producto",
         foreignKeyConstraintName: "fk_prod_id"
     })
-    producto!: ProductoEntity
+    producto!: IProducto
 
     @ManyToOne( () => PedidoEntity, (pedido) => pedido.venta)
     @JoinColumn({
@@ -37,6 +37,6 @@ export class VentaEntity implements IVenta{
         referencedColumnName: "id_pedido",
         foreignKeyConstraintName: "fk_ped_id"
     })
-    pedido!: PedidoEntity
+    pedido!: IPedido
 
 }

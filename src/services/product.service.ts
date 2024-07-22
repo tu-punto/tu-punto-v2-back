@@ -1,3 +1,5 @@
+import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity";
+import { Caracteristicas } from "../models/Caracteristicas";
 import { FeatureRepository } from "../repositories/feature.repository";
 import { ProductRepository } from "../repositories/product.repository";
 
@@ -18,39 +20,30 @@ const getFeaturesById = async (productId: number) => {
     const product = await ProductRepository.findById(productId)
     if(!product)
         throw new Error("Doesn't exist such product with that id")
-    const listFeatures = await ProductRepository.getFeatures(product)
+    const features = await FeatureRepository.getFeaturesByProductId(product)
 
-    console.log(listFeatures)
-    const features = new Map<string, string[]>()
-    for(let feature of listFeatures){
-        if(feature.producto.id_Producto === productId){
-            const featureName: string = feature.caracteristica.nombre
-            const newFeatures = features.get(featureName) || []
-            newFeatures.push(feature.value)
-            features.set(featureName, newFeatures)
+    return features.reduce((acc, cur) => {
+        
+        const feature = acc.find( feat => feat.feature === cur.feature)
+        if(feature){
+            feature.values.push(cur.value)
         }
-    }
+        else{
+            acc.push({feature: cur.feature, values: [cur.value]})
+        }
+        
+        return acc;
+    }, [] as any[])
 
-    const fixFeatures:Feature[] = []
-    features.forEach( (value, key) => {
-        value = [... new Set(value)]
-        fixFeatures.push({
-            feature: key,
-            value
-        })
-    })
-
-    return fixFeatures
 }
 
-const addFeatureToProduct = async (productId: number, featureId: number, value: string) => {
+const addFeatureToProduct = async (productId: number, featureWithOutProductId: any) => {
     const product = await ProductRepository.findById(productId)
     if(!product)
         throw new Error("Doesn't exist such product with that id")
-    const feature = await FeatureRepository.findById(featureId)
-    if(!feature)
-        throw new Error("Doesn't exist such feature with that id")
-    return await ProductRepository.addFeatureToProduct(product, feature, value)
+    const feature = new Caracteristicas({...featureWithOutProductId})
+    feature.product = product
+    return await FeatureRepository.registerFeature(feature)
 
 }
 

@@ -1,7 +1,6 @@
 import { DataSource } from "typeorm";
 import dotenv from 'dotenv';
 import { VendedorEntity } from "../entities/implements/VendedorEntity";
-import { Caracteristicas_ProductoEntity } from "../entities/implements/Caracteristicas_ProductoEntity";
 import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity";
 import { ComprobanteEntradaEntity } from "../entities/implements/ComprobanteEntradaEntity";
 import { ComprobantePagoEntity } from "../entities/implements/ComprobantePagoEntity";
@@ -27,7 +26,6 @@ const AppDataSource = new DataSource({
     synchronize: true,
     logging: true,
     entities: [
-        Caracteristicas_ProductoEntity,
         VendedorEntity,
         CaracteristicasEntity,
         ComprobanteEntradaEntity,

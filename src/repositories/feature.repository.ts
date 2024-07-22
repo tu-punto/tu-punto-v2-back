@@ -2,6 +2,7 @@
 import AppDataSource from "../config/dataSource"
 import { ICaracteristicas } from "../entities/ICaracteristicas"
 import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity"
+import { IProducto } from "../entities/IProducto"
 import { Caracteristicas } from "../models/Caracteristicas"
 
 const featureRepository = AppDataSource.getRepository(CaracteristicasEntity)
@@ -24,8 +25,15 @@ const registerFeature = async (feature: ICaracteristicas): Promise<Caracteristic
     return new Caracteristicas(savedFeature);
 }
 
+const getFeaturesByProductId = async (productId: IProducto) => {
+    return await featureRepository.find({
+        where: {product: productId}
+    })
+}
+
 export const FeatureRepository = {
     findById,
     registerFeature,
-    findAll
+    findAll,
+    getFeaturesByProductId
 }

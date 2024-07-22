@@ -1,4 +1,4 @@
-import { ICaracteristicas_Producto } from "./ICaracteristicas_Producto";
+import { ICaracteristicas } from "./ICaracteristicas";
 import { ICategoria } from "./ICategoria";
 import { IProducto_Sucursal } from "./IProducto_Sucursal";
 import { IVendedor } from "./IVendedor";
@@ -14,7 +14,7 @@ export interface IProducto{
     id_vendedor: number;
 
     vendedor: IVendedor;
-    caracteristicas_producto: ICaracteristicas_Producto[];
+    features: ICaracteristicas[];
     categoria: ICategoria;
     venta: IVenta[];
     producto_sucursal?: IProducto_Sucursal[];

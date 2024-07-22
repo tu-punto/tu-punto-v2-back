@@ -1,9 +1,9 @@
 import { IProducto } from './../entities/IProducto';
-import { ICaracteristicas_Producto } from "../entities/ICaracteristicas_Producto";
 import { ICategoria } from "../entities/ICategoria";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 import { IVendedor } from "../entities/IVendedor";
 import { IVenta } from "../entities/IVenta";
+import { ICaracteristicas } from '../entities/ICaracteristicas';
 
 export class Producto{
     id_producto: number;
@@ -15,7 +15,7 @@ export class Producto{
     id_vendedor: number;
 
     vendedor: IVendedor;
-    caracteristicas_producto: ICaracteristicas_Producto[];
+    features: ICaracteristicas[]
     categoria: ICategoria;
     venta: IVenta[];
     producto_sucursal?: IProducto_Sucursal[];
@@ -29,7 +29,7 @@ export class Producto{
         this.id_categoria= iProducto.id_categoria;
         this.id_vendedor= iProducto.id_vendedor;
         this.vendedor= iProducto.vendedor;
-        this.caracteristicas_producto= iProducto.caracteristicas_producto;
+        this.features = iProducto.features
         this.categoria= iProducto.categoria;
         this.venta= iProducto.venta;
         this.producto_sucursal= iProducto.producto_sucursal; 

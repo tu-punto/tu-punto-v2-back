@@ -1,15 +1,15 @@
 import { Entity, PrimaryColumn,  Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
-import { ICaracteristicas_Producto } from "../ICaracteristicas_Producto";
 import { ICategoria } from "../ICategoria";
 import { IProducto } from "../IProducto";
 import { IProducto_Sucursal } from "../IProducto_Sucursal";
 import { IVendedor } from "../IVendedor";
 import { IVenta } from "../IVenta";
 import { VendedorEntity } from './VendedorEntity';
-import { Caracteristicas_ProductoEntity } from './Caracteristicas_ProductoEntity';
 import { CategoriaEntity } from './CategoriaEntity';
 import { VentaEntity } from './VentaEntity';
 import { Producto_SucursalEntity } from './Producto_SucursalEntity';
+import { ICaracteristicas } from '../ICaracteristicas';
+import { CaracteristicasEntity } from './CaracteristicasEntity';
 
 @Entity({name:'Producto'})
 export class ProductoEntity implements IProducto{
@@ -39,9 +39,9 @@ export class ProductoEntity implements IProducto{
     @JoinColumn({ name: 'id_vendedor'})
     vendedor!: IVendedor;
 
-    @OneToMany(() => Caracteristicas_ProductoEntity, caracteristicaProducto => caracteristicaProducto.producto)
-    caracteristicas_producto!: ICaracteristicas_Producto[];
-    
+    @OneToMany( () => CaracteristicasEntity, features => features.product)
+    features!: ICaracteristicas[];
+
     @ManyToOne(() => CategoriaEntity, categoriaEntity => categoriaEntity.producto)
     @JoinColumn({ name: 'id_categoria'})
     categoria!: ICategoria;

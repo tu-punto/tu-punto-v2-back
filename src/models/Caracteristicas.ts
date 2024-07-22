@@ -1,15 +1,16 @@
 import { ICaracteristicas } from "../entities/ICaracteristicas";
-import { ICaracteristicas_Producto } from "../entities/ICaracteristicas_Producto";
+import { IProducto } from "../entities/IProducto";
 
 export class Caracteristicas{
     id_caracteristicas: number;
-    nombre: string;
-
-    caracteristicas_producto: ICaracteristicas_Producto[];
+    feature: string;
+    value: string;
+    product: IProducto
 
     constructor(iCaracteristicas: ICaracteristicas){
         this.id_caracteristicas = iCaracteristicas.id_caracteristicas;
-        this.nombre = iCaracteristicas.nombre;
-        this.caracteristicas_producto= iCaracteristicas.caracteristicas_producto;
+        this.feature = iCaracteristicas.feature
+        this.value = iCaracteristicas.value
+        this.product = iCaracteristicas.product
     }
 }

@@ -1,7 +1,7 @@
 import { Entity, PrimaryColumn,  Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { ICaracteristicas } from "../ICaracteristicas";
-import { Caracteristicas_ProductoEntity } from './Caracteristicas_ProductoEntity';
-import { ICaracteristicas_Producto } from '../ICaracteristicas_Producto';
+import { ProductoEntity } from './ProductoEntity';
+import { IProducto } from '../IProducto';
 
 @Entity({name:'Caracteristicas'})
 export class CaracteristicasEntity implements ICaracteristicas{
@@ -10,10 +10,13 @@ export class CaracteristicasEntity implements ICaracteristicas{
     id_caracteristicas!: number;
     
     @Column({type: 'varchar'})
-    nombre!: string;
+    feature!: string;
     
-    @OneToMany(() => Caracteristicas_ProductoEntity, caracteristicaProducto => caracteristicaProducto.caracteristica)
-    caracteristicas_producto!: Caracteristicas_ProductoEntity[];
+    @Column({type: 'varchar'})
+    value!: string
+
+    @ManyToOne( () => ProductoEntity, (product) => product.features)
+    product!: IProducto
 
 
 }
