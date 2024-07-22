@@ -30,6 +30,6 @@ export class SucursalEntity implements ISucursal{
     producto_sucursal!: IProducto_Sucursal[];
 
     @ManyToOne(() => PedidoEntity, productoEntity => productoEntity.sucursal)
-    @JoinColumn({ name: 'id_Trabajador'})
+    @JoinColumn({ name: 'id_trabajador'})
     pedido!: IPedido;
 }

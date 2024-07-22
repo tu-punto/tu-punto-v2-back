@@ -78,7 +78,7 @@ export class VendedorEntity implements IVendedor{
     comprobante_pago!: IComprobantePago[];
 
     @ManyToOne(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.vendedor)
-    @JoinColumn({ name: 'id_Trabajador'})
+    @JoinColumn({ name: 'id_trabajador'})
     trabajador!: ITrabajador;
 
     @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.vendedor)

@@ -67,15 +67,15 @@ export class PedidoEntity implements IPedido{
     venta!: IVenta[];
 
     @OneToMany(() => SucursalEntity, sucursalEntity => sucursalEntity.pedido)
-    @JoinColumn({ name: 'id_Sucursal'})
+    @JoinColumn({ name: 'id_sucursal'})
     sucursal!: ISucursal[];
 
     @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.pedido)  
-    @JoinColumn({ name: 'id_Vendedor'})
+    @JoinColumn({ name: 'id_vendedor'})
     vendedor!: IVendedor;
 
     @ManyToOne(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.pedido)
-    @JoinColumn({ name: 'id_Trabajador'})
+    @JoinColumn({ name: 'id_trabajador'})
     trabajador!: ITrabajador;
 
 }

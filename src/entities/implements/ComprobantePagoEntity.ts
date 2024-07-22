@@ -28,6 +28,6 @@ export class ComprobantePagoEntity implements IComprobantePago{
     id_vendedor!: number;
 
     @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.comprobante_pago)
-    @JoinColumn({ name: 'id_Vendedor'})
+    @JoinColumn({ name: 'id_vendedor'})
     vendedor!: IVendedor;
 }

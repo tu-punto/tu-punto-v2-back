@@ -26,11 +26,11 @@ export class Producto_SucursalEntity implements IProducto_Sucursal{
     numero_caja!: number;
 
     @ManyToOne(() => ProductoEntity, productoEntity => productoEntity.producto_sucursal)
-    @JoinColumn({ name: 'id_Producto'})
+    @JoinColumn({ name: 'id_producto'})
     producto!: IProducto;
     
     @ManyToOne(() => SucursalEntity, sucursalEntity => sucursalEntity.producto_sucursal)
-    @JoinColumn({ name: 'id_Sucursal'})
+    @JoinColumn({ name: 'id_sucursal'})
     sucursal!: ISucursal;
 
     
