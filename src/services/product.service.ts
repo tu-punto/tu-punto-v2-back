@@ -23,7 +23,7 @@ const getFeaturesById = async (productId: number) => {
     console.log(listFeatures)
     const features = new Map<string, string[]>()
     for(let feature of listFeatures){
-        if(feature.producto.id_Producto === productId){
+        if(feature.producto.id_producto === productId){
             const featureName: string = feature.caracteristica.nombre
             const newFeatures = features.get(featureName) || []
             newFeatures.push(feature.value)
