@@ -1,10 +1,10 @@
 import { Request, Response, Router } from "express";
-import { addFeatureToProduct, getFeatures, getProduct, getProductById, getProductCategory, registerProduct } from "../controllers/product.controller";
+import { addFeatureToProduct, getFeatures, getProduct, getProductById, getProductCategory, ProductController, registerProduct } from "../controllers/product.controller";
 
 const productRouter = Router();
 productRouter.get('/', getProduct)
 
-productRouter.post('/register', registerProduct)
+productRouter.post('/register', ProductController.registerProductVariants)
 
 productRouter.post('/addFeature', addFeatureToProduct)
 

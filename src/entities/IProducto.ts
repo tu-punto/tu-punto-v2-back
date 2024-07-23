@@ -1,5 +1,6 @@
 import { ICaracteristicas } from "./ICaracteristicas";
 import { ICategoria } from "./ICategoria";
+import { IGroup } from "./IGroup";
 import { IProducto_Sucursal } from "./IProducto_Sucursal";
 import { IVendedor } from "./IVendedor";
 import { IVenta } from "./IVenta";
@@ -19,4 +20,5 @@ export interface IProducto{
     venta: IVenta[];
     producto_sucursal?: IProducto_Sucursal[];
 
+    group: IGroup
 }

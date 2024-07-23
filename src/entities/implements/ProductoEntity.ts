@@ -10,6 +10,7 @@ import { VentaEntity } from './VentaEntity';
 import { Producto_SucursalEntity } from './Producto_SucursalEntity';
 import { ICaracteristicas } from '../ICaracteristicas';
 import { CaracteristicasEntity } from './CaracteristicasEntity';
+import { GroupEntity } from './GroupEntity';
 
 @Entity({name:'Producto'})
 export class ProductoEntity implements IProducto{
@@ -51,5 +52,11 @@ export class ProductoEntity implements IProducto{
 
     @OneToMany(() => Producto_SucursalEntity, producto_SucursalEntity => producto_SucursalEntity.producto)
     producto_sucursal!: IProducto_Sucursal[];
+
+    @ManyToOne( () => GroupEntity, group => group.products)
+    group!: GroupEntity
+
+    @Column({nullable: true})
+    groupId!: number
 
 }

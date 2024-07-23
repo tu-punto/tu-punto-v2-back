@@ -1,6 +1,10 @@
 import e, { Request, Response } from "express";
 import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
+import { IGroup } from "../entities/IGroup";
+import { GroupRepository } from "../repositories/group.repository";
+import { GroupEntity } from "../entities/implements/GroupEntity";
+import { IProducto } from "../entities/IProducto";
 export const getProduct = async (req: Request, res: Response) =>{
     try {
         const products = await ProductService.getAllProducts();
@@ -72,4 +76,28 @@ export const getProductById = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error', error });
         
     }
+}
+
+const registerProductVariants = async (req: Request, res: Response) => {
+    const group = { name: req.body.group } as any
+    const seller = req.body.seller
+    const {variants} = req.body
+
+    const savedGroup = await GroupRepository.registerGroup(group)
+
+    const products = [] as any[]
+
+    for(let variant of variants){
+        const product = {...variant, group: savedGroup} as IProducto
+        products.push(await ProductService.registerProduct(product))
+    }
+
+    res.json({
+        msg: "Succesfull",
+        products 
+    })
+}
+
+export const ProductController = {
+    registerProductVariants
 }

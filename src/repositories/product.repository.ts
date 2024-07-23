@@ -2,8 +2,6 @@ import { Producto } from "../models/Producto";
 import AppDataSource from '../config/dataSource';
 import { ProductoEntity } from '../entities/implements/ProductoEntity';
 import { IProducto } from "../entities/IProducto";
-import { ICaracteristicas } from "../entities/ICaracteristicas";
-import { Caracteristicas_Producto } from "../models/Caracteristicas_Producto";
 
 const productRepository = AppDataSource.getRepository(ProductoEntity);
 
