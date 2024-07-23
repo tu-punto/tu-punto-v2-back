@@ -80,7 +80,6 @@ export const getProductById = async (req: Request, res: Response) => {
 
 const registerProductVariants = async (req: Request, res: Response) => {
     const group = { name: req.body.group } as any
-    const seller = req.body.seller
     const {variants} = req.body
 
     const savedGroup = await GroupRepository.registerGroup(group)
