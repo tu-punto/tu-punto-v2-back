@@ -42,10 +42,16 @@ export const getFeatures = async (req: Request, res: Response) => {
 }
 
 export const addFeatureToProduct = async (req: Request, res: Response) => {
-    const {productId, feature} = req.body
+    const {productId, features} = req.body
     try {
-        const featureProduct = await ProductService.addFeatureToProduct(productId, feature)
-        res.json(featureProduct)
+
+        const saveFeatures = [] as any[]
+
+        for(let feature of features){
+            const featureProduct = await ProductService.addFeatureToProduct(productId, feature)
+            saveFeatures.push(featureProduct)
+        }
+        res.json(saveFeatures)
     } catch (error) {
         console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });

@@ -6,7 +6,7 @@ productRouter.get('/', getProduct)
 
 productRouter.post('/register', ProductController.registerProductVariants)
 
-productRouter.post('/addFeature', addFeatureToProduct)
+productRouter.post('/addFeatures', addFeatureToProduct)
 
 productRouter.get('/features/:id', getFeatures)
 

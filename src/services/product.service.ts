@@ -54,6 +54,7 @@ const getProductById = async (productId: number) => {
     return product
 }
 
+
 export const ProductService ={
     getAllProducts,
     registerProduct,
