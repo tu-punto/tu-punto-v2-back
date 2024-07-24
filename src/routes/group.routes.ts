@@ -6,4 +6,6 @@ const groupRouter = Router()
 
 groupRouter.get('/:id/variants', GroupController.getProductsInGroup)
 
+groupRouter.get('/',GroupController.getAllGroups)
+
 export default groupRouter

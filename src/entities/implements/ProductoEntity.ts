@@ -56,7 +56,7 @@ export class ProductoEntity implements IProducto{
     @ManyToOne( () => GroupEntity, group => group.products)
     group!: GroupEntity
 
-    // No tocar
+    @Column({nullable: true})
     groupId!: number
 
 }

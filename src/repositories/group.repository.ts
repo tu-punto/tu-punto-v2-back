@@ -10,6 +10,10 @@ import { Group } from "../models/Group";
 const productRepository = AppDataSource.getRepository(ProductoEntity)
 const groupRepository = AppDataSource.getRepository(GroupEntity)
 
+const getAllGroups = async () => {
+    return await groupRepository.find();
+}
+
 const getGroupById = async (id: number) => {
     return await groupRepository.findOne({
         where: {
@@ -39,5 +43,6 @@ const registerGroup = async (group: IGroup) => {
 export const GroupRepository = {
     getProductsInGroup,
     getGroupById,
-    registerGroup
+    registerGroup,
+    getAllGroups
 }

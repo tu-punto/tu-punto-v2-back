@@ -13,6 +13,16 @@ const getProductsInGroup = async (req: Request, res: Response) => {
     }
 }
 
+const getAllGroups = async (req: Request, res: Response) => {
+    try {
+        const groups = await GroupService.getAllGroups()
+        res.json(groups)
+    } catch (error) {
+        
+    }
+}
+
 export const GroupController = {
-    getProductsInGroup
+    getProductsInGroup,
+    getAllGroups
 }

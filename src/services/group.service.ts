@@ -10,6 +10,11 @@ const getProductsByGroup = async (idGroup: number) => {
     return await GroupRepository.getProductsInGroup(group)
 }
 
+const getAllGroups = async () => {
+    return await GroupRepository.getAllGroups()
+}
+
 export const GroupService = {
-    getProductsByGroup
+    getProductsByGroup,
+    getAllGroups
 }
