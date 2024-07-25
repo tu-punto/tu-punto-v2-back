@@ -16,6 +16,12 @@ export class PedidoEntity implements IPedido{
     id_pedido!: number;
 
     @Column({type: 'varchar'})
+    cliente!: string;
+
+    @Column({default : 0})
+    telefono_cliente!: number;
+
+    @Column({type: 'varchar'})
     tipo_de_pago!: string;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})

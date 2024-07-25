@@ -6,6 +6,8 @@ import { IVenta } from "../entities/IVenta";
 
 export class Pedido{
     id_pedido: number;
+    cliente: string;
+    telefono_cliente: number;
     tipo_de_pago: string;
     fecha_pedido: Date;
     hora_entrega_acordada: Date;
@@ -30,6 +32,8 @@ export class Pedido{
 
     constructor(iPedido: IPedido){
         this.id_pedido= iPedido.id_pedido;
+        this.cliente = iPedido.cliente;
+        this.telefono_cliente = iPedido.telefono_cliente;
         this.tipo_de_pago= iPedido.tipo_de_pago;
         this.fecha_pedido= iPedido.fecha_pedido;
         this.hora_entrega_acordada= iPedido.hora_entrega_acordada;

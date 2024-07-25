@@ -5,6 +5,8 @@ import { IVenta } from "./IVenta";
 
 export interface IPedido{
     id_pedido: number;
+    cliente: string;
+    telefono_cliente: number;
     tipo_de_pago: string;
     fecha_pedido: Date;
     hora_entrega_acordada: Date;
