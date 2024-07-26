@@ -1,4 +1,5 @@
 import { IPedido } from "./IPedido";
+import { ISucursal } from "./ISucursal";
 import { IVendedor } from "./IVendedor";
 
 export interface ITrabajador{
@@ -10,4 +11,5 @@ export interface ITrabajador{
 
     vendedor?: IVendedor[];
     pedido?: IPedido[];
+    sucursal: ISucursal[];
 }

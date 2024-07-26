@@ -4,29 +4,34 @@ import { ITrabajador } from "../ITrabajador";
 import { IVendedor } from "../IVendedor";
 import { VendedorEntity } from './VendedorEntity';
 import { PedidoEntity } from './PedidoEntity';
+import { ISucursal } from '../ISucursal';
+import { SucursalEntity } from './SucursalEntity';
 
 @Entity({name:'Trabajador'})
 export class TrabajadorEntity implements ITrabajador{
     
     @PrimaryGeneratedColumn()
     id_trabajador!: number;
-
+    
     @Column({type: 'varchar'})
     nombre!: string;
-
+    
     @Column()
     numero!: number;
-
+    
     @Column({type: 'varchar'})
     rol!: string;
-
+    
     @Column({type: 'varchar'})
     estado!: string;
-
+    
     @OneToMany(() => VendedorEntity, vendedorEntity => vendedorEntity.trabajador)
     vendedor!: IVendedor[];
-
+    
     @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.trabajador)
     pedido!: IPedido[];
-
+    
+    @ManyToOne(() => SucursalEntity, sucursalEntity => sucursalEntity.trabajador)
+    @JoinColumn({ name: 'id_sucursal'})
+    sucursal!: ISucursal[];
 }
