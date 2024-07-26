@@ -27,40 +27,40 @@ export class PedidoEntity implements IPedido{
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     hora_entrega_real!: Date;
 
-    @Column({type: 'varchar'})
+    @Column({type: 'varchar', default: ""})
     observaciones!: string;
 
     @Column({type: 'varchar'})
     lugar_entrega!: string;
 
-    @Column()
+    @Column({default: 0})
     costo_delivery!: number;
 
-    @Column()
+    @Column({default: 0})
     cargo_delivery!: number;
 
     @Column({type: 'varchar'})
     estado_pedido!: string;
 
-    @Column()
+    @Column({default: 0})
     adelanto_cliente!: number;
 
-    @Column()
+    @Column({default: 0})
     pagado_al_vendedor!: number;
 
-    @Column()
+    @Column({default: 0})
     subtotal_qr!: number;
 
-    @Column()
+    @Column({default: 0})
     subtotal_efectivo!: number;
 
     @Column({nullable:false})  
     id_vendedor!: number;
 
-    @Column({nullable:false})  
+    @Column({nullable:true})  
     id_trabajador!: number;
 
-    @Column({nullable:false})  
+    @Column({nullable:true})  
     id_sucursal!: number;
 
     @OneToMany(() => VentaEntity, ventaEntity => ventaEntity.pedido)

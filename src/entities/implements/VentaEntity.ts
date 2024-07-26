@@ -17,10 +17,10 @@ export class VentaEntity implements IVenta{
     @Column()
     precio_unitario!: number;
 
-    @Column()
+    @Column({default: 0})
     utilidad!: number;
 
-    @Column()
+    @Column({default: 0})
     utilidad_extra!: number;
 
     @ManyToOne( () => ProductoEntity, (product) => product.venta)
