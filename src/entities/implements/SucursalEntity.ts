@@ -4,6 +4,8 @@ import { IProducto_Sucursal } from "../IProducto_Sucursal";
 import { ISucursal } from "../ISucursal";
 import { Producto_SucursalEntity } from './Producto_SucursalEntity';
 import { PedidoEntity } from './PedidoEntity';
+import { TrabajadorEntity } from './TrabajadorEntity';
+import { ITrabajador } from '../ITrabajador';
 
 @Entity({name:'Sucursal'})
 export class SucursalEntity implements ISucursal{
@@ -23,13 +25,12 @@ export class SucursalEntity implements ISucursal{
     @Column()
     telefono!: number;
 
-    @Column({nullable:false})
-    id_trabajador!: number;
-
     @OneToMany(() => Producto_SucursalEntity, producto_SucursalEntity => producto_SucursalEntity.sucursal)
     producto_sucursal!: IProducto_Sucursal[];
 
-    @ManyToOne(() => PedidoEntity, productoEntity => productoEntity.sucursal)
-    @JoinColumn({ name: 'id_trabajador'})
+    @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.sucursal)
     pedido!: IPedido;
+
+    @OneToMany(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.sucursal)
+    trabajador!: ITrabajador[];
 }

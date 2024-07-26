@@ -1,4 +1,5 @@
 import { IPedido } from "../entities/IPedido";
+import { ISucursal } from "../entities/ISucursal";
 import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
 
@@ -11,6 +12,7 @@ export class Trabajador{
 
     vendedor?: IVendedor[];
     pedido?: IPedido[];
+    sucursal: ISucursal[];
 
     constructor(iTrabajador: ITrabajador){
         this.id_trabajador= iTrabajador.id_trabajador;
@@ -20,5 +22,6 @@ export class Trabajador{
         this.estado= iTrabajador.estado;
         this.vendedor= iTrabajador.vendedor;
         this.pedido= iTrabajador.pedido;
+        this.sucursal= iTrabajador.sucursal;
     }
 }

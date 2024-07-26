@@ -1,6 +1,7 @@
 import { IPedido } from "../entities/IPedido";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 import { ISucursal } from "../entities/ISucursal";
+import { ITrabajador } from "../entities/ITrabajador";
 
 export class Sucursal{
     id_sucursal: number;
@@ -8,10 +9,10 @@ export class Sucursal{
     direccion: string;
     ciudad: string;
     telefono: number;
-    id_trabajador: number;
 
     producto_sucursal?: IProducto_Sucursal[];
-    pedido: IPedido;
+    pedido?: IPedido;
+    trabajador: ITrabajador[];
 
     constructor(iSucursal: ISucursal){
         this.id_sucursal= iSucursal.id_sucursal;
@@ -19,8 +20,8 @@ export class Sucursal{
         this.direccion= iSucursal.direccion;
         this.ciudad= iSucursal.ciudad;
         this.telefono= iSucursal.telefono;
-        this.id_trabajador= iSucursal.id_trabajador;
         this.producto_sucursal= iSucursal.producto_sucursal;
         this.pedido= iSucursal.pedido;
+        this.trabajador= iSucursal.trabajador;
     }
 }

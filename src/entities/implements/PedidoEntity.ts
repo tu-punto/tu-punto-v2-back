@@ -16,6 +16,12 @@ export class PedidoEntity implements IPedido{
     id_pedido!: number;
 
     @Column({type: 'varchar'})
+    cliente!: string;
+
+    @Column({default : 0})
+    telefono_cliente!: number;
+
+    @Column({type: 'varchar'})
     tipo_de_pago!: string;
 
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
@@ -42,8 +48,8 @@ export class PedidoEntity implements IPedido{
     @Column({type: 'varchar'})
     estado_pedido!: string;
 
-    @Column({default: 0})
-    adelanto_cliente!: number;
+    @Column({type: 'varchar'})
+    adelanto_cliente!: string;
 
     @Column({default: 0})
     pagado_al_vendedor!: number;
@@ -66,7 +72,7 @@ export class PedidoEntity implements IPedido{
     @OneToMany(() => VentaEntity, ventaEntity => ventaEntity.pedido)
     venta!: IVenta[];
 
-    @OneToMany(() => SucursalEntity, sucursalEntity => sucursalEntity.pedido)
+    @ManyToOne(() => SucursalEntity, sucursalEntity => sucursalEntity.pedido)
     @JoinColumn({ name: 'id_sucursal'})
     sucursal!: ISucursal[];
 
