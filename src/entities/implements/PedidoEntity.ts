@@ -48,8 +48,8 @@ export class PedidoEntity implements IPedido{
     @Column({type: 'varchar'})
     estado_pedido!: string;
 
-    @Column()
-    adelanto_cliente!: number;
+    @Column({type: 'varchar'})
+    adelanto_cliente!: string;
 
     @Column()
     pagado_al_vendedor!: number;

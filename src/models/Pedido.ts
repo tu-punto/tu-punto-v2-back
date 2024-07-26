@@ -17,7 +17,7 @@ export class Pedido{
     costo_delivery: number;
     cargo_delivery: number;
     estado_pedido: string;
-    adelanto_cliente: number;
+    adelanto_cliente: string;
     pagado_al_vendedor: number;
     subtotal_qr: number;
     subtotal_efectivo: number; 
