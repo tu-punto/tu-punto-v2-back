@@ -84,7 +84,6 @@ export class VendedorEntity implements IVendedor{
     @JoinColumn({ name: 'id_trabajador'})
     trabajador!: ITrabajador;
 
-
     @OneToMany(() => VentaEntity, ventaEntity => ventaEntity.vendedor)
     venta!: IVenta[];
 

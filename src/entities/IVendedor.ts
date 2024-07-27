@@ -3,6 +3,7 @@ import { IComprobantePago } from "./IComprobantePago";
 import { IPedido } from "./IPedido";
 import { IProducto } from "./IProducto";
 import { ITrabajador } from "./ITrabajador";
+import { IVenta } from "./IVenta";
 
 export interface IVendedor{
     id_vendedor: number;
@@ -31,4 +32,5 @@ export interface IVendedor{
     trabajador: ITrabajador;
     pedido?: IPedido[];
     producto?: IProducto[];
+    venta: IVenta[];
 }
