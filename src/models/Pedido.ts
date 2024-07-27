@@ -21,13 +21,11 @@ export class Pedido{
     pagado_al_vendedor: number;
     subtotal_qr: number;
     subtotal_efectivo: number; 
-    id_vendedor: number;
     id_trabajador: number;
     id_sucursal: number;
 
     venta: IVenta[];
     sucursal: ISucursal[];
-    vendedor: IVendedor;
     trabajador: ITrabajador;
 
     constructor(iPedido: IPedido){
@@ -47,12 +45,10 @@ export class Pedido{
         this.pagado_al_vendedor= iPedido.pagado_al_vendedor;
         this.subtotal_qr= iPedido.subtotal_qr;
         this.subtotal_efectivo= iPedido.subtotal_efectivo;
-        this.id_vendedor= iPedido.id_vendedor;
         this.id_trabajador= iPedido.id_trabajador;
         this.id_sucursal= iPedido.id_sucursal;
         this.venta= iPedido.venta;
         this.sucursal= iPedido.sucursal;
-        this.vendedor= iPedido.vendedor;
         this.trabajador= iPedido.trabajador;
     }
 }

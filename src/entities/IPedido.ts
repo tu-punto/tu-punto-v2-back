@@ -20,12 +20,10 @@ export interface IPedido{
     pagado_al_vendedor: number;
     subtotal_qr: number;
     subtotal_efectivo: number; 
-    id_vendedor: number;
     id_trabajador: number;
     id_sucursal: number;
 
     venta: IVenta[];
     sucursal: ISucursal[];
-    vendedor: IVendedor;
     trabajador: ITrabajador;
 }

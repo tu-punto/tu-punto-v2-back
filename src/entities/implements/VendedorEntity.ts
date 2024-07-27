@@ -12,6 +12,7 @@ import { PedidoEntity } from './PedidoEntity';
 import { ComprobantePagoEntity } from './ComprobantePagoEntity';
 import { VentaEntity } from './VentaEntity';
 import { IVenta } from '../IVenta';
+import { ProductoEntity } from './ProductoEntity';
 
 @Entity({name:'Vendedor'})
 export class VendedorEntity implements IVendedor{
@@ -83,13 +84,11 @@ export class VendedorEntity implements IVendedor{
     @JoinColumn({ name: 'id_trabajador'})
     trabajador!: ITrabajador;
 
-    @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.vendedor)
-    pedido!: IPedido[];
 
     @OneToMany(() => VentaEntity, ventaEntity => ventaEntity.vendedor)
     venta!: IVenta[];
 
-    @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.vendedor)
+    @OneToMany(() => ProductoEntity, pedidoEntity => pedidoEntity.vendedor)
     producto!: IProducto[];
 
 }

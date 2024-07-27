@@ -60,9 +60,6 @@ export class PedidoEntity implements IPedido{
     @Column({default: 0})
     subtotal_efectivo!: number;
 
-    @Column({nullable:false})  
-    id_vendedor!: number;
-
     @Column({nullable:true})  
     id_trabajador!: number;
 
@@ -75,10 +72,6 @@ export class PedidoEntity implements IPedido{
     @ManyToOne(() => SucursalEntity, sucursalEntity => sucursalEntity.pedido)
     @JoinColumn({ name: 'id_sucursal'})
     sucursal!: ISucursal[];
-
-    @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.pedido)  
-    @JoinColumn({ name: 'id_vendedor'})
-    vendedor!: IVendedor;
 
     @ManyToOne(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.pedido)
     @JoinColumn({ name: 'id_trabajador'})
