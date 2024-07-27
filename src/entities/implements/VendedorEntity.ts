@@ -10,6 +10,8 @@ import { ComprobantePago } from '../../models/ComprobantePago';
 import { TrabajadorEntity } from './TrabajadorEntity';
 import { PedidoEntity } from './PedidoEntity';
 import { ComprobantePagoEntity } from './ComprobantePagoEntity';
+import { VentaEntity } from './VentaEntity';
+import { IVenta } from '../IVenta';
 
 @Entity({name:'Vendedor'})
 export class VendedorEntity implements IVendedor{
@@ -83,6 +85,9 @@ export class VendedorEntity implements IVendedor{
 
     @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.vendedor)
     pedido!: IPedido[];
+
+    @OneToMany(() => VentaEntity, ventaEntity => ventaEntity.vendedor)
+    venta!: IVenta[];
 
     @OneToMany(() => PedidoEntity, pedidoEntity => pedidoEntity.vendedor)
     producto!: IProducto[];

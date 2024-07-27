@@ -4,6 +4,8 @@ import { IProducto } from "../IProducto";
 import { IVenta } from "../IVenta";
 import { ProductoEntity } from './ProductoEntity';
 import { PedidoEntity } from './PedidoEntity';
+import { IVendedor } from '../IVendedor';
+import { VendedorEntity } from './VendedorEntity';
 
 @Entity({name:'Venta'})
 export class VentaEntity implements IVenta{
@@ -20,8 +22,8 @@ export class VentaEntity implements IVenta{
     @Column({default: 0})
     utilidad!: number;
 
-    @Column({default: 0})
-    utilidad_extra!: number;
+    @Column({default: false})
+    deposito_realizado!: boolean;
 
     @ManyToOne( () => ProductoEntity, (product) => product.venta)
     @JoinColumn({
@@ -38,5 +40,13 @@ export class VentaEntity implements IVenta{
         foreignKeyConstraintName: "fk_ped_id"
     })
     pedido!: IPedido
+
+    @ManyToOne( () => VendedorEntity, (vendedor) => vendedor.venta)
+    @JoinColumn({
+        name: "id_vendedor",
+        referencedColumnName: "id_vendedor",
+        foreignKeyConstraintName: "fk_vend_id"
+    })
+    vendedor!: IVendedor;
 
 }
