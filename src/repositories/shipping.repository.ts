@@ -9,6 +9,14 @@ const findAll = async (): Promise<Pedido[]> => {
     return await shippingRepository.find()
 }
 
+const findById = async(shippingId: number) => {
+    return await shippingRepository.findOne({
+        where: {
+            id_pedido: shippingId
+        }
+    })
+}
+
 const registerShipping = async (shipping: IPedido): Promise<Pedido> => {
     const newShipping = shippingRepository.create(shipping);
     const savedShipping = await shippingRepository.save(newShipping);
@@ -17,5 +25,6 @@ const registerShipping = async (shipping: IPedido): Promise<Pedido> => {
 
 export const ShippingRepository = {
     findAll,
-    registerShipping
+    registerShipping,
+    findById
 }
