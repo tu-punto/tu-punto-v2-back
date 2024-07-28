@@ -29,7 +29,11 @@ const getProductsInGroup = async (group: any) => {
             groupId: group.id
         },
         relations: {
-            group: true
+            group: true,
+            categoria: true,
+            features: true,
+            vendedor: true,
+            
         }
     })
 }
