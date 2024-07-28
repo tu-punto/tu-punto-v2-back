@@ -6,7 +6,11 @@ import { IProducto } from "../entities/IProducto";
 const productRepository = AppDataSource.getRepository(ProductoEntity);
 
 const findAll = async (): Promise<ProductoEntity[]> => {
-    return await productRepository.find()
+    return await productRepository.find({
+        relations: {
+            features: true
+        }
+    })
 }
 
 const findById = async (productoId: number): Promise<ProductoEntity | null> => {

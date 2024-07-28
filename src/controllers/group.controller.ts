@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { GroupService } from "../services/group.service";
+import { ProductService } from "../services/product.service";
 
 
 const getProductsInGroup = async (req: Request, res: Response) => {
@@ -16,7 +17,19 @@ const getProductsInGroup = async (req: Request, res: Response) => {
 const getAllGroups = async (req: Request, res: Response) => {
     try {
         const groups = await GroupService.getAllGroups()
-        res.json(groups)
+        const products = await ProductService.getAllProducts()
+        const resGroup = groups.map((group) => ({...group, features: [] as any[]}))
+        for(let product of products) {
+            const refFeature = resGroup.find(feat => feat.id === product.groupId)
+            console.log(resGroup, product)
+            for(let feature of product.features){
+                refFeature?.features.push(feature.feature)
+            }
+        }
+        for(let group of resGroup){
+            group.features = [...new Set(group.features)];
+        }
+        res.json(resGroup)
     } catch (error) {
         
     }
