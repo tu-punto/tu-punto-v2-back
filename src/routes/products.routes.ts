@@ -14,6 +14,6 @@ productRouter.get('/category/:id', getProductCategory)
 
 productRouter.get('/:id', getProductById)
 
-productRouter.get('/registerVariant', ProductController.registerProduct)
+productRouter.post('/registerVariant', ProductController.registerProduct)
 
 export default productRouter;
