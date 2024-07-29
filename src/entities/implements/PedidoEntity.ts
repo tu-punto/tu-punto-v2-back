@@ -48,11 +48,11 @@ export class PedidoEntity implements IPedido{
     @Column({type: 'varchar'})
     estado_pedido!: string;
 
-    @Column({type: 'varchar'})
-    adelanto_cliente!: string;
-
     @Column({default: 0})
-    pagado_al_vendedor!: number;
+    adelanto_cliente!: number;
+
+    @Column({default: false})
+    pagado_al_vendedor!: boolean;
 
     @Column({default: 0})
     subtotal_qr!: number;

@@ -3,7 +3,7 @@ import { ITrabajador } from "./ITrabajador";
 import { IVendedor } from "./IVendedor";
 import { IVenta } from "./IVenta";
 
-export interface IPedido{
+export interface IPedido {
     id_pedido: number;
     cliente: string;
     telefono_cliente: number;
@@ -16,10 +16,10 @@ export interface IPedido{
     costo_delivery: number;
     cargo_delivery: number;
     estado_pedido: string;
-    adelanto_cliente: string;
-    pagado_al_vendedor: number;
+    adelanto_cliente: number;
+    pagado_al_vendedor: boolean;
     subtotal_qr: number;
-    subtotal_efectivo: number; 
+    subtotal_efectivo: number;
     id_trabajador: number;
     id_sucursal: number;
 
