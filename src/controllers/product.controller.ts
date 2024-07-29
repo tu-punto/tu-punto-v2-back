@@ -15,7 +15,7 @@ export const getProduct = async (req: Request, res: Response) =>{
     }
 }
 
-export const registerProduct = async (req: Request, res: Response) => {
+const registerProduct = async (req: Request, res: Response) => {
     const product = req.body;
     try {
         const newProduct = await ProductService.registerProduct(product);
@@ -104,5 +104,6 @@ const registerProductVariants = async (req: Request, res: Response) => {
 }
 
 export const ProductController = {
-    registerProductVariants
+    registerProductVariants,
+    registerProduct
 }

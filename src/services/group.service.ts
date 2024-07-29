@@ -11,10 +11,20 @@ const getProductsByGroup = async (idGroup: number) => {
 }
 
 const getAllGroups = async () => {
-    return await GroupRepository.getAllGroups()
+    const groups = await GroupRepository.getAllGroupsWithProducts();
+    const resGroups = groups.map((group) => {
+        return {...group, products: group.products.slice(0,1)}
+    })
+    console.log(resGroups)
+    return resGroups
+}
+
+const getAllGroupsWithProducts = async () => {
+    return await GroupRepository.getAllGroupsWithProducts()
 }
 
 export const GroupService = {
     getProductsByGroup,
-    getAllGroups
+    getAllGroups,
+    getAllGroupsWithProducts
 }
