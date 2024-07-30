@@ -27,6 +27,7 @@ const getGroupById = async (id: number) => {
         where: {
             id
         }
+
     })
 }
 
@@ -41,7 +42,7 @@ const getProductsInGroup = async (group: any) => {
             categoria: true,
             features: true,
             vendedor: true,
-            
+            producto_sucursal: true,
         }
     })
 }

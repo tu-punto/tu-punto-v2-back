@@ -8,7 +8,8 @@ const productRepository = AppDataSource.getRepository(ProductoEntity);
 const findAll = async (): Promise<ProductoEntity[]> => {
     return await productRepository.find({
         relations: {
-            features: true
+            features: true,
+            producto_sucursal: true
         }
     })
 }
