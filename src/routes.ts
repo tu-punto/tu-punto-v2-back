@@ -6,6 +6,7 @@ import categoryRouter from "./routes/category,routes";
 import saleRouter from "./routes/sale.routes";
 import groupRouter from "./routes/group.routes";
 import shippingRouter from "./routes/shipping.routes";
+import sucursalRouter from "./routes/sucursal.routes";
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/category',categoryRouter)
 router.use('/sale',saleRouter)
 router.use('/group', groupRouter)
 router.use('/shipping', shippingRouter)
+router.use('/sucursal', sucursalRouter)
 
 export default router;
