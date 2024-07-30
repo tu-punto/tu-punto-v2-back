@@ -9,9 +9,9 @@ const registerSale = async (sale:any) => {
     return await SaleRepository.registerSale(sale);
 }
 const getProductsById = async (pedidoId: number) => {
-    console.log(`Fetching sales for pedidoId: ${pedidoId}`);
+    //console.log(`Fetching sales for pedidoId: ${pedidoId}`);
     const sales = await SaleRepository.findByPedidoId(pedidoId);
-    console.log(`Sales found: ${JSON.stringify(sales)}`);
+    //console.log(`Sales found: ${JSON.stringify(sales)}`);
 
     if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
 
@@ -22,7 +22,7 @@ const getProductsById = async (pedidoId: number) => {
         cantidad: sale.cantidad
     }));
 
-    console.log(`Products with quantities: ${JSON.stringify(products)}`);
+    //console.log(`Products with quantities: ${JSON.stringify(products)}`);
 
     return products;
 }
