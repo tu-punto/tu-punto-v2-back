@@ -17,9 +17,10 @@ const getProductsById = async (pedidoId: number) => {
 
     // Obtiene los productos junto con la cantidad
     const products = sales.map(sale => ({
-        nombre_producto: sale.producto.nombre_producto,
-        precio: sale.producto.precio,
-        cantidad: sale.cantidad
+        producto: sale.producto.nombre_producto,
+        precio_unitario: sale.producto.precio,
+        cantidad: sale.cantidad,
+        utilidad: sale.utilidad
     }));
 
     //console.log(`Products with quantities: ${JSON.stringify(products)}`);
