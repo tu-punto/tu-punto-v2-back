@@ -27,7 +27,7 @@ export class ProductoEntity implements IProducto{
     @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     fecha_de_ingreso!: Date;
     
-    @Column({type: 'varchar'})
+    @Column({type: 'varchar', default: ""})
     imagen!: string;
     
     @Column({nullable:false})

@@ -14,6 +14,14 @@ const getAllGroups = async () => {
     return await groupRepository.find();
 }
 
+const getAllGroupsWithProducts = async () => {
+    return await groupRepository.find({
+        relations: {
+            products: true
+        }
+    })
+}
+
 const getGroupById = async (id: number) => {
     return await groupRepository.findOne({
         where: {
@@ -44,9 +52,19 @@ const registerGroup = async (group: IGroup) => {
     return new Group(savedGroup)
 }
 
+const getExampleProduct = async (group: IGroup) => {
+    return await productRepository.findOne({
+        where: {
+            groupId: group.id
+        }
+    })
+}
+
 export const GroupRepository = {
     getProductsInGroup,
     getGroupById,
     registerGroup,
-    getAllGroups
+    getAllGroups,
+    getExampleProduct,
+    getAllGroupsWithProducts
 }

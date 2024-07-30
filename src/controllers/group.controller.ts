@@ -20,8 +20,7 @@ const getAllGroups = async (req: Request, res: Response) => {
         const products = await ProductService.getAllProducts()
         const resGroup = groups.map((group) => ({...group, features: [] as any[]}))
         for(let product of products) {
-            const refFeature = resGroup.find(feat => feat.id === product.groupId)
-            console.log(resGroup, product)
+            const refFeature = resGroup.find(group => group.id === product.groupId)
             for(let feature of product.features){
                 refFeature?.features.push(feature.feature)
             }
