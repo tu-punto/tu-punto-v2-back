@@ -2,6 +2,8 @@ import { Producto } from "../models/Producto";
 import AppDataSource from '../config/dataSource';
 import { ProductoEntity } from '../entities/implements/ProductoEntity';
 import { IProducto } from "../entities/IProducto";
+import { IVenta } from "../entities/IVenta";
+import { VentaEntity } from "../entities/implements/VentaEntity";
 
 const productRepository = AppDataSource.getRepository(ProductoEntity);
 
@@ -27,10 +29,20 @@ const registerProduct = async (product: IProducto): Promise<any> => {
     return new Producto(savedProduct);
 }
 
+const getProductsBySales = async (sales: VentaEntity[]) => {
+    const productIds = sales.map(sale => sale.producto.id_producto);
+    console.log(`Product IDs to fetch: ${productIds}`);
+    
+    // Usando los IDs de producto para buscar los productos correspondientes
+    const products = await productRepository.findByIds(productIds);
+    console.log(`Products fetched: ${JSON.stringify(products)}`);
 
+    return products;
+}
 
 export const ProductRepository = {
     findAll,
     findById,
-    registerProduct
+    registerProduct,
+    getProductsBySales
 };

@@ -24,3 +24,13 @@ export const registerSale = async(req: Request, res:Response) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 }
+export const getProducts = async (req: Request, res: Response) => {
+    const id: number = parseInt(req.params.id);
+    try {
+        const products = await SaleService.getProductsById(id);
+        res.json(products);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+}
