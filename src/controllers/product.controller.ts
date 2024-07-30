@@ -5,7 +5,8 @@ import { IGroup } from "../entities/IGroup";
 import { GroupRepository } from "../repositories/group.repository";
 import { GroupEntity } from "../entities/implements/GroupEntity";
 import { IProducto } from "../entities/IProducto";
-export const getProduct = async (req: Request, res: Response) =>{
+import { ProductBranchService } from "../services/productBranch.service";
+export const getProduct = async (req: Request, res: Response) => {
     try {
         const products = await ProductService.getAllProducts();
         res.json(products);
@@ -30,24 +31,24 @@ export const registerProduct = async (req: Request, res: Response) => {
 }
 
 export const getFeatures = async (req: Request, res: Response) => {
-    const id:number = parseInt(req.params.id)
-    try{
+    const id: number = parseInt(req.params.id)
+    try {
         const features = await ProductService.getFeaturesById(id)
         res.json(features)
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
-        
+
     }
 }
 
 export const addFeatureToProduct = async (req: Request, res: Response) => {
-    const {productId, features} = req.body
+    const { productId, features } = req.body
     try {
 
         const saveFeatures = [] as any[]
 
-        for(let feature of features){
+        for (let feature of features) {
             const featureProduct = await ProductService.addFeatureToProduct(productId, feature)
             saveFeatures.push(featureProduct)
         }
@@ -55,52 +56,72 @@ export const addFeatureToProduct = async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
-               
+
     }
 }
 
 export const getProductCategory = async (req: Request, res: Response) => {
-    const {id} = req.params
-    try{
+    const { id } = req.params
+    try {
         const product = await ProductService.getProductById(parseInt(id))
         const category = await CategoryService.getCategoryById(product.id_categoria)
         res.json(category)
     } catch (error) {
         console.log(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
-        
+
     }
 }
 
 export const getProductById = async (req: Request, res: Response) => {
-    const {id} = req.params
-    try{
+    const { id } = req.params
+    try {
         const product = await ProductService.getProductById(parseInt(id))
         res.json(product)
     } catch (error) {
         console.log(error)
         res.status(500).json({ msg: 'Internal Server Error', error });
-        
+
     }
 }
 
 const registerProductVariants = async (req: Request, res: Response) => {
     const group = { name: req.body.group } as any
-    const {variants} = req.body
+    const { variants } = req.body
 
     const savedGroup = await GroupRepository.registerGroup(group)
 
     const products = [] as any[]
 
-    for(let variant of variants){
-        const product = {...variant, group: savedGroup} as IProducto
+    for (let variant of variants) {
+        const product = { ...variant, group: savedGroup } as IProducto
         products.push(await ProductService.registerProduct(product))
     }
 
     res.json({
         msg: "Succesfull",
-        products 
+        products
     })
+}
+
+export const addStockToBranch = async (req: Request, res: Response) => {
+    const { branch, products } = req.body
+
+
+    const savedStocks = []
+
+    try {
+        for (let product of products) {
+            const newStock = await ProductBranchService.registerProductBranch({ id_sucursal: branch, ...product })
+            savedStocks.push(newStock)
+        }
+        res.json({
+            status: true,
+            savedStocks
+        })
+    } catch (error) {
+        res.status(500).json({ msg: 'Internal Server Error' })
+    }
 }
 
 export const ProductController = {
