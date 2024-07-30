@@ -18,8 +18,15 @@ const registerSaleToShipping = async (shippingId: number, saleWithoutShippingId:
     return await SaleRepository.registerSale(sale)
 }
 
+const updateShipping = async (newData: any, shippingId: number) => {
+    const shipping = await ShippingRepository.findById(shippingId)
+    if(!shipping) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+    return await ShippingRepository.updateShipping(newData, shipping)
+}
+
 export const ShippingService = {
     getAllShippings,
     registerShipping,
-    registerSaleToShipping
+    registerSaleToShipping,
+    updateShipping
 }

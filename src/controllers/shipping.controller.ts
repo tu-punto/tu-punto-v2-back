@@ -41,3 +41,19 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error', error })
     }
 }
+
+const updateShipping = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id)
+    const {newData} = req.body
+    try {
+        const shippingUpdated = await ShippingService.updateShipping(newData, id)
+        res.json(shippingUpdated)
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ msg: 'Internal Server Error', error })   
+    }
+}
+
+export const ShippingController = {
+    updateShipping
+}

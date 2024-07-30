@@ -15,7 +15,6 @@ const getAllGroups = async () => {
     const resGroups = groups.map((group) => {
         return {...group, products: group.products.slice(0,1)}
     })
-    console.log(resGroups)
     return resGroups
 }
 

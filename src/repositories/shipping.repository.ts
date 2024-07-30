@@ -23,8 +23,15 @@ const registerShipping = async (shipping: IPedido): Promise<Pedido> => {
     return new Pedido(savedShipping);
 }
 
+const updateShipping = async (newData: any, shipping: IPedido) => {
+    shipping = {...shipping, ...newData}
+    const newShipping = await shippingRepository.save(shipping)
+    return newShipping
+}
+
 export const ShippingRepository = {
     findAll,
     registerShipping,
-    findById
+    findById,
+    updateShipping
 }
