@@ -89,7 +89,7 @@ export const getProductById = async (req: Request, res: Response) => {
 
 const registerProductVariants = async (req: Request, res: Response) => {
     const group = { name: req.body.group } as any
-    const { variants } = req.body
+    const { variants, id_sucursal } = req.body
 
     const savedGroup = await GroupRepository.registerGroup(group)
 
@@ -97,7 +97,15 @@ const registerProductVariants = async (req: Request, res: Response) => {
 
     for (let variant of variants) {
         const product = { ...variant, group: savedGroup } as IProducto
-        products.push(await ProductService.registerProduct(product))
+        const newProduct = await ProductService.registerProduct(product)
+        const {cantidad_por_sucursal} = variant
+        
+        const newStock = await ProductBranchService.registerProductBranch({
+            id_producto: newProduct.id_producto,
+            id_sucursal,
+            cantidad_por_sucursal})
+        products.push({newProduct, newStock})
+
     }
 
     res.json({
