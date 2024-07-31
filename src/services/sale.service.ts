@@ -17,6 +17,7 @@ const getProductsById = async (pedidoId: number) => {
 
     // Obtiene los productos junto con la cantidad
     const products = sales.map(sale => ({
+        key: sale.producto.id_producto,
         producto: sale.producto.nombre_producto,
         precio_unitario: sale.producto.precio,
         cantidad: sale.cantidad,
