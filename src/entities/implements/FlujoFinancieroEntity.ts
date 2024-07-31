@@ -19,10 +19,10 @@ export class FlujoFinancieroEntity implements IFlujoFinanciero {
     @Column({ type: 'varchar', nullable: false })
     concepto!: string;
 
-    @Column({ nullable: false })
+    @Column({ type: 'numeric', precision: 10, scale: 2, nullable: false })
     monto!: number;
 
-    @Column({ nullable: false, default: 'CURRENT_TIMESTAMP(6)' })
+    @Column({ nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
     fecha!: Date;
 
     @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.flujoFinanciero)
