@@ -60,11 +60,18 @@ const updateStock = async (stock: IProducto_Sucursal, newData: any) => {
     return newStock
 }
 
+const updateProduct = async (product: IProducto, newData: any) => {
+    product = {...product, ...newData}
+    const newProduct = await productRepository.save(product)
+    return newProduct
+}
+
 export const ProductRepository = {
     findAll,
     findById,
     registerProduct,
     getProductsBySales,
     getStockProduct,
-    updateStock
+    updateStock,
+    updateProduct
 };

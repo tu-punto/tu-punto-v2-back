@@ -60,10 +60,15 @@ const getProductStock = async (productId: number, sucursalId: number) => {
 
 const updateStock = async (newStock: any[]) => {
     const updatedStock = []
-    for( let {productId, sucursalId, stock} of newStock){
+    for( let {productId, sucursalId, stock, precio} of newStock){
         const oldStock = await ProductRepository.getStockProduct(productId, sucursalId)
         const cantidad_por_sucursal = oldStock?.cantidad_por_sucursal + stock
         const newStock = await ProductRepository.updateStock(oldStock!, {cantidad_por_sucursal})
+        
+        if(precio){
+            const product = await ProductRepository.findById(productId)
+            const newProduct = ProductRepository.updateProduct(product!, {precio})
+        }
         updatedStock.push(newStock)
     }
     return updatedStock
