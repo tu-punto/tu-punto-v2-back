@@ -54,11 +54,27 @@ const getProductById = async (productId: number) => {
     return product
 }
 
+const getProductStock = async (productId: number, sucursalId: number) => {
+    return await ProductRepository.getStockProduct(productId, sucursalId)
+}
+
+const updateStock = async (newStock: any[]) => {
+    const updatedStock = []
+    for( let {productId, sucursalId, stock} of newStock){
+        const oldStock = await ProductRepository.getStockProduct(productId, sucursalId)
+        const cantidad_por_sucursal = oldStock?.cantidad_por_sucursal + stock
+        const newStock = await ProductRepository.updateStock(oldStock!, {cantidad_por_sucursal})
+        updatedStock.push(newStock)
+    }
+    return updatedStock
+}
 
 export const ProductService ={
     getAllProducts,
     registerProduct,
     getFeaturesById,
     addFeatureToProduct,
-    getProductById
+    getProductById,
+    getProductStock,
+    updateStock
 }

@@ -4,8 +4,11 @@ import { ProductoEntity } from '../entities/implements/ProductoEntity';
 import { IProducto } from "../entities/IProducto";
 import { IVenta } from "../entities/IVenta";
 import { VentaEntity } from "../entities/implements/VentaEntity";
+import { Producto_SucursalEntity } from "../entities/implements/Producto_SucursalEntity";
+import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 
 const productRepository = AppDataSource.getRepository(ProductoEntity);
+const productSucursalRepository = AppDataSource.getRepository(Producto_SucursalEntity)
 
 const findAll = async (): Promise<ProductoEntity[]> => {
     return await productRepository.find({
@@ -41,9 +44,27 @@ const getProductsBySales = async (sales: VentaEntity[]) => {
     return products;
 }
 
+const getStockProduct = async (idProduct: number, idSucursal: number = 3) => {
+    const productSucursal = await productSucursalRepository.findOne({
+        where: {
+            id_producto: idProduct,
+            id_sucursal: idSucursal
+        }
+    })
+    return productSucursal
+}
+
+const updateStock = async (stock: IProducto_Sucursal, newData: any) => {
+    stock = {...stock, ...newData}
+    const newStock = await productSucursalRepository.save(stock)
+    return newStock
+}
+
 export const ProductRepository = {
     findAll,
     findById,
     registerProduct,
-    getProductsBySales
+    getProductsBySales,
+    getStockProduct,
+    updateStock
 };

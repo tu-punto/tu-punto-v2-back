@@ -18,4 +18,8 @@ productRouter.get('/:id', getProductById)
 
 productRouter.post('/registerVariant', ProductController.registerProduct)
 
+productRouter.get("/:idProduct/sucursal/:idSucursal", ProductController.getProductStock)
+
+productRouter.put('/updateStock', ProductController.updateStock)
+
 export default productRouter;

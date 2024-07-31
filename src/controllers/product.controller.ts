@@ -124,7 +124,34 @@ export const addStockToBranch = async (req: Request, res: Response) => {
     }
 }
 
+const getProductStock = async (req: Request, res: Response) => {
+    const idProduct = parseInt(req.params.idProduct)
+    const idSucursal = parseInt(req.params.idSucursal)
+    try {
+        const inventory = await ProductService.getProductStock(idProduct, idSucursal)   
+        res.json({
+            inventory
+        })     
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ msg: 'Internal Server Error' , error})
+    }
+}
+
+const updateStock = async (req: Request, res: Response) => {
+    const {newStock} = req.body
+    try {
+        const updatedStock = await ProductService.updateStock(newStock)
+        res.json({updatedStock})
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ msg: 'Internal Server Error' , error})        
+    }
+}
+
 export const ProductController = {
     registerProductVariants,
-    registerProduct
+    registerProduct,
+    getProductStock,
+    updateStock
 }
