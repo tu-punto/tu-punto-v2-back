@@ -27,7 +27,7 @@ const findById = async (productoId: number): Promise<ProductoEntity | null> => {
     })
 }
 
-const registerProduct = async (product: IProducto): Promise<any> => {
+const registerProduct = async (product: IProducto): Promise<Producto> => {
     const newProduct = productRepository.create(product);
     const savedProduct = await productRepository.save(newProduct);
     return new Producto(savedProduct);

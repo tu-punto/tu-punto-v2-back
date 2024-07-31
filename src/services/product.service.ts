@@ -67,7 +67,7 @@ const updateStock = async (newStock: any[]) => {
         
         if(precio){
             const product = await ProductRepository.findById(productId)
-            const newProduct = ProductRepository.updateProduct(product!, {precio})
+            const newProduct = await ProductRepository.updateProduct(product!, {precio})
         }
         updatedStock.push(newStock)
     }

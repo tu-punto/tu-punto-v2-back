@@ -17,12 +17,14 @@ export const getProduct = async (req: Request, res: Response) => {
 }
 
 const registerProduct = async (req: Request, res: Response) => {
-    const product = req.body;
+    const {product, stock} = req.body;
     try {
         const newProduct = await ProductService.registerProduct(product);
+        const newStock = await ProductBranchService.registerProductBranch({id_producto: newProduct.id_producto,...stock})
         res.json({
             status: true,
-            newProduct
+            newProduct,
+            newStock
         });
     } catch (error) {
         console.error(error);
