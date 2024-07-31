@@ -1,8 +1,9 @@
+import { IFlujoFinanciero } from "./IFlujoFinanciero";
 import { IPedido } from "./IPedido";
 import { ISucursal } from "./ISucursal";
 import { IVendedor } from "./IVendedor";
 
-export interface ITrabajador{
+export interface ITrabajador {
     id_trabajador: number;
     nombre: string;
     numero: number;
@@ -11,5 +12,6 @@ export interface ITrabajador{
 
     vendedor?: IVendedor[];
     pedido?: IPedido[];
+    flujoFinanciero?: IFlujoFinanciero[];
     sucursal: ISucursal[];
 }

@@ -13,6 +13,8 @@ import { ComprobantePagoEntity } from './ComprobantePagoEntity';
 import { VentaEntity } from './VentaEntity';
 import { IVenta } from '../IVenta';
 import { ProductoEntity } from './ProductoEntity';
+import { FlujoFinancieroEntity } from './FlujoFinancieroEntity';
+import { IFlujoFinanciero } from '../IFlujoFinanciero';
 
 @Entity({name:'Vendedor'})
 export class VendedorEntity implements IVendedor{
@@ -89,5 +91,8 @@ export class VendedorEntity implements IVendedor{
 
     @OneToMany(() => ProductoEntity, pedidoEntity => pedidoEntity.vendedor)
     producto!: IProducto[];
+
+    @OneToMany(() => FlujoFinancieroEntity, flujoFinancieroEntity => flujoFinancieroEntity.vendedor)
+    flujoFinanciero!: IFlujoFinanciero[];
 
 }

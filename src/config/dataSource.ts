@@ -13,6 +13,7 @@ import { TrabajadorEntity } from "../entities/implements/TrabajadorEntity";
 import { VentaEntity } from "../entities/implements/VentaEntity";
 import { CategoriaEntity } from "../entities/implements/CategoriaEntity";
 import { GroupEntity } from "../entities/implements/GroupEntity";
+import { FlujoFinancieroEntity } from "../entities/implements/FlujoFinancieroEntity";
 
 dotenv.config();
 
@@ -40,7 +41,8 @@ const AppDataSource = new DataSource({
         VendedorEntity,
         VentaEntity,
         CategoriaEntity,
-        GroupEntity
+        GroupEntity,
+        FlujoFinancieroEntity,
     ],
     subscribers: [],
     migrations: [],
