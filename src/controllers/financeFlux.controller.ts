@@ -24,3 +24,25 @@ export const registerFinanceFlux = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error', error })
     }
 }
+export const getWorker = async (req: Request, res: Response) => {
+    const id: number = parseInt(req.params.id)
+    try {
+        const worker = await FinanceFluxService.getWorkerById(id)
+        res.json(worker)
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al obtener un trabajador' });
+
+    }
+}
+export const getSeller = async (req: Request, res: Response) => {
+    const id: number = parseInt(req.params.id)
+    try {
+        const seller = await FinanceFluxService.getSellerById(id)
+        res.json(seller)
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al obtener un vendedor' });
+
+    }
+}

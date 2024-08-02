@@ -8,6 +8,7 @@ import groupRouter from "./routes/group.routes";
 import shippingRouter from "./routes/shipping.routes";
 import sucursalRouter from "./routes/sucursal.routes";
 import financeFluxRouter from "./routes/financeFlux.routes";
+import workerRouter from "./routes/worker.routes";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/group', groupRouter)
 router.use('/shipping', shippingRouter)
 router.use('/sucursal', sucursalRouter)
 router.use('/financeFlux', financeFluxRouter)
+router.use('/worker', workerRouter)
 
 export default router;

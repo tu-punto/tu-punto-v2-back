@@ -14,8 +14,29 @@ const registerFinanceFlux = async (financeFlux: IFlujoFinanciero) => {
     const savedFinanceFlux: IFlujoFinanciero = await financeFluxRepository.save(newFinanceFlux)
     return new FlujoFinanciero(savedFinanceFlux)
 }
-
+const findWorkerById = async (workerId: number): Promise<FlujoFinancieroEntity | null> => {
+    return await financeFluxRepository.findOne({
+        where: {
+            trabajador: {
+                id_trabajador: workerId
+            }
+        },
+        relations: ['trabajador']
+    })
+}
+const findSellerById = async (sellerId: number): Promise<FlujoFinancieroEntity | null> => {
+    return await financeFluxRepository.findOne({
+        where: {
+            vendedor: {
+                id_vendedor: sellerId
+            }
+        },
+        relations: ['vendedor']
+    })
+}
 export const FinanceFluxRepository = {
     findAll,
     registerFinanceFlux,
+    findWorkerById,
+    findSellerById
 }

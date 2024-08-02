@@ -14,8 +14,15 @@ const registerSeller = async (seller: IVendedor): Promise<Vendedor> => {
     const saveSeller = await sellersRepository.save(newSeller);
     return new Vendedor(saveSeller);
 } 
+export const getSellerByFinanceFlux = async (sellerId: number): Promise<VendedorEntity | null> => {
+    const seller = await sellersRepository.findOne({
+        where: { id_vendedor: sellerId }
+    });
+    return seller;
+};
 
 export const SellerRepository = {
     findAll,
-    registerSeller
+    registerSeller,
+    getSellerByFinanceFlux
 }
