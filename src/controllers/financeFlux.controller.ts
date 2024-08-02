@@ -3,7 +3,7 @@ import { FinanceFluxService } from "../services/financeFlux.service"
 
 export const getFinanceFluxes = async (req: Request, res: Response) => {
     try {
-        const financeFluxes = await FinanceFluxService.getAllFinanceFluxes()
+        const financeFluxes = await FinanceFluxService.getAllFinanceFluxes();
         res.json(financeFluxes)
     } catch (error) {
         console.log(error)

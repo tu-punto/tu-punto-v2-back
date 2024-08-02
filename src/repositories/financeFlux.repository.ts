@@ -5,7 +5,7 @@ import { FlujoFinanciero } from "../models/FlujoFinanciero"
 
 const financeFluxRepository = AppDataSource.getRepository(FlujoFinancieroEntity)
 
-const findAll = async () => {
+const findAll = async (): Promise<FlujoFinanciero[]> => {
     return await financeFluxRepository.find()
 }
 

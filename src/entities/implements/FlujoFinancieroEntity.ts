@@ -25,6 +25,12 @@ export class FlujoFinancieroEntity implements IFlujoFinanciero {
     @Column({ nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
     fecha!: Date;
 
+    @Column({nullable: false})
+    id_vendedor!: number;
+
+    @Column({nullable: false})
+    id_trabajador!: number;
+
     @ManyToOne(() => VendedorEntity, vendedorEntity => vendedorEntity.flujoFinanciero)
     @JoinColumn({
         name: 'id_vendedor',
