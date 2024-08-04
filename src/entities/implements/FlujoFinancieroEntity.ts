@@ -25,7 +25,7 @@ export class FlujoFinancieroEntity implements IFlujoFinanciero {
     @Column({ nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
     fecha!: Date;
 
-    @Column({nullable: false})
+    @Column({nullable: true})
     id_vendedor!: number;
 
     @Column({nullable: false})
