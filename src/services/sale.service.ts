@@ -14,14 +14,16 @@ const getProductsById = async (pedidoId: number) => {
     //console.log(`Sales found: ${JSON.stringify(sales)}`);
 
     if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
-
     // Obtiene los productos junto con la cantidad
     const products = sales.map(sale => ({
         key: sale.producto.id_producto,
         producto: sale.producto.nombre_producto,
         precio_unitario: sale.producto.precio,
         cantidad: sale.cantidad,
-        utilidad: sale.utilidad
+        utilidad: sale.utilidad,
+        id_venta: sale.id_venta,
+        id_vendedor: sale.producto.id_vendedor,
+        id_pedido: pedidoId
     }));
 
     //console.log(`Products with quantities: ${JSON.stringify(products)}`);
