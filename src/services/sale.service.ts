@@ -22,7 +22,8 @@ const getProductsById = async (pedidoId: number) => {
         utilidad: sale.utilidad,
         id_venta: sale.id_venta,
         id_vendedor: sale.producto.id_vendedor,
-        id_pedido: pedidoId
+        id_pedido: pedidoId,
+        id_producto: sale.producto.id_producto
     }));
 
     //console.log(`Products with quantities: ${JSON.stringify(products)}`);
