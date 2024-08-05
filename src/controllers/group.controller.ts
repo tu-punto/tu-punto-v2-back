@@ -18,23 +18,35 @@ const getAllGroups = async (req: Request, res: Response) => {
     try {
         const groups = await GroupService.getAllGroups()
         const products = await ProductService.getAllProducts()
-        const resGroup = groups.map((group) => ({...group, features: [] as any[]}))
-        for(let product of products) {
+        const resGroup = groups.map((group) => ({ ...group, features: [] as any[] }))
+        for (let product of products) {
             const refFeature = resGroup.find(group => group.id === product.groupId)
-            for(let feature of product.features){
+            for (let feature of product.features) {
                 refFeature?.features.push(feature.feature)
             }
         }
-        for(let group of resGroup){
+        for (let group of resGroup) {
             group.features = [...new Set(group.features)];
         }
         res.json(resGroup)
     } catch (error) {
-        
+
     }
 }
 
+const updateGroup = async (req: Request, res: Response) => {
+    const groupId = parseInt(req.params.id)
+    const { newData } = req.body
+    try {
+        const updatedGroup = await GroupService.updateGroup(newData, groupId)
+        res.json(updatedGroup)
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ msg: 'Internal server Error', error })
+    }
+}
 export const GroupController = {
     getProductsInGroup,
-    getAllGroups
+    getAllGroups,
+    updateGroup
 }

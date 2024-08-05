@@ -27,7 +27,6 @@ const getGroupById = async (id: number) => {
         where: {
             id
         }
-
     })
 }
 
@@ -61,11 +60,18 @@ const getExampleProduct = async (group: IGroup) => {
     })
 }
 
+const updateGroup = async (newData: any, groupId: IGroup) => {
+    const updatedGroup = { ...groupId, ...newData }
+    const newGroup = await groupRepository.save(updatedGroup)
+    return newGroup
+}
+
 export const GroupRepository = {
     getProductsInGroup,
     getGroupById,
     registerGroup,
     getAllGroups,
     getExampleProduct,
-    getAllGroupsWithProducts
+    getAllGroupsWithProducts,
+    updateGroup
 }
