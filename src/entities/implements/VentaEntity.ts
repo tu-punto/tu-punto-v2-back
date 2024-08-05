@@ -25,6 +25,9 @@ export class VentaEntity implements IVenta{
     @Column({default: false})
     deposito_realizado!: boolean;
 
+    @Column({nullable:false})
+    id_producto!:number;
+
     @ManyToOne( () => ProductoEntity, (product) => product.venta)
     @JoinColumn({
         name: "id_producto",

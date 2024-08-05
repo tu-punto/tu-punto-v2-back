@@ -1,4 +1,3 @@
-import { ProductRepository } from "../repositories/product.repository";
 import { SaleRepository } from "../repositories/sale.repository";
 
 const getAllSales = async () => {
@@ -30,8 +29,23 @@ const getProductsById = async (pedidoId: number) => {
 
     return products;
 }
+const updateProducts = async (shippingId:number, prods:any[])=>{
+    const sale= await SaleRepository.findByPedidoId(shippingId)
+    //console.log(sale)
+    if(!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+    return await SaleRepository.updateProducts(sale, prods);
+}
+
+const deleteProducts = async (shippingId:number, prods:any[])=>{
+    const sale= await SaleRepository.findByPedidoId(shippingId)
+    //console.log(sale)
+    if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
+    return await SaleRepository.deleteProducts(sale, prods);
+}
 export const SaleService = {
     getAllSales,
     registerSale,
-    getProductsById
+    getProductsById,
+    updateProducts,
+    deleteProducts
 }
