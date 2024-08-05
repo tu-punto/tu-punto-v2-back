@@ -17,7 +17,7 @@ const getProductsById = async (pedidoId: number) => {
     const products = sales.map(sale => ({
         key: sale.producto.id_producto,
         producto: sale.producto.nombre_producto,
-        precio_unitario: sale.producto.precio,
+        precio_unitario: sale.precio_unitario,
         cantidad: sale.cantidad,
         utilidad: sale.utilidad,
         id_venta: sale.id_venta,
