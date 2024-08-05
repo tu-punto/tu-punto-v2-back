@@ -28,6 +28,12 @@ export class VentaEntity implements IVenta{
     @Column({nullable:false})
     id_producto!:number;
 
+    @Column({nullable:false})
+    id_pedido!:number;
+
+    @Column({nullable:false})
+    id_vendedor!:number;
+
     @ManyToOne( () => ProductoEntity, (product) => product.venta)
     @JoinColumn({
         name: "id_producto",
