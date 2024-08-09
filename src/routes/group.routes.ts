@@ -8,6 +8,6 @@ groupRouter.get('/:id/variants', GroupController.getProductsInGroup)
 
 groupRouter.get('/', GroupController.getAllGroups)
 
-groupRouter.put('/:id', GroupController.updateGroup)
+groupRouter.put('/products/:id', GroupController.updateGroupAndProductNames)
 
 export default groupRouter
