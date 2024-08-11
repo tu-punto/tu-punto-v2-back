@@ -8,6 +8,7 @@ export interface IFlujoFinanciero {
     concepto: string;
     monto: number;
     fecha: Date;
+    esDeuda: boolean;
 
     vendedor: IVendedor;
     trabajador: ITrabajador;
