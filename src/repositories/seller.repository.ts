@@ -13,8 +13,15 @@ const registerSeller = async (seller: IVendedor): Promise<Vendedor> => {
     const newSeller = sellersRepository.create(seller);
     const saveSeller = await sellersRepository.save(newSeller);
     return new Vendedor(saveSeller);
-} 
-export const getSellerByFinanceFlux = async (sellerId: number): Promise<VendedorEntity | null> => {
+}
+
+const updateSeller = async (seller: IVendedor, updateData: any) => {
+    seller = { ...seller, ...updateData }
+    const updatedSeller = await sellersRepository.save(seller)
+    return updatedSeller
+}
+
+const findById = async (sellerId: number): Promise<VendedorEntity | null> => {
     const seller = await sellersRepository.findOne({
         where: { id_vendedor: sellerId }
     });
@@ -24,5 +31,6 @@ export const getSellerByFinanceFlux = async (sellerId: number): Promise<Vendedor
 export const SellerRepository = {
     findAll,
     registerSeller,
-    getSellerByFinanceFlux
+    findById,
+    updateSeller
 }

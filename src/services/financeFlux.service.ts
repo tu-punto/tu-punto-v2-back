@@ -31,7 +31,7 @@ const getSellerById = async (sellerId: number) => {
     const financeFlux = await FinanceFluxRepository.findSellerById(sellerId)
     if(!financeFlux)
         throw new Error("Doesn't exist such seller with that id fk from FinanceFlux")
-    const seller = await SellerRepository.getSellerByFinanceFlux(financeFlux.vendedor.id_vendedor)
+    const seller = await SellerRepository.findById(financeFlux.vendedor.id_vendedor)
 
     if (!seller) {
         throw new Error("No seller found with the given id");
