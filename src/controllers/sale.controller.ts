@@ -1,27 +1,27 @@
 import { Request, Response } from "express";
 import { SaleService } from "../services/sale.service";
 
-export const getSale = async (req: Request, res:Response) => {
+export const getSale = async (req: Request, res: Response) => {
     try {
         const sale = await SaleService.getAllSales();
         res.json(sale);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
 
-export const registerSale = async(req: Request, res:Response) => {
+export const registerSale = async (req: Request, res: Response) => {
     const sale = req.body;
     try {
-        const newSale= await SaleService.registerSale(sale);
+        const newSale = await SaleService.registerSale(sale);
         res.json({
             status: true,
             newSale
         });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
 export const getProducts = async (req: Request, res: Response) => {
@@ -31,36 +31,36 @@ export const getProducts = async (req: Request, res: Response) => {
         res.json(products);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
-export const updateProducts = async(req:Request, res:Response)=>{
+export const updateProducts = async (req: Request, res: Response) => {
     const shippingId = parseInt(req.params.id);
     const prods = req.body;
-    try{
+    try {
         const updatedProds = await SaleService.updateProducts(shippingId, prods);
         res.json({
-            status:true,
+            status: true,
             updatedProds
         })
 
-    }catch(error){
+    } catch (error) {
         console.log(error);
-        res.status(500).json({msg:'Error updating products', error})
+        res.status(500).json({ msg: 'Error updating products', error })
     }
 }
-export const deleteProducts = async(req:Request, res:Response)=>{
+export const deleteProducts = async (req: Request, res: Response) => {
     const shippingId = parseInt(req.params.id);
     const prods = req.body;
-    try{
+    try {
         const deleteProduct = await SaleService.deleteProducts(shippingId, prods);
         res.json({
-            status:true,
+            status: true,
             deleteProduct
         })
 
-    }catch(error){
+    } catch (error) {
         console.log(error);
-        res.status(500).json({msg:'Error deleting products', error})
+        res.status(500).json({ msg: 'Error deleting products', error })
     }
 }
