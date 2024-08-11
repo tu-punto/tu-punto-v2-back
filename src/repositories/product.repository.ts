@@ -15,7 +15,8 @@ const findAll = async (): Promise<ProductoEntity[]> => {
         relations: {
             features: true,
             producto_sucursal: true,
-            categoria: true
+            categoria: true,
+            group: true
         }
     })
 }
