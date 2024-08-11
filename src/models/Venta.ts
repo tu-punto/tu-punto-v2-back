@@ -9,7 +9,9 @@ export class Venta {
     precio_unitario: number;
     utilidad: number;
     deposito_realizado: boolean;
-
+    id_pedido: number;
+    id_vendedor: number;
+    id_producto: number;
     producto: IProducto;
     pedido: IPedido;
     vendedor: IVendedor;
@@ -20,6 +22,9 @@ export class Venta {
         this.precio_unitario = iVenta.precio_unitario;
         this.utilidad = iVenta.utilidad;
         this.deposito_realizado = iVenta.deposito_realizado;
+        this.id_pedido = iVenta.id_pedido
+        this.id_vendedor = iVenta.id_vendedor
+        this.id_producto = iVenta.id_producto
         this.producto = iVenta.producto;
         this.pedido = iVenta.pedido;
         this.vendedor = iVenta.vendedor
