@@ -39,10 +39,10 @@ export class PedidoEntity implements IPedido{
     @Column({type: 'varchar'})
     lugar_entrega!: string;
 
-    @Column({default: 0})
+    @Column({type: 'decimal', precision: 10, scale: 2, default: 0})
     costo_delivery!: number;
 
-    @Column({default: 0})
+    @Column({type: 'decimal', precision: 10, scale: 2, default: 0})
     cargo_delivery!: number;
 
     @Column({type: 'varchar'})
