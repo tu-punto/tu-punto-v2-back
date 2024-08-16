@@ -34,6 +34,17 @@ export const getProducts = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
+export const getProductsBySellerId = async (req: Request, res: Response) => {
+    const sellerId: number = parseInt(req.params.id);
+    try {
+        const products = await SaleService.getProductsBySellerId(sellerId);
+        res.json(products);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Error getting products by seller id', error });
+    }
+}
+
 export const updateProducts = async (req: Request, res: Response) => {
     const shippingId = parseInt(req.params.id);
     const prods = req.body;

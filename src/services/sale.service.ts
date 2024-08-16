@@ -10,7 +10,6 @@ const registerSale = async (sale:any) => {
 const getProductsById = async (pedidoId: number) => {
     //console.log(`Fetching sales for pedidoId: ${pedidoId}`);
     const sales = await SaleRepository.findByPedidoId(pedidoId);
-    //console.log(`Sales found: ${JSON.stringify(sales)}`);
 
     if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
     // Obtiene los productos junto con la cantidad
@@ -26,7 +25,25 @@ const getProductsById = async (pedidoId: number) => {
         id_producto: sale.producto.id_producto
     }));
 
-    //console.log(`Products with quantities: ${JSON.stringify(products)}`);
+
+    return products;
+}
+const getProductsBySellerId = async (sellerId: number) => {
+    const sales = await SaleRepository.findBySellerId(sellerId);
+
+    if (sales.length === 0) throw new Error("No existen ventas con ese ID de vendedor");
+    const products = sales.map(sale => ({
+        key: sale.producto.id_producto,
+        producto: sale.producto.nombre_producto,
+        precio_unitario: sale.precio_unitario,
+        cantidad: sale.cantidad,
+        utilidad: sale.utilidad,
+        id_venta: sale.id_venta,
+        id_vendedor: sellerId,
+        id_pedido: sale.id_pedido,
+        id_producto: sale.producto.id_producto
+    }));
+
 
     return products;
 }
@@ -48,5 +65,6 @@ export const SaleService = {
     registerSale,
     getProductsById,
     updateProducts,
-    deleteProducts
+    deleteProducts,
+    getProductsBySellerId
 }

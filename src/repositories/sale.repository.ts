@@ -25,6 +25,15 @@ const findByPedidoId = async (pedidoId: number): Promise<VentaEntity[]> => {
     //console.log(`Sales found: ${JSON.stringify(sales)}`);
     return sales;
 }
+const findBySellerId = async (sellerId: number): Promise<VentaEntity[]> => {
+    //console.log(`Searching for sales with pedidoId: ${pedidoId}`);
+    const sales = await saleRepository.find({
+        where: { vendedor: { id_vendedor: sellerId } },
+        relations: ['producto']
+    });
+    //console.log(`Sales found: ${JSON.stringify(sales)}`);
+    return sales;
+}
 
 // const updateProducts = async (sales: any[], prods: any[]) => {
 //     const updatedSales: any[] = [];
@@ -86,5 +95,6 @@ export const SaleRepository = {
     registerSale,
     findByPedidoId,
     updateProducts,
-    deleteProducts
+    deleteProducts,
+    findBySellerId
 }
