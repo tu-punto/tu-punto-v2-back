@@ -41,7 +41,8 @@ const getProductsBySellerId = async (sellerId: number) => {
         id_venta: sale.id_venta,
         id_vendedor: sellerId,
         id_pedido: sale.id_pedido,
-        id_producto: sale.producto.id_producto
+        id_producto: sale.producto.id_producto,
+        deposito_realizado: sale.deposito_realizado
     }));
 
 
