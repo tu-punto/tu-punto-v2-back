@@ -5,6 +5,12 @@ import { ShippingRepository } from "../repositories/shipping.repository";
 const getAllShippings = async () => {
     return await ShippingRepository.findAll();
 };
+
+const getShippingByIds = async(shippingIds:number[]) =>{
+    const shippings = await ShippingRepository.findByIds(shippingIds);
+    if (!shippings.length) throw new Error(`No shippings found for the provided IDs`);
+    return shippings;
+}
 const registerShipping = async (shipping: any) => {
     return await ShippingRepository.registerShipping(shipping);
 };
@@ -25,6 +31,7 @@ const updateShipping = async (newData: any, shippingId: number) => {
 
 export const ShippingService = {
     getAllShippings,
+    getShippingByIds,
     registerShipping,
     registerSaleToShipping,
     updateShipping

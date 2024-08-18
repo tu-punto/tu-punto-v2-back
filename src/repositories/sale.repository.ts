@@ -29,7 +29,7 @@ const findBySellerId = async (sellerId: number): Promise<VentaEntity[]> => {
     //console.log(`Searching for sales with pedidoId: ${pedidoId}`);
     const sales = await saleRepository.find({
         where: { vendedor: { id_vendedor: sellerId } },
-        relations: ['producto']
+        relations: ['producto', 'pedido']
     });
     //console.log(`Sales found: ${JSON.stringify(sales)}`);
     return sales;

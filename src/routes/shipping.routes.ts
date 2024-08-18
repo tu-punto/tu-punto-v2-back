@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { getShipping, registerShipping, registerSaleToShipping, ShippingController } from "../controllers/shipping.controller";
+import { getShipping, registerShipping, registerSaleToShipping, ShippingController, getShippingByIds } from "../controllers/shipping.controller";
 
 const shippingRouter = Router();
 
 shippingRouter.get('/', getShipping)
+
+shippingRouter.get('/:ids', getShippingByIds)
 
 shippingRouter.post('/register', registerShipping)
 

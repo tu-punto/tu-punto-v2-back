@@ -1,3 +1,4 @@
+import { In } from "typeorm";
 import AppDataSource from "../config/dataSource";
 import { PedidoEntity } from "../entities/implements/PedidoEntity";
 import { IPedido } from "../entities/IPedido";
@@ -17,6 +18,14 @@ const findById = async(shippingId: number) => {
     })
 }
 
+const findByIds = async (shippingIds: number[]): Promise<Pedido[]> => {
+    return await shippingRepository.find({
+        where: {
+            id_pedido: In(shippingIds)
+        }
+    });
+}
+
 const registerShipping = async (shipping: IPedido): Promise<Pedido> => {
     const newShipping = shippingRepository.create(shipping);
     const savedShipping = await shippingRepository.save(newShipping);
@@ -33,5 +42,6 @@ export const ShippingRepository = {
     findAll,
     registerShipping,
     findById,
+    findByIds,
     updateShipping
 }
