@@ -28,6 +28,16 @@ const findById = async (productoId: number): Promise<ProductoEntity | null> => {
         }
     })
 }
+const findBySellerId = async (sellerId: number): Promise<ProductoEntity[] | null> => {
+    return await productRepository.find({
+        where: {
+            id_vendedor: sellerId
+        },
+        relations: {
+            producto_sucursal:true
+        }
+    })
+}
 
 const registerProduct = async (product: IProducto): Promise<Producto> => {
     const newProduct = productRepository.create(product);
@@ -71,6 +81,7 @@ const updateProduct = async (product: IProducto, newData: any) => {
 export const ProductRepository = {
     findAll,
     findById,
+    findBySellerId,
     registerProduct,
     getProductsBySales,
     getStockProduct,

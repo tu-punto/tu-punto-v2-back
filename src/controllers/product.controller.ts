@@ -86,6 +86,17 @@ export const getProductById = async (req: Request, res: Response) => {
 
     }
 }
+export const getProductAndStockBySellerId = async (req: Request, res: Response) => {
+    const { id } = req.params
+    try {
+        const stock = await ProductService.getStockBySellerId(parseInt(id))
+        res.json(stock)
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ msg: 'Error getting stock by a seller Id', error });
+
+    }
+}
 
 const registerProductVariants = async (req: Request, res: Response) => {
     const group = { name: req.body.group } as any

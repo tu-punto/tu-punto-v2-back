@@ -54,6 +54,12 @@ const getProductById = async (productId: number) => {
     return product
 }
 
+const getStockBySellerId = async (sellerId: number) => {
+    const products = await ProductRepository.findBySellerId(sellerId)
+    if(!products) throw new Error("Doesn't exist such products with that seller id as fk")
+    return products
+}
+
 const getProductStock = async (productId: number, sucursalId: number) => {
     return await ProductRepository.getStockProduct(productId, sucursalId)
 }
@@ -78,6 +84,7 @@ export const ProductService ={
     getAllProducts,
     registerProduct,
     getFeaturesById,
+    getStockBySellerId,
     addFeatureToProduct,
     getProductById,
     getProductStock,

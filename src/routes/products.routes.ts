@@ -1,5 +1,5 @@
 import { Request, Response, Router } from "express";
-import { addFeatureToProduct, addStockToBranch, getFeatures, getProduct, getProductById, getProductCategory, ProductController } from "../controllers/product.controller";
+import { addFeatureToProduct, addStockToBranch, getFeatures, getProduct, getProductAndStockBySellerId, getProductById, getProductCategory, ProductController } from "../controllers/product.controller";
 
 const productRouter = Router();
 productRouter.get('/', getProduct)
@@ -15,6 +15,8 @@ productRouter.get('/features/:id', getFeatures)
 productRouter.get('/category/:id', getProductCategory)
 
 productRouter.get('/:id', getProductById)
+
+productRouter.get('/seller/:id', getProductAndStockBySellerId)
 
 productRouter.post('/registerVariant', ProductController.registerProduct)
 
