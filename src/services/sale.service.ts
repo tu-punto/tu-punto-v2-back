@@ -44,7 +44,7 @@ const getProductsBySellerId = async (sellerId: number) => {
         id_producto: sale.producto.id_producto,
         deposito_realizado: sale.deposito_realizado,
         cliente: sale.pedido.cliente,
-        fecha:sale.pedido.fecha_pedido
+        fecha_pedido:sale.pedido.fecha_pedido
     }));
 
 
