@@ -58,9 +58,20 @@ const updateGroupAndProductNames = async (req: Request, res: Response) => {
     }
 }
 
+const getGroupById = async(req: Request, res:Response) => {
+    const groupId = parseInt(req.params.id)
+    try {
+        const group = await GroupService.getGroupById(groupId)
+        res.json(group)
+    } catch (error) {
+        res.status(500).json({msg: "Internal server Error", error})
+    }
+}
+
 export const GroupController = {
     getProductsInGroup,
     getAllGroups,
     updateGroup,
-    updateGroupAndProductNames
+    updateGroupAndProductNames,
+    getGroupById
 }

@@ -10,4 +10,6 @@ groupRouter.get('/', GroupController.getAllGroups)
 
 groupRouter.put('/products/:id', GroupController.updateGroupAndProductNames)
 
+groupRouter.get('/:id', GroupController.getGroupById)
+
 export default groupRouter
