@@ -59,10 +59,16 @@ const updateGroupAndProductNames = async (newData: any, groupId: number) => {
     return { group: updatedGroup, products: updatedProducts }
 }
 
+const getGroupById = async (idGroup: number) => {
+    const group = await GroupRepository.getGroupById(idGroup)
+    return group
+}
+
 export const GroupService = {
     getProductsByGroup,
     getAllGroups,
     getAllGroupsWithProducts,
     updateGroup,
-    updateGroupAndProductNames
+    updateGroupAndProductNames,
+    getGroupById
 }
