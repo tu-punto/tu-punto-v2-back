@@ -34,9 +34,17 @@ const findSellerById = async (sellerId: number): Promise<FlujoFinancieroEntity |
         relations: ['vendedor']
     })
 }
+const findSellerInfoById = async (sellerId: number): Promise<FlujoFinancieroEntity[] | null> => {
+    return await financeFluxRepository.find({
+        where: {
+           id_vendedor: sellerId
+        },
+    })
+}
 export const FinanceFluxRepository = {
     findAll,
     registerFinanceFlux,
     findWorkerById,
-    findSellerById
+    findSellerById,
+    findSellerInfoById
 }

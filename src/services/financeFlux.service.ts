@@ -44,10 +44,17 @@ const getSellerById = async (sellerId: number) => {
         marca: seller.marca
     };
 }
+const getSellerInfoById = async (sellerId: number) => {
+    const financeFlux = await FinanceFluxRepository.findSellerInfoById(sellerId)
+    if(!financeFlux)
+        throw new Error("Doesn't exist such seller with that id fk from FinanceFlux")
+    return financeFlux
+}
 
 export const FinanceFluxService = {
     getAllFinanceFluxes,
     registerFinanceFlux,
     getWorkerById,
-    getSellerById
+    getSellerById,
+    getSellerInfoById
 }
