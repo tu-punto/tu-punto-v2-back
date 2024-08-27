@@ -60,6 +60,17 @@ export const updateProducts = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Error updating products', error })
     }
 }
+export const updateSale = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id)
+    const { newData } = req.body
+    try {
+        const saleUpdated = await SaleService.updateSalesByIds(newData, id)
+        res.json(saleUpdated)
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ msg: 'Internal Server Error', error })
+    }
+}
 export const deleteProducts = async (req: Request, res: Response) => {
     const shippingId = parseInt(req.params.id);
     const prods = req.body;

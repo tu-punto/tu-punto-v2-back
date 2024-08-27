@@ -56,6 +56,11 @@ const updateProducts = async (shippingId:number, prods:any[])=>{
     if(!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
     return await SaleRepository.updateProducts(sale, prods);
 }
+const updateSalesByIds = async (newData: any, salesId: number) => {
+    const sale = await SaleRepository.findById(salesId)
+    if (!sale) throw new Error(`Sale with id ${salesId} doesn't exist`);
+    return await SaleRepository.updateSalesByIds(newData, sale)
+}
 
 const deleteProducts = async (shippingId:number, prods:any[])=>{
     const sale= await SaleRepository.findByPedidoId(shippingId)
@@ -69,5 +74,6 @@ export const SaleService = {
     getProductsById,
     updateProducts,
     deleteProducts,
-    getProductsBySellerId
+    getProductsBySellerId,
+    updateSalesByIds
 }

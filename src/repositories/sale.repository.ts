@@ -16,6 +16,18 @@ const registerSale = async (sale: IVenta): Promise<Venta> => {
     const savedSale = await saleRepository.save(newSale);
     return new Venta(savedSale);
 }
+const findById = async(saleId: number) => {
+    return await saleRepository.findOne({
+        where: {
+            id_venta: saleId
+        }
+    })
+}
+const updateSalesByIds = async (newData: any, sale: IVenta) => {
+    sale = {...sale, ...newData}
+    const newSale = await saleRepository.save(sale)
+    return newSale
+}
 const findByPedidoId = async (pedidoId: number): Promise<VentaEntity[]> => {
     //console.log(`Searching for sales with pedidoId: ${pedidoId}`);
     const sales = await saleRepository.find({
@@ -96,5 +108,7 @@ export const SaleRepository = {
     findByPedidoId,
     updateProducts,
     deleteProducts,
-    findBySellerId
+    findBySellerId,
+    findById,
+    updateSalesByIds,
 }
