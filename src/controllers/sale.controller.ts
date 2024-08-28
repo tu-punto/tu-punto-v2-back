@@ -86,3 +86,17 @@ export const deleteProducts = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Error deleting products', error })
     }
 }
+export const deleteSales = async (req: Request, res: Response) => {
+    const {ids} = req.body;
+    try {
+        const deleteSales = await SaleService.deleteSalesByIds(ids);
+        res.json({
+            status: true,
+            deleteSales
+        })
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ msg: 'Error deleting products', error })
+    }
+}

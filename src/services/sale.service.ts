@@ -68,6 +68,13 @@ const deleteProducts = async (shippingId:number, prods:any[])=>{
     if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
     return await SaleRepository.deleteProducts(sale, prods);
 }
+const deleteSalesByIds = async (saleIds:number[])=>{
+    if (!saleIds || saleIds.length === 0) {
+        throw new Error("No sale IDs provided for deletion.");
+    }
+    await SaleRepository.deleteSalesByIds(saleIds);
+}
+
 export const SaleService = {
     getAllSales,
     registerSale,
@@ -75,5 +82,6 @@ export const SaleService = {
     updateProducts,
     deleteProducts,
     getProductsBySellerId,
-    updateSalesByIds
+    updateSalesByIds,
+    deleteSalesByIds
 }

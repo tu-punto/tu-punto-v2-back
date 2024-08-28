@@ -1,3 +1,4 @@
+import { In } from "typeorm";
 import AppDataSource from "../config/dataSource";
 import { ProductoEntity } from "../entities/implements/ProductoEntity";
 import { VentaEntity } from "../entities/implements/VentaEntity";
@@ -100,6 +101,9 @@ const deleteProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
     }
     return deletedProducts;
 };
+const deleteSalesByIds = async (saleIds:number[]): Promise<any> => {
+    await saleRepository.delete({ id_venta: In(saleIds) });
+};
 
 
 export const SaleRepository = {
@@ -111,4 +115,5 @@ export const SaleRepository = {
     findBySellerId,
     findById,
     updateSalesByIds,
+    deleteSalesByIds
 }
