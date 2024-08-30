@@ -90,7 +90,6 @@ const deleteSalesByIds = async (saleIds:number[]): Promise<any> => {
 };
 
 export const SaleRepository = {
-<<<<<<< HEAD
     findAll,
     registerSale,
     findByPedidoId,
@@ -101,14 +100,3 @@ export const SaleRepository = {
     updateSalesByIds,
     deleteSalesByIds
 }
-=======
-  findAll,
-  registerSale,
-  findByPedidoId,
-  updateProducts,
-  deleteProducts,
-  findBySellerId,
-  findById,
-  updateSalesByIds,
-};
->>>>>>> 22237c12f4a1e546454d24c24de205f54e5dd8d8
