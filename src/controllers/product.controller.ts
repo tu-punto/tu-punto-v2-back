@@ -86,14 +86,14 @@ export const getProductById = async (req: Request, res: Response) => {
 
     }
 }
-export const getProductAndStockBySellerId = async (req: Request, res: Response) => {
+export const getAllProductsEntryAmountBySellerId = async (req: Request, res: Response) => {
     const { id } = req.params
     try {
-        const stock = await ProductService.getStockBySellerId(parseInt(id))
+        const stock = await ProductService.getAllProductsEntryAmountBySellerId(parseInt(id))
         res.json(stock)
     } catch (error) {
         console.log(error)
-        res.status(500).json({ msg: 'Error getting stock by a seller Id', error });
+        res.status(500).json({ msg: 'Error getting entry amount by a seller Id', error });
 
     }
 }

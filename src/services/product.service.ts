@@ -54,7 +54,7 @@ const getProductById = async (productId: number) => {
     return product
 }
 
-const getStockBySellerId = async (sellerId: number) => {
+const getAllProductsEntryAmountBySellerId = async (sellerId: number) => {
     const products = await ProductRepository.findBySellerId(sellerId)
     if(!products) throw new Error("Doesn't exist such products with that seller id as fk")
     return products
@@ -84,7 +84,7 @@ export const ProductService ={
     getAllProducts,
     registerProduct,
     getFeaturesById,
-    getStockBySellerId,
+    getAllProductsEntryAmountBySellerId,
     addFeatureToProduct,
     getProductById,
     getProductStock,
