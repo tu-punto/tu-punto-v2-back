@@ -11,6 +11,8 @@ import { Producto_SucursalEntity } from './Producto_SucursalEntity';
 import { ICaracteristicas } from '../ICaracteristicas';
 import { CaracteristicasEntity } from './CaracteristicasEntity';
 import { GroupEntity } from './GroupEntity';
+import { IIngreso } from '../IIngreso';
+import { IngresoEntity } from './IngresoEntity';
 
 @Entity({ name: 'Producto' })
 export class ProductoEntity implements IProducto {
@@ -58,5 +60,8 @@ export class ProductoEntity implements IProducto {
 
     @Column({ nullable: true })
     groupId!: number
+
+    @OneToMany(() => IngresoEntity, ingresoEntity => ingresoEntity.producto)
+    ingreso?: IIngreso[];
 
 }

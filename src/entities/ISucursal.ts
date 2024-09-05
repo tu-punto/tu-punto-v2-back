@@ -1,3 +1,4 @@
+import { IIngreso } from "./IIngreso";
 import { IPedido } from "./IPedido";
 import { IProducto_Sucursal } from "./IProducto_Sucursal";
 import { ITrabajador } from "./ITrabajador";
@@ -12,4 +13,5 @@ export interface ISucursal{
     producto_sucursal?: IProducto_Sucursal[];
     pedido?: IPedido;
     trabajador: ITrabajador[];
+    ingreso?: IIngreso[]
 }

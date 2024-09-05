@@ -1,6 +1,7 @@
 import { IComprobanteEntrada } from "./IComprobanteEntrada";
 import { IComprobantePago } from "./IComprobantePago";
 import { IFlujoFinanciero } from "./IFlujoFinanciero";
+import { IIngreso } from "./IIngreso";
 import { IPedido } from "./IPedido";
 import { IProducto } from "./IProducto";
 import { ITrabajador } from "./ITrabajador";
@@ -34,5 +35,6 @@ export interface IVendedor {
     pedido?: IPedido[];
     producto?: IProducto[];
     venta: IVenta[];
-    flujoFinanciero?: IFlujoFinanciero[]
+    flujoFinanciero?: IFlujoFinanciero[];
+    ingreso? : IIngreso[];
 }

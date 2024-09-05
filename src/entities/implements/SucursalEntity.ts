@@ -6,6 +6,8 @@ import { Producto_SucursalEntity } from './Producto_SucursalEntity';
 import { PedidoEntity } from './PedidoEntity';
 import { TrabajadorEntity } from './TrabajadorEntity';
 import { ITrabajador } from '../ITrabajador';
+import { IIngreso } from '../IIngreso';
+import { IngresoEntity } from './IngresoEntity';
 
 @Entity({name:'Sucursal'})
 export class SucursalEntity implements ISucursal{
@@ -33,4 +35,7 @@ export class SucursalEntity implements ISucursal{
 
     @OneToMany(() => TrabajadorEntity, trabajadorEntity => trabajadorEntity.sucursal)
     trabajador!: ITrabajador[];
+
+    @OneToMany(()=> IngresoEntity, ingresoEntity => ingresoEntity.sucursal)
+    ingreso?: IIngreso[];
 }

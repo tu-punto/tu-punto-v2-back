@@ -1,6 +1,7 @@
 import { IComprobanteEntrada } from "../entities/IComprobanteEntrada";
 import { IComprobantePago } from "../entities/IComprobantePago";
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
+import { IIngreso } from "../entities/IIngreso";
 import { IPedido } from "../entities/IPedido";
 import { IProducto } from "../entities/IProducto";
 import { ITrabajador } from "../entities/ITrabajador";
@@ -35,6 +36,7 @@ export class Vendedor {
     producto?: IProducto[];
     flujoFinanciero?: IFlujoFinanciero[];
     venta: IVenta[]
+    ingreso? : IIngreso[]
 
     constructor(iVendedor: IVendedor) {
         this.id_vendedor = iVendedor.id_vendedor;
@@ -63,5 +65,6 @@ export class Vendedor {
         this.producto = iVendedor.producto;
         this.flujoFinanciero = iVendedor.flujoFinanciero;
         this.venta = iVendedor.venta;
+        this.ingreso = iVendedor.ingreso;
     }
 }
