@@ -6,4 +6,8 @@ const entryRouter = Router();
 
 entryRouter.get('/seller/:id', EntryController.getProductsEntryAmount);
 
+entryRouter.delete('/', EntryController.deleteEntries)
+
+entryRouter.put('/:id', EntryController.updateEntry)
+
 export default entryRouter;
