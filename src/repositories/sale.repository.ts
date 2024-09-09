@@ -24,11 +24,12 @@ const findById = async (saleId: number) => {
     },
   });
 };
-const updateSalesByIds = async (newData: any, sale: IVenta) => {
-  sale = { ...sale, ...newData };
-  const newSale = await saleRepository.save(sale);
-  return newSale;
+
+const updateSale = async (sale: IVenta) => {
+  const updatedSale = await saleRepository.save(sale);
+  return updatedSale;
 };
+
 const findByPedidoId = async (pedidoId: number): Promise<VentaEntity[]> => {
   //console.log(`Searching for sales with pedidoId: ${pedidoId}`);
   const sales = await saleRepository.find({
@@ -97,6 +98,6 @@ export const SaleRepository = {
     deleteProducts,
     findBySellerId,
     findById,
-    updateSalesByIds,
+    updateSale,
     deleteSalesByIds
 }

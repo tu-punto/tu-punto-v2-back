@@ -29,13 +29,16 @@ export const deleteEntries = async (req: Request, res: Response) => {
 };
 
 export const updateEntry = async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
-    const { newData } = req.body;
+    const entries = req.body.entries
     try {
-        const entryUpdated = await EntryService.updateEntryById(newData, id);
-        res.json(entryUpdated);
+        const entryUpdated = await EntryService.updateEntries(entries);
+        res.status(200).json({
+            status: "success",
+            message: `${entryUpdated.length} entries updated successfully`,
+            data: entryUpdated
+          });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ msg: "Internal Server Error", error });
+        res.status(500).json({ msg: "Error updating entries", error });
     }
 };

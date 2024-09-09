@@ -8,6 +8,6 @@ entryRouter.get('/seller/:id', EntryController.getProductsEntryAmount);
 
 entryRouter.delete('/', EntryController.deleteEntries)
 
-entryRouter.put('/:id', EntryController.updateEntry)
+entryRouter.put('/', EntryController.updateEntry);
 
 export default entryRouter;

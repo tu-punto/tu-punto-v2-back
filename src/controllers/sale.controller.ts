@@ -59,15 +59,18 @@ export const updateProducts = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Error updating products", error });
   }
 };
-export const updateSale = async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-  const { newData } = req.body;
+export const updateSales = async (req: Request, res: Response) => {
+  const sales = req.body.sales;
   try {
-    const saleUpdated = await SaleService.updateSalesByIds(newData, id);
-    res.json(saleUpdated);
+    const salesUpdated = await SaleService.updateSales(sales);
+    res.status(200).json({
+      status: "success",
+      message: `${salesUpdated.length} sales updated successfully`,
+      data: salesUpdated
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: "Internal Server Error", error });
+    res.status(500).json({ msg: "Error updating sales", error });
   }
 };
 export const deleteProducts = async (req: Request, res: Response) => {

@@ -32,27 +32,34 @@ export const deleteEntriesByIds = async (entriesIds: number[]) => {
     }
 }
 
-export const updateEntryById = async (newData: any, entryId: number) => {
-    const entry = await EntryRepository.findById(entryId)
-    if (!entry) throw new Error(`Entry with id ${entryId} doesn't exist`);
-    const oldAmount = entry.cantidad_ingreso;
+export const updateEntries = async (entries: any[]) => {
+    const updatedEntries = [];
 
-    const updatedEntry = await EntryRepository.updateEntryById(newData, entry)
-    const newAmount = updatedEntry.cantidad_ingreso;
+    for (const entry of entries) {
+        const existingEntry = await EntryRepository.findById(entry.id_ingreso);
+        if (!existingEntry) throw new Error(`Entry with id ${entry.id_ingreso} doesn't exist`);
+        
+        const oldAmount = existingEntry.cantidad_ingreso;
+        const updatedEntry = await EntryRepository.updateEntryById(entry, existingEntry);
+        const newAmount = updatedEntry.cantidad_ingreso;
 
-    if (updatedEntry) {
-        const { id_producto, cantidad_ingreso, id_sucursal } = entry;
-        const productStock = await ProductRepository.getStockProduct(id_producto, id_sucursal);
-        if (productStock) {
-            const difference = newAmount - oldAmount;
-            const updatedStock = {
-                cantidad_por_sucursal: (productStock.cantidad_por_sucursal || 0) + difference
-            };
-            await ProductRepository.updateStock(productStock, updatedStock);
+        if (updatedEntry) {
+            const { id_producto, cantidad_ingreso, id_sucursal } = existingEntry;
+            const productStock = await ProductRepository.getStockProduct(id_producto, id_sucursal);
+            if (productStock) {
+                const difference = newAmount - oldAmount;
+                const updatedStock = {
+                    cantidad_por_sucursal: (productStock.cantidad_por_sucursal || 0) + difference
+                };
+                await ProductRepository.updateStock(productStock, updatedStock);
+            } else {
+                throw new Error("It was not possible to update stock product");
+            }
         }
-    } else {
-        throw new Error("It was not possible to update stock product")
+
+        updatedEntries.push(updatedEntry);
     }
 
-    return updatedEntry
-}
+    return updatedEntries;
+};
+
