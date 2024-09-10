@@ -14,12 +14,14 @@ export const getProductsEntryAmount = async (req: Request, res: Response) => {
 }
 
 export const deleteEntries = async (req: Request, res: Response) => {
-    const { ids } = req.body;
+    const entries = req.body.entries;
     try {
-        const deleteEntries = await EntryService.deleteEntriesByIds(ids);
+        const entryIds = entries.map((entry: { id_ingreso: number }) => entry.id_ingreso);
+        const deletedEntries = await EntryService.deleteEntriesByIds(entryIds);
         res.json({
             status: true,
-            deleteEntries
+            message: 'Entries deleted successfully',
+            data: deletedEntries
         })
 
     } catch (error) {

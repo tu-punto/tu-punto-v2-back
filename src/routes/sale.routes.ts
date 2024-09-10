@@ -17,6 +17,6 @@ saleRouter.put('/', updateSales)
 
 saleRouter.delete('/products/delete/:id', deleteProducts)
 
-saleRouter.delete('/delete', deleteSales)
+saleRouter.delete('/', deleteSales)
 
 export default saleRouter;

@@ -88,16 +88,21 @@ export const deleteProducts = async (req: Request, res: Response) => {
   }
 }
 export const deleteSales = async (req: Request, res: Response) => {
-    const {ids} = req.body;
-    try {
-        const deleteSales = await SaleService.deleteSalesByIds(ids);
-        res.json({
-            status: true,
-            deleteSales
-        })
+  const sales  = req.body.sales;
+  try {
+    const saleIds = sales.map((sale:any) => sale.id_venta);
 
-    } catch (error) {
-        console.log(error);
-        res.status(500).json({ msg: 'Error deleting products', error })
+    if (!saleIds || saleIds.length === 0) {
+      return res.status(400).json({ msg: 'No sale IDs provided for deletion.' });
     }
+
+    const deletedSales = await SaleService.deleteSalesByIds(saleIds);
+    res.json({
+      status: true,
+      deletedSales
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ msg: 'Error deleting products', error })
+  }
 };
