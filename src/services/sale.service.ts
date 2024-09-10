@@ -4,7 +4,7 @@ const getAllSales = async () => {
     return await SaleRepository.findAll();
 };
 
-const registerSale = async (sale:any) => {
+const registerSale = async (sale: any) => {
     return await SaleRepository.registerSale(sale);
 }
 const getProductsById = async (pedidoId: number) => {
@@ -44,39 +44,48 @@ const getProductsBySellerId = async (sellerId: number) => {
         id_producto: sale.producto.id_producto,
         deposito_realizado: sale.deposito_realizado,
         cliente: sale.pedido.cliente,
-        fecha_pedido:sale.pedido.fecha_pedido
+        fecha_pedido: sale.pedido.fecha_pedido
     }));
 
 
     return products;
 }
-const updateProducts = async (shippingId:number, prods:any[])=>{
-    const sale= await SaleRepository.findByPedidoId(shippingId)
+const updateProducts = async (shippingId: number, prods: any[]) => {
+    const sale = await SaleRepository.findByPedidoId(shippingId)
     //console.log(sale)
-    if(!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+    if (!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
     return await SaleRepository.updateProducts(sale, prods);
 }
 
 const updateSales = async (sales: any[]) => {
     const updatedSales = [];
     for (const sale of sales) {
-      const updatedSale = await SaleRepository.updateSale(sale);
-      const isSale = await SaleRepository.findById(sale.id_venta);
-      if(isSale){updatedSales.push(updatedSale);}
-      else{
-        throw new Error(`No sale found with that saleId ${sale.id_venta}`)
-      }
+        const isSale = await SaleRepository.findById(sale.id_venta);
+        if (isSale) { 
+            const saleUpdate = {
+                id_venta: sale.id_venta,
+                cantidad: sale.cantidad,
+                precio_unitario: sale.precio_unitario,
+                utilidad: sale.utilidad,
+                deposito_realizado: sale.deposito_realizado,
+                ...(sale.id_producto && { id_producto: sale.id_producto }),
+            };
+            const updatedSale = await SaleRepository.updateSale(saleUpdate);
+            updatedSales.push(updatedSale); }
+        else {
+            throw new Error(`No sale found with that saleId ${sale.id_venta}`)
+        }
     }
-    return updatedSales; 
-  };
+    return updatedSales;
+};
 
-const deleteProducts = async (shippingId:number, prods:any[])=>{
-    const sale= await SaleRepository.findByPedidoId(shippingId)
+const deleteProducts = async (shippingId: number, prods: any[]) => {
+    const sale = await SaleRepository.findByPedidoId(shippingId)
     //console.log(sale)
     if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
     return await SaleRepository.deleteProducts(sale, prods);
 }
-const deleteSalesByIds = async (saleIds:number[])=>{
+const deleteSalesByIds = async (saleIds: number[]) => {
     if (!saleIds || saleIds.length === 0) {
         throw new Error("No sale IDs provided for deletion.");
     }
