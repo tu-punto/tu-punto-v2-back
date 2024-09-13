@@ -9,6 +9,7 @@ import shippingRouter from "./routes/shipping.routes";
 import sucursalRouter from "./routes/sucursal.routes";
 import financeFluxRouter from "./routes/financeFlux.routes";
 import workerRouter from "./routes/worker.routes";
+import pdfRouter from "./routes/pdf.routes";
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use('/shipping', shippingRouter)
 router.use('/sucursal', sucursalRouter)
 router.use('/financeFlux', financeFluxRouter)
 router.use('/worker', workerRouter)
+router.use('/pdf', pdfRouter)
 
 export default router;
