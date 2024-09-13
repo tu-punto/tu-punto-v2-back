@@ -34,7 +34,7 @@ const findBySellerId = async (sellerId: number): Promise<ProductoEntity[] | null
             id_vendedor: sellerId
         },
         relations: {
-            producto_sucursal:true
+            ingreso:true
         }
     })
 }

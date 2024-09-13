@@ -10,6 +10,8 @@ import sucursalRouter from "./routes/sucursal.routes";
 import financeFluxRouter from "./routes/financeFlux.routes";
 import workerRouter from "./routes/worker.routes";
 import pdfRouter from "./routes/pdf.routes";
+import paymentProofRouter from "./routes/paymentProof.routes";
+import entryRouter from "./routes/entry.routes";
 
 const router = Router();
 
@@ -24,5 +26,7 @@ router.use('/sucursal', sucursalRouter)
 router.use('/financeFlux', financeFluxRouter)
 router.use('/worker', workerRouter)
 router.use('/pdf', pdfRouter)
+router.use('/paymentProof', paymentProofRouter)
+router.use('/entry', entryRouter)
 
 export default router;

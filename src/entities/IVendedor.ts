@@ -1,9 +1,11 @@
 import { IComprobanteEntrada } from "./IComprobanteEntrada";
 import { IComprobantePago } from "./IComprobantePago";
 import { IFlujoFinanciero } from "./IFlujoFinanciero";
+import { IIngreso } from "./IIngreso";
 import { IPedido } from "./IPedido";
 import { IProducto } from "./IProducto";
 import { ITrabajador } from "./ITrabajador";
+import { IUser } from "./IUser";
 import { IVenta } from "./IVenta";
 
 export interface IVendedor {
@@ -28,11 +30,13 @@ export interface IVendedor {
     //TODO QUITAR LOS NULLS DE ID_TRABAJADOR Y DE TRABAJADOR
     id_trabajador: number;
 
+    user: IUser;
     comprobante_entrada?: IComprobanteEntrada[];
     comprobante_pago?: IComprobantePago[];
     trabajador: ITrabajador;
     pedido?: IPedido[];
     producto?: IProducto[];
     venta: IVenta[];
-    flujoFinanciero?: IFlujoFinanciero[]
+    flujoFinanciero?: IFlujoFinanciero[];
+    ingreso? : IIngreso[];
 }

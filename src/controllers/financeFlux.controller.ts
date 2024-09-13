@@ -46,3 +46,15 @@ export const getSeller = async (req: Request, res: Response) => {
 
     }
 }
+
+export const getSellerInfo = async (req: Request, res: Response) => {
+    const id: number = parseInt(req.params.id)
+    try {
+        const seller = await FinanceFluxService.getSellerInfoById(id)
+        res.json(seller)
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al obtener un vendedor' });
+
+    }
+}

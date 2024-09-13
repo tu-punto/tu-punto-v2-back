@@ -5,6 +5,7 @@ import { IVendedor } from "../entities/IVendedor";
 import { IVenta } from "../entities/IVenta";
 import { ICaracteristicas } from '../entities/ICaracteristicas';
 import { IGroup } from '../entities/IGroup';
+import { IIngreso } from '../entities/IIngreso';
 
 export class Producto{
     id_producto: number;
@@ -20,7 +21,7 @@ export class Producto{
     categoria: ICategoria;
     venta: IVenta[];
     producto_sucursal?: IProducto_Sucursal[];
-
+    ingreso?: IIngreso[];
     group: IGroup
 
     constructor(iProducto: IProducto){
@@ -37,5 +38,6 @@ export class Producto{
         this.venta= iProducto.venta;
         this.producto_sucursal= iProducto.producto_sucursal; 
         this.group = iProducto.group
+        this.ingreso = iProducto.ingreso;
     }
 }
