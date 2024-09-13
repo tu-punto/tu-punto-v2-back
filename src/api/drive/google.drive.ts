@@ -7,13 +7,30 @@ import { JWT } from 'google-auth-library';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Readable } from 'typeorm/platform/PlatformTools';
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+const pkey = {
+  type: process.env.TYPE,
+  project_id: process.env.PROJECT_ID,
+  private_key_id: process.env.PRIVATE_KEY_ID,
+  private_key: process.env.PRIVATE_KEY,
+  client_email: process.env.CLIENT_EMAIL,
+  client_id: process.env.CLIENT_ID,
+  auth_uri: process.env.AUTH_URI,
+  token_uri: process.env.TOKEN_URI,
+  auth_provider_x509_cert_url: process.env.AUTH_PROVIDER_X509_CERT_URL,
+  client_x509_cert_url: process.env.CLIENT_X509_CERT_URL,
+  universe_domain: process.env.UNIVERSE_DOMAIN
+};
 
 interface ServiceAccountKey {
     client_email: string;
     private_key: string;
   }
 
-const pkey: ServiceAccountKey = require('./pk.json');
+// const pkey: ServiceAccountKey = require('./pk.json');
 
 async function authorize(): Promise<JWT> {
     const jwtClient = new google.auth.JWT(
