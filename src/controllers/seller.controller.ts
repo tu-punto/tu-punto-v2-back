@@ -6,6 +6,20 @@ export const getSellers = async (req: Request, res: Response) => {
   res.json(sellers);
 };
 
+export const getSeller = async (req: Request, res: Response) => {
+  try {
+    const sellerId = req.params.id;
+    const seller = await SellerService.getSeller(sellerId);
+    if (seller) {
+      res.json(seller);
+    } else {
+      res.status(404).json({ msg: `Seller not found with such id ${sellerId}` });      
+    }
+  } catch (error) {
+    res.status(500).json({ msg: "Error getting seller", error });
+  }
+};
+
 export const registerSeller = async (req: Request, res: Response) => {
   const seller = req.body;
   try {

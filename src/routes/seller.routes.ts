@@ -1,11 +1,13 @@
 import { Request, Response, Router } from "express";
-import { getSellers, registerSeller, updateSeller } from "../controllers/seller.controller";
+import * as SellerController from '../controllers/seller.controller'
 
 const sellerRouter = Router();
-sellerRouter.get('/', getSellers)
+sellerRouter.get('/', SellerController.getSellers)
 
-sellerRouter.post('/register', registerSeller)
+sellerRouter.post('/register', SellerController.registerSeller)
 
-sellerRouter.put('/update/:id', updateSeller)
+sellerRouter.put('/update/:id', SellerController.updateSeller)
+
+sellerRouter.get('/:id', SellerController.getSeller)
 
 export default sellerRouter;
