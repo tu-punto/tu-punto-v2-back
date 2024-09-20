@@ -12,6 +12,7 @@ import workerRouter from "./routes/worker.routes";
 import pdfRouter from "./routes/pdf.routes";
 import paymentProofRouter from "./routes/paymentProof.routes";
 import entryRouter from "./routes/entry.routes";
+import userRouter from "./routes/user.route";
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use('/worker', workerRouter)
 router.use('/pdf', pdfRouter)
 router.use('/paymentProof', paymentProofRouter)
 router.use('/entry', entryRouter)
+router.use('/user', userRouter)
 
 export default router;
