@@ -20,10 +20,10 @@ export const getCategory = async (req: Request, res: Response) => {
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   try {
-    //TODO: no dejar crear cuenta con un mismo correo
     const checkEmail = await UserService.findByEmailService(user.email);
     if (checkEmail) {
       res.status(500).json({ error: "Email is already taken" });
+      return;
     }
     const encryptPassword = await hashPassword(user.password);
     const newUser = await UserService.registerUserService({
@@ -55,7 +55,7 @@ export const loginUserController = async (req: Request, res: Response) => {
       return;
     }
     const token = generateToken(user.id_user, user.role);
-    res.cookie("token", token).json(user);
+    res.cookie("token", token).json({ ...user, password: "" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
