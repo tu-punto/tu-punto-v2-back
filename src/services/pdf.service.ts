@@ -3,7 +3,7 @@ import { googleDrive } from "../api/drive/google.drive"
 
 
 
-const generatePdf = async (bodyTable: any) => {
+export const generatePdf = async (bodyTable: any) => {
     try {
         const pdf = await googleDrive.sentProductsPDF(bodyTable)
         return pdf
@@ -12,4 +12,11 @@ const generatePdf = async (bodyTable: any) => {
     }
 }
 
-export default generatePdf
+export const generatePaymentPDF = async (bodyTable: any[], paymentData: any[]) => {
+    try{
+        const pdf = await googleDrive.sentPaymentPDF(bodyTable, paymentData)
+        return pdf
+    } catch (error) {
+        throw error
+    }
+}
