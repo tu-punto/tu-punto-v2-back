@@ -7,16 +7,8 @@ import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
 
 dotenv.config();
-export const getCategory = async (req: Request, res: Response) => {
-  try {
-    const categories = await CategoryService.getAllCategories();
-    res.json(categories);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
 
+const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   try {
@@ -55,9 +47,25 @@ export const loginUserController = async (req: Request, res: Response) => {
       return;
     }
     const token = generateToken(user.id_user, user.role);
-    res.cookie("token", token).json({ ...user, password: "" });
+    res
+      .cookie("token", token, { maxAge: 900000 })
+      .json({ ...user, password: "" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getUserInfoController = async (req: Request, res: Response) => {
+  const { token } = req.cookies;
+  if (!token) {
+    res.status(500).json({ msg: "Error getting token" });
+    return;
+  }
+  try {
+    const user = jwt.verify(token, JWT_SECRET, {});
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ msg: "Error getting user" });
   }
 };

@@ -10,9 +10,15 @@ dotenv.config();
 AppDataSource.initialize().then(() => {
   const app: Express = express();
   const port = process.env.SERVER_PORT;
+  const client_url = process.env.CLIENT_URL;
 
+  app.use(
+    cors({
+      origin: client_url,
+      credentials: true,
+    })
+  );
   app.use(express.json());
-  app.use(cors());
   app.use(cookieParser());
   app.use(express.urlencoded({ extended: false }));
   app.use(routes);
