@@ -156,6 +156,92 @@ const sentProductsPDF = async (tableData: any[]) => {
         
 }
 
+const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
+ try {
+  
+   const jwt = await authorize()
+   const doc = new jsPDF()
+   
+   const titleX = 20; // X position for text
+   const titleY = 30; // Y position for text
+   const titleWidth = 170; // Width of the background rectangle
+   const titleHeight = 10; // Height of the background rectangle
+ 
+   doc.setFillColor(29,213,144);
+   doc.rect(titleX - 2, titleY - 6, titleWidth, titleHeight, 'F');
+ 
+   doc.setFontSize(18)
+   doc.setTextColor("white")
+   doc.text("COMPROBANTE DE PAGOS", titleX + 40, titleY)
+ 
+   doc.setFontSize(10)
+   doc.setTextColor("black")
+   doc.text(`Fecha: ${new Date().toLocaleDateString()}`,
+           doc.internal.pageSize.width - 50,
+           titleY + titleHeight + 5,
+         )
+     
+   doc.text(`Cliente: Deborah Matienzo Gamon`,
+     titleX, 
+     titleY + titleHeight + 5
+   )
+ 
+   const tableX = titleX
+   const tableY = titleY + titleHeight + 15;
+   (doc as any).autoTable({
+       head:[['Producto','Precio Unitario','Cantidad','Total']],
+       body: tableData.map((val,i)=>[val.producto,val.unitartio,val.cantidad,val.total]),
+       columnStyles:{
+           0:{cellWidth:80},
+           1:{cellWidth:40},
+           2:{cellWidth:20},
+           3:{cellWidth:30}
+       },
+       headStyles:{
+           fillColor: [29,213,144],
+           textColor: "white"
+       },
+       startY: tableY,
+       margin: {left: tableX},
+   })
+   console.log("DOCS");
+   (doc as any).autoTable({
+     head:[['Fecha','ADELANTOS RECIBIDOS DE CLIENTES']],
+     body: paymentData.map((val,i)=>[val.date,val.client]),
+     columnStyles:{
+         0:{cellWidth:80},
+         1:{cellWidth:40},
+     },
+     headStyles:{
+         fillColor: [29,213,144],
+         textColor: "white"
+     },
+     margin: {left: tableX},
+     didDrawPage: (data: any) => {
+       const finalY = data.cursor.y; // Get the Y-coordinate where the table ends
+       doc.setFontSize(10)
+       doc.setTextColor('black')
+ 
+       doc.text(`PAGO REALIZADO: 3910.01 Bs`,
+         titleX, 
+         finalY + 5
+       )
+ 
+       doc.text('FIRMA', tableX + 30, finalY + 30); 
+       doc.text("Nombre Cliente:", tableX , finalY + 40)
+       doc.text("CI:",tableX , finalY+50)
+     }
+   })
+   const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+   // Upload the generated PDF
+   const response = await uploadFile(jwt, pdfBuffer);
+   return response
+ } catch (error) {
+  console.log(error)
+ } 
+}
+
 export const googleDrive = {
-    sentProductsPDF
+    sentProductsPDF,
+    sentPaymentPDF
 }
