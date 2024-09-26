@@ -47,12 +47,13 @@ export const loginUserController = async (req: Request, res: Response) => {
       return;
     }
     const token = generateToken(user.id_user, user.role);
+    const isSecure = process.env.NODE_ENV === "production";
     res
       .cookie("token", token, {
         maxAge: 900000,
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "none",
+        secure: isSecure,
+        sameSite: isSecure ? "none" : "lax",
       })
       .json({ ...user, password: "" });
   } catch (error) {
