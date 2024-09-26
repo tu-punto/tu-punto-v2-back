@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { CookieOptions, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { CategoryService } from "../services/category.service";
@@ -48,7 +48,12 @@ export const loginUserController = async (req: Request, res: Response) => {
     }
     const token = generateToken(user.id_user, user.role);
     res
-      .cookie("token", token, { maxAge: 900000 })
+      .cookie("token", token, {
+        maxAge: 900000,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "none",
+      })
       .json({ ...user, password: "" });
   } catch (error) {
     console.error(error);
@@ -57,6 +62,7 @@ export const loginUserController = async (req: Request, res: Response) => {
 };
 
 export const getUserInfoController = async (req: Request, res: Response) => {
+  console.log("cookies", req.cookies);
   const { token } = req.cookies;
   if (!token) {
     res.status(500).json({ msg: "Error getting token" });
