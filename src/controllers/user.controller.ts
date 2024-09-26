@@ -62,7 +62,6 @@ export const loginUserController = async (req: Request, res: Response) => {
 };
 
 export const getUserInfoController = async (req: Request, res: Response) => {
-  console.log("cookies", req.cookies);
   const { token } = req.cookies;
   if (!token) {
     res.status(500).json({ msg: "Error getting token" });
