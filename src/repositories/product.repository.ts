@@ -51,7 +51,6 @@ const getProductsBySales = async (sales: VentaEntity[]) => {
     
     // Usando los IDs de producto para buscar los productos correspondientes
     const products = await productRepository.findByIds(productIds);
-    //console.log(`Products fetched: ${JSON.stringify(products)}`);
 
     return products;
 }

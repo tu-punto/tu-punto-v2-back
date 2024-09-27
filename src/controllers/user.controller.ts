@@ -9,6 +9,7 @@ import { generateToken } from "../helpers/jwt";
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
+const isSecure = process.env.NODE_ENV === "production";
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   try {
@@ -47,7 +48,7 @@ export const loginUserController = async (req: Request, res: Response) => {
       return;
     }
     const token = generateToken(user.id_user, user.role);
-    const isSecure = process.env.NODE_ENV === "production";
+
     res
       .cookie("token", token, {
         maxAge: 900000,
@@ -73,5 +74,19 @@ export const getUserInfoController = async (req: Request, res: Response) => {
     res.json(user);
   } catch (error) {
     res.status(500).json({ msg: "Error getting user" });
+  }
+};
+
+export const logoutUserController = async (req: Request, res: Response) => {
+  try {
+    res
+      .clearCookie("token", {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: isSecure ? "none" : "lax",
+      })
+      .json({ msg: "Log out successfull" });
+  } catch (error) {
+    res.status(500).json({ msg: "Error logging out user" });
   }
 };
