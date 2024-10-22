@@ -1,0 +1,5 @@
+export const FLUX_TYPES = {
+  GASTO: "GASTO",
+  INGRESO: "INGRESO",
+  INVERSION: "INVERSION",
+};

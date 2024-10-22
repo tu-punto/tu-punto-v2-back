@@ -237,7 +237,7 @@ const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
    const response = await uploadFile(jwt, pdfBuffer);
    return response
  } catch (error) {
-  console.log(error)
+  console.error(error)
  } 
 }
 

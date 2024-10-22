@@ -1,19 +1,18 @@
 import { Router } from "express";
-import { getFinanceFluxes, getSeller, getSellerInfo, getWorker, registerFinanceFlux } from "../controllers/financeFlux.controller";
+import * as fluxController from "../controllers/financeFlux.controller";
 
-const financeFluxRouter = Router()
+const financeFluxRouter = Router();
 
-financeFluxRouter.get('/', getFinanceFluxes)
+financeFluxRouter.get("/", fluxController.getFinanceFluxes);
 
-financeFluxRouter.post('/register', registerFinanceFlux)
+financeFluxRouter.post("/register", fluxController.registerFinanceFlux);
 
-financeFluxRouter.get('/worker/:id', getWorker)
+financeFluxRouter.get("/worker/:id", fluxController.getWorker);
 
-financeFluxRouter.get('/seller/:id', getSeller)
+financeFluxRouter.get("/seller/:id", fluxController.getSeller);
 
-financeFluxRouter.get('/sellerInf/:id', getSellerInfo)
+financeFluxRouter.get("/sellerInf/:id", fluxController.getSellerInfo);
 
+financeFluxRouter.get("/stats/", fluxController.getStatsController);
 
-
-export default financeFluxRouter
-
+export default financeFluxRouter;
