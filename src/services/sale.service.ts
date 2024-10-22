@@ -8,7 +8,6 @@ const registerSale = async (sale: any) => {
     return await SaleRepository.registerSale(sale);
 }
 const getProductsById = async (pedidoId: number) => {
-    //console.log(`Fetching sales for pedidoId: ${pedidoId}`);
     const sales = await SaleRepository.findByPedidoId(pedidoId);
 
     if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
@@ -52,7 +51,6 @@ const getProductsBySellerId = async (sellerId: number) => {
 }
 const updateProducts = async (shippingId: number, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
-    //console.log(sale)
     if (!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
     return await SaleRepository.updateProducts(sale, prods);
 }
@@ -81,7 +79,6 @@ const updateSales = async (sales: any[]) => {
 
 const deleteProducts = async (shippingId: number, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
-    //console.log(sale)
     if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
     return await SaleRepository.deleteProducts(sale, prods);
 }

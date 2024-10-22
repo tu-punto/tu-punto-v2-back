@@ -11,7 +11,7 @@ const getSeller = async (sellerId:string) => {
         const seller = await SellerRepository.findById(parseInt(sellerId))
         return seller;
     }catch(error){
-        console.log("Error getting sellerService", error)
+        console.error("Error getting sellerService", error)
         throw new Error("Seller service error");
     }
 }

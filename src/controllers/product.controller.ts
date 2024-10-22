@@ -69,7 +69,7 @@ export const getProductCategory = async (req: Request, res: Response) => {
         const category = await CategoryService.getCategoryById(product.id_categoria)
         res.json(category)
     } catch (error) {
-        console.log(error);
+        console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
 
     }
@@ -81,7 +81,7 @@ export const getProductById = async (req: Request, res: Response) => {
         const product = await ProductService.getProductById(parseInt(id))
         res.json(product)
     } catch (error) {
-        console.log(error)
+        console.error(error)
         res.status(500).json({ msg: 'Internal Server Error', error });
 
     }
@@ -92,7 +92,7 @@ export const getAllProductsEntryAmountBySellerId = async (req: Request, res: Res
         const stock = await ProductService.getAllProductsEntryAmountBySellerId(parseInt(id))
         res.json(stock)
     } catch (error) {
-        console.log(error)
+        console.error(error)
         res.status(500).json({ msg: 'Error getting entry amount by a seller Id', error });
 
     }
@@ -154,7 +154,7 @@ const getProductStock = async (req: Request, res: Response) => {
             inventory
         })     
     } catch (error) {
-        console.log(error)
+        console.error(error)
         res.status(500).json({ msg: 'Internal Server Error' , error})
     }
 }
@@ -165,7 +165,7 @@ const updateStock = async (req: Request, res: Response) => {
         const updatedStock = await ProductService.updateStock(newStock)
         res.json({updatedStock})
     } catch (error) {
-        console.log(error)
+        console.error(error)
         res.status(500).json({ msg: 'Internal Server Error' , error})        
     }
 }

@@ -9,7 +9,7 @@ const getProductsInGroup = async (req: Request, res: Response) => {
         const products = await GroupService.getProductsByGroup(id)
         res.json(products)
     } catch (error) {
-        console.log(error)
+        console.error(error)
         throw res.status(500).json(error)
     }
 }

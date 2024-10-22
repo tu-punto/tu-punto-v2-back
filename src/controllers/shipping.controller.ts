@@ -18,7 +18,7 @@ export const getShippingByIds = async (req: Request, res: Response) => {
     const shippings = await ShippingService.getShippingByIds(idsArray);
     res.json(shippings);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ error: "Error getting shippings by Ids" });
   }
 };

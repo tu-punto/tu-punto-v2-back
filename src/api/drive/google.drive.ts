@@ -204,7 +204,6 @@ const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
        startY: tableY,
        margin: {left: tableX},
    })
-   console.log("DOCS");
    (doc as any).autoTable({
      head:[['Fecha','ADELANTOS RECIBIDOS DE CLIENTES']],
      body: paymentData.map((val,i)=>[val.date,val.client]),

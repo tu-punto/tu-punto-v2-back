@@ -47,7 +47,6 @@ const registerProduct = async (product: IProducto): Promise<Producto> => {
 
 const getProductsBySales = async (sales: VentaEntity[]) => {
     const productIds = sales.map(sale => sale.producto.id_producto);
-    //console.log(`Product IDs to fetch: ${productIds}`);
     
     // Usando los IDs de producto para buscar los productos correspondientes
     const products = await productRepository.findByIds(productIds);

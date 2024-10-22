@@ -53,7 +53,6 @@ const updateGroupAndProductNames = async (newData: any, groupId: number) => {
     for (const newProductName of newProductNames) {
         const product: any = await ProductRepository.findById(newProductName.id_producto)
         const what = await ProductRepository.updateProduct(product, { nombre_producto: newProductName.nombre_producto })
-        console.log(what, 'am i updating')
         updatedProducts.push(what)
     }
     return { group: updatedGroup, products: updatedProducts }

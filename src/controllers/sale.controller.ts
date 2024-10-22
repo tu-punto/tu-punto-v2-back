@@ -24,6 +24,7 @@ export const registerSale = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
+
 export const getProducts = async (req: Request, res: Response) => {
   const id: number = parseInt(req.params.id);
   try {
@@ -34,6 +35,7 @@ export const getProducts = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
+
 export const getProductsBySellerId = async (req: Request, res: Response) => {
   const sellerId: number = parseInt(req.params.id);
   try {
@@ -55,10 +57,11 @@ export const updateProducts = async (req: Request, res: Response) => {
       updatedProds,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ msg: "Error updating products", error });
   }
 };
+
 export const updateSales = async (req: Request, res: Response) => {
   const sales = req.body.sales;
   try {
@@ -73,6 +76,7 @@ export const updateSales = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Error updating sales", error });
   }
 };
+
 export const deleteProducts = async (req: Request, res: Response) => {
   const shippingId = parseInt(req.params.id);
   const prods = req.body;
@@ -83,10 +87,11 @@ export const deleteProducts = async (req: Request, res: Response) => {
       deleteProduct,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ msg: "Error deleting products", error });
   }
 }
+
 export const deleteSales = async (req: Request, res: Response) => {
   const sales  = req.body.sales;
   try {
@@ -102,7 +107,7 @@ export const deleteSales = async (req: Request, res: Response) => {
       deletedSales
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ msg: 'Error deleting products', error })
   }
 };

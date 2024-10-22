@@ -31,7 +31,6 @@ const getGroupById = async (id: number) => {
 }
 
 const getProductsInGroup = async (group: any) => {
-    console.log(group)
     return await productRepository.find({
         where: {
             groupId: group.id

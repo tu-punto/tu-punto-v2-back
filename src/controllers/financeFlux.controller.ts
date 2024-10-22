@@ -6,7 +6,7 @@ export const getFinanceFluxes = async (req: Request, res: Response) => {
     const financeFluxes = await FinanceFluxService.getAllFinanceFluxes();
     res.json(financeFluxes);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json(error);
   }
 };
@@ -22,7 +22,7 @@ export const registerFinanceFlux = async (req: Request, res: Response) => {
       newFinanceFlux,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
@@ -61,7 +61,6 @@ export const getSellerInfo = async (req: Request, res: Response) => {
 export const getStatsController = async (req: Request, res: Response) => {
   try {
     const stats = await FinanceFluxService.getStatsService();
-    console.log(stats, "control stast");
     res.json(stats);
   } catch (error) {
     console.error(error);

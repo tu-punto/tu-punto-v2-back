@@ -39,7 +39,6 @@ const updateShipping = async (newData: any, shippingId: number) => {
 
 const getShippingsBySellerService = async (sellerId: number) => {
   const salesBySeller = await SaleRepository.findBySellerId(sellerId);
-  console.log(salesBySeller, "test");
   const uniqueShippings: PedidoEntity[] = [];
   const checkedShippings: { [key: number]: boolean } = {};
   salesBySeller.forEach((sale: VentaEntity) => {

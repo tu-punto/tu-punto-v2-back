@@ -7,7 +7,7 @@ export const getProductsEntryAmount = async (req: Request, res: Response) => {
         const stock = await EntryService.getProductsEntryAmount(parseInt(id))
         res.json(stock)
     } catch (error) {
-        console.log(error)
+        console.error(error)
         res.status(500).json({ msg: 'Error getting entry amount by a seller Id', error });
 
     }
@@ -25,7 +25,7 @@ export const deleteEntries = async (req: Request, res: Response) => {
         })
 
     } catch (error) {
-        console.log(error);
+        console.error(error);
         res.status(500).json({ msg: 'Error deleting entries', error })
     }
 };
