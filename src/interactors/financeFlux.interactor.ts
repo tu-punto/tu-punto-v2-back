@@ -1,5 +1,6 @@
 import { FLUX_TYPES } from "../constants/fluxTypes";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
+import { ShippingRepository } from "../repositories/shipping.repository";
 
 const { GASTO, INGRESO } = FLUX_TYPES;
 const getTotalByFluxType = async (fluxType: string) => {
@@ -18,15 +19,33 @@ const getTotalByFluxType = async (fluxType: string) => {
   }
 };
 
+const getDeliveryTotal = async () => {
+  try {
+    const allShippings = await ShippingRepository.findAll();
+    let deliveryIncome = 0;
+    let deliveryExpense = 0;
+
+    for (const shipping of allShippings) {
+      deliveryIncome += shipping.cargo_delivery;
+      deliveryExpense += shipping.costo_delivery;
+    }
+    return { deliveryIncome, deliveryExpense };
+  } catch (error) {
+    throw new Error(`Error while calculating total value ${error}`);
+  }
+};
+
 const getStatsInteractor = async () => {
   try {
-    //TODO: finish delivery stats
     const expenses = await getTotalByFluxType(GASTO);
     const income = await getTotalByFluxType(INGRESO);
+    const { deliveryIncome, deliveryExpense } = await getDeliveryTotal();
     const stats = {
       expenses: expenses,
       income: income,
       utility: income - expenses,
+      deliveryIncome: deliveryIncome,
+      deliveryExpense: deliveryExpense,
     };
     return stats;
   } catch (error) {
