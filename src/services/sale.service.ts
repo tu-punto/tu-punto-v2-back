@@ -30,7 +30,9 @@ const getProductsById = async (pedidoId: number) => {
 const getProductsBySellerId = async (sellerId: number) => {
     const sales = await SaleRepository.findBySellerId(sellerId);
 
-    if (sales.length === 0) throw new Error("No existen ventas con ese ID de vendedor");
+    if (sales.length === 0) 
+        return []
+        //throw new Error("No existen ventas con ese ID de vendedor");
     const products = sales.map(sale => ({
         key: sale.producto.id_producto,
         producto: sale.producto.nombre_producto,
@@ -89,6 +91,25 @@ const deleteSalesByIds = async (saleIds: number[]) => {
     await SaleRepository.deleteSalesByIds(saleIds);
 }
 
+const getDataPaymentProof = async (sellerId: number) => {
+    const data = await SaleRepository.getDataPaymentProof(sellerId)
+
+    const products = data.map(venta => ({
+        producto: venta.producto.nombre_producto,
+        unitario: venta.precio_unitario,
+        cantidad: venta.cantidad,
+        total: venta.precio_unitario * venta.cantidad
+    }))
+
+    const payments = data.filter(venta => venta.pedido.adelanto_cliente !== 0)
+        .map( venta => ({
+            date: venta.pedido.fecha_pedido.toLocaleDateString(),
+            client: venta.pedido.adelanto_cliente
+        }))
+
+    return {products, payments}
+}
+
 export const SaleService = {
     getAllSales,
     registerSale,
@@ -97,5 +118,6 @@ export const SaleService = {
     deleteProducts,
     getProductsBySellerId,
     updateSales,
-    deleteSalesByIds
+    deleteSalesByIds,
+    getDataPaymentProof
 }

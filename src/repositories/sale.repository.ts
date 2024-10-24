@@ -88,6 +88,19 @@ const deleteSalesByIds = async (saleIds:number[]): Promise<any> => {
     await saleRepository.delete({ id_venta: In(saleIds) });
 };
 
+const getDataPaymentProof = async (sellerId: number) => {
+  const data = await saleRepository.find({
+    where: {
+      deposito_realizado: false,
+      id_vendedor: sellerId
+    },
+    relations: [
+      "producto", "pedido"
+    ]
+  })
+  return data
+} 
+
 export const SaleRepository = {
     findAll,
     registerSale,
@@ -97,5 +110,6 @@ export const SaleRepository = {
     findBySellerId,
     findById,
     updateSale,
-    deleteSalesByIds
+    deleteSalesByIds,
+    getDataPaymentProof
 }
