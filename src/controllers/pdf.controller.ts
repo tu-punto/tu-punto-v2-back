@@ -14,9 +14,9 @@ const uploadPDF = async (req: Request, res:Response) => {
 }
 
 const uploadPaymentPDF = async (req: Request, res: Response) => {
-    const {bodyTable, paymentTable} = req.body
+    const sellerId = parseInt(req.params.id)
     try {
-        const pdf = await generatePaymentPDF(bodyTable, paymentTable)
+        const pdf = await generatePaymentPDF(sellerId)
         return res.status(200).json({
             pdf
         })

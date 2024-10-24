@@ -112,14 +112,14 @@ const sentProductsPDF = async (tableData: any[]) => {
     const tableY = titleY + titleHeight + 15;
     const productData: any[] = tableData.map((val: any) => [
         val.producto,
-        val.unitartio,
+        val.unitario,
         val.cantidad,
         val.total]);
             
     productData.push(['Total', '', '', `${tableData.reduce((acc: number, val: any) => acc+val.total,0)}`]);
 
       (doc as any).autoTable({
-        head:[['Producto','Precio Unitario','Cantidad','Total']],
+        head:[['Producto','Precio Unitario (Bs)','Cantidad','Total (Bs)']],
         body: productData,
         columnStyles:{
             0:{cellWidth:80},
@@ -189,7 +189,7 @@ const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
    const tableX = titleX
    const tableY = titleY + titleHeight + 15;
    (doc as any).autoTable({
-       head:[['Producto','Precio Unitario','Cantidad','Total']],
+       head:[['Producto','Precio Unitario (Bs)','Cantidad','Total (Bs)']],
        body: tableData.map((val,i)=>[val.producto,val.unitartio,val.cantidad,val.total]),
        columnStyles:{
            0:{cellWidth:80},
@@ -206,7 +206,7 @@ const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
    })
    console.log("DOCS");
    (doc as any).autoTable({
-     head:[['Fecha','ADELANTOS RECIBIDOS DE CLIENTES']],
+     head:[['Fecha','ADELANTOS RECIBIDOS DE CLIENTES (Bs)']],
      body: paymentData.map((val,i)=>[val.date,val.client]),
      columnStyles:{
          0:{cellWidth:80},
@@ -222,7 +222,7 @@ const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
        doc.setFontSize(10)
        doc.setTextColor('black')
  
-       doc.text(`PAGO REALIZADO: 3910.01 Bs`,
+       doc.text(`PAGO REALIZADO: ${tableData.reduce((acc: number, val: any) => acc+val.total,0) - paymentData.reduce((acc, val) => acc+val.client, 0)} Bs`,
          titleX, 
          finalY + 5
        )
