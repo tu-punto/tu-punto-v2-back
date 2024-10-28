@@ -121,3 +121,13 @@ export const deleteSales = async (req: Request, res: Response) => {
     res.status(500).json({ msg: 'Error deleting products', error })
   }
 };
+
+export const getDataPaymentProof = async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id)
+  try {
+    const data = await SaleService.getDataPaymentProof(id)
+    res.status(200).json(data)
+  } catch (error) {
+    
+  }
+}
