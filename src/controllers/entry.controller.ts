@@ -13,6 +13,18 @@ export const getProductsEntryAmount = async (req: Request, res: Response) => {
     }
 }
 
+export const getProductEntryDetails = async (req: Request, res: Response) => {
+    const { id } = req.params
+    try {
+        const stock = await EntryService.getProductEntryDetails(parseInt(id))
+        res.json(stock)
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ msg: 'Error getting entry amount by a product Id', error });
+
+    }
+}
+
 export const deleteEntries = async (req: Request, res: Response) => {
     const entries = req.body.entries;
     try {

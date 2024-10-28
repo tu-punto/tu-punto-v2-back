@@ -38,6 +38,13 @@ const findByPedidoId = async (pedidoId: number): Promise<VentaEntity[]> => {
   return sales;
 };
 
+const findByProductId = async (productId: number): Promise<VentaEntity[]> => {
+  const sales = await saleRepository.find({
+    where: {id_producto: productId},
+    relations: ["producto", "pedido"],
+  });
+  return sales;
+};
 const findBySellerId = async (sellerId: number): Promise<VentaEntity[]> => {
   const sales = await saleRepository.find({
     where: { vendedor: { id_vendedor: sellerId } },
@@ -92,6 +99,7 @@ export const SaleRepository = {
     findAll,
     registerSale,
     findByPedidoId,
+    findByProductId,
     updateProducts,
     deleteProducts,
     findBySellerId,

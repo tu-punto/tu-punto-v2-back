@@ -16,6 +16,39 @@ export const findBySellerId = async (sellerId: number): Promise<IngresoEntity[] 
     })
 }
 
+export const findByProductId = async (productId: number): Promise<IngresoEntity[]| null> => {
+    const entries = await entryRepository.find({
+        where: {
+            id_producto: productId
+        },
+        select: {
+            id_ingreso: true,
+            fecha_ingreso: true,
+            estado: true,
+            cantidad_ingreso: true,
+            id_producto: true,
+            id_vendedor: true,
+            id_sucursal: true,
+            producto: {
+                id_producto: true,
+                nombre_producto: true
+            },
+            vendedor: {
+                id_vendedor: true,
+                marca: true,
+                nombre: true,
+                apellido: true
+            }
+        },
+        relations: {
+            producto: true,
+            vendedor: true
+        }
+    });
+
+    return entries;
+};
+
 export const deleteEntriesByIds = async (entriesIds: number[]): Promise<any> => {
     return await entryRepository.delete({ id_ingreso: In(entriesIds) });
 };

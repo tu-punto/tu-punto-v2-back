@@ -1,17 +1,19 @@
 import { Router } from "express";
-import { deleteProducts, getProducts, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales } from "../controllers/sale.controller";
+import { deleteProducts, getProductsByShippingId, getProductDetailsByProductId, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales } from "../controllers/sale.controller";
 
 const saleRouter = Router();
 
 saleRouter.get('/', getSale)
 
-saleRouter.post('/register', registerSale)
-
-saleRouter.get('/products/:id', getProducts)
+saleRouter.get('/products/:id', getProductsByShippingId)
 
 saleRouter.get('/products/seller/:id', getProductsBySellerId)
 
+saleRouter.get('/product/:id', getProductDetailsByProductId)
+
 saleRouter.put('/products/update/:id', updateProducts)
+
+saleRouter.post('/register', registerSale)
 
 saleRouter.put('/', updateSales)
 

@@ -25,10 +25,10 @@ export const registerSale = async (req: Request, res: Response) => {
   }
 };
 
-export const getProducts = async (req: Request, res: Response) => {
+export const getProductsByShippingId = async (req: Request, res: Response) => {
   const id: number = parseInt(req.params.id);
   try {
-    const products = await SaleService.getProductsById(id);
+    const products = await SaleService.getProductsByShippingId(id);
     res.json(products);
   } catch (error) {
     console.error(error);
@@ -36,6 +36,16 @@ export const getProducts = async (req: Request, res: Response) => {
   }
 };
 
+export const getProductDetailsByProductId = async (req: Request, res: Response) => {
+  const id: number = parseInt(req.params.id);
+  try {
+    const productDetails = await SaleService.getProductDetailsByProductId(id);
+    res.json(productDetails);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: "Error getting product details", error });
+  }
+};
 export const getProductsBySellerId = async (req: Request, res: Response) => {
   const sellerId: number = parseInt(req.params.id);
   try {

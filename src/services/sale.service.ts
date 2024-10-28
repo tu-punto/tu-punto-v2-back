@@ -1,4 +1,5 @@
 import { SaleRepository } from "../repositories/sale.repository";
+import { format } from 'date-fns';
 
 const getAllSales = async () => {
     return await SaleRepository.findAll();
@@ -7,7 +8,7 @@ const getAllSales = async () => {
 const registerSale = async (sale: any) => {
     return await SaleRepository.registerSale(sale);
 }
-const getProductsById = async (pedidoId: number) => {
+const getProductsByShippingId = async (pedidoId: number) => {
     const sales = await SaleRepository.findByPedidoId(pedidoId);
 
     if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
@@ -27,6 +28,33 @@ const getProductsById = async (pedidoId: number) => {
 
     return products;
 }
+
+const getProductDetailsByProductId = async (productId: number) => {
+    const sales = await SaleRepository.findByProductId(productId);
+
+    if (sales.length === 0) throw new Error("No existen ventas con ese ID de producto");
+
+    const products = sales.map(sale => {
+        const formattedDate = format(new Date(sale.pedido.fecha_pedido), 'dd/MM/yyyy:HH:mm:ss');
+
+        return {
+            key: `${sale.producto.id_producto}-${formattedDate}`,
+            producto: sale.producto.nombre_producto,
+            precio_unitario: sale.precio_unitario,
+            cantidad: sale.cantidad,
+            utilidad: sale.utilidad,
+            id_venta: sale.id_venta,
+            id_vendedor: sale.producto.id_vendedor,
+            id_pedido: sale.id_pedido,
+            id_producto: sale.producto.id_producto,
+            deposito_realizado: sale.deposito_realizado,
+            cliente: sale.pedido.cliente,
+            fecha_pedido: sale.pedido.fecha_pedido
+        };
+    });
+
+    return products;
+};
 const getProductsBySellerId = async (sellerId: number) => {
     const sales = await SaleRepository.findBySellerId(sellerId);
 
@@ -92,7 +120,8 @@ const deleteSalesByIds = async (saleIds: number[]) => {
 export const SaleService = {
     getAllSales,
     registerSale,
-    getProductsById,
+    getProductsByShippingId,
+    getProductDetailsByProductId,
     updateProducts,
     deleteProducts,
     getProductsBySellerId,

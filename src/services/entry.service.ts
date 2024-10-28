@@ -7,6 +7,12 @@ export const getProductsEntryAmount = async (sellerId: number) => {
     return products
 }
 
+export const getProductEntryDetails = async (productId: number) => {
+    const productHistory = await EntryRepository.findByProductId(productId)
+    if (!productHistory) throw new Error("Doesn't exist such product history with that product id")
+    return productHistory
+}
+
 export const deleteEntriesByIds = async (entriesIds: number[]) => {
     if (!entriesIds || entriesIds.length === 0) {
         throw new Error("No entries IDs provided for deletion.");
