@@ -41,7 +41,7 @@ const findByPedidoId = async (pedidoId: number): Promise<VentaEntity[]> => {
 const findByProductId = async (productId: number): Promise<VentaEntity[]> => {
   const sales = await saleRepository.find({
     where: {id_producto: productId},
-    relations: ["producto", "pedido"],
+    relations: ["producto", "pedido", "vendedor"],
   });
   return sales;
 };
@@ -70,6 +70,27 @@ const updateProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
   const newSaleData = await saleRepository.save(updatedSales);
   return newSaleData;
 };
+
+const updateSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
+  const ids = salesData.map(sale => sale.id_venta);
+  const salesToUpdate = await saleRepository.findBy({ id_venta: In(ids) });
+  salesToUpdate.forEach(sale => {
+    const newData = salesData.find(s => s.id_venta === sale.id_venta);
+    if (newData) {
+      sale.cantidad = newData.cantidad;
+      sale.precio_unitario = newData.precio_unitario;
+    }
+  });
+
+  return await saleRepository.save(salesToUpdate);
+};
+
+const deleteSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
+  const ids = salesData.map(sale => sale.id_venta);
+  await saleRepository.delete({ id_venta: In(ids) });
+  return ids;
+};
+
 const deleteProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
   const deletedProducts: any[] = [];
   const productsToDelete = new Set(
@@ -113,11 +134,13 @@ export const SaleRepository = {
     registerSale,
     findByPedidoId,
     findByProductId,
+    updateSalesOfProducts,
     updateProducts,
     deleteProducts,
     findBySellerId,
     findById,
     updateSale,
     deleteSalesByIds,
-    getDataPaymentProof
+    getDataPaymentProof,
+    deleteSalesOfProducts
 }

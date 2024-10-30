@@ -87,6 +87,34 @@ export const updateSales = async (req: Request, res: Response) => {
   }
 };
 
+export const updateSalesOfProducts = async (req: Request, res: Response) => {
+  const stockData = req.body;
+  try {
+    const updatedStock = await SaleService.updateSalesOfProducts(stockData);
+    res.json({
+      status: true,
+      updatedStock,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: "Error updating product stock", error });
+  }
+};
+
+export const deleteSalesOfProducts = async (req: Request, res: Response) => {
+  const salesData = req.body;
+  try {
+    const deletedSales = await SaleService.deleteSalesOfProducts(salesData);
+    res.json({
+      status: true,
+      deletedSales,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: "Error deleting product sales", error });
+  }
+};
+
 export const deleteProducts = async (req: Request, res: Response) => {
   const shippingId = parseInt(req.params.id);
   const prods = req.body;

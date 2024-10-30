@@ -38,13 +38,17 @@ export const deleteEntriesByIds = async (entriesIds: number[]) => {
     }
 }
 
+export const deleteProductEntries = async (entryData: any[]) => {
+    return await EntryRepository.deleteProductEntries(entryData);
+};
+
 export const updateEntries = async (entries: any[]) => {
     const updatedEntries = [];
 
     for (const entry of entries) {
         const existingEntry = await EntryRepository.findById(entry.id_ingreso);
         if (!existingEntry) throw new Error(`Entry with id ${entry.id_ingreso} doesn't exist`);
-        
+
         const oldAmount = existingEntry.cantidad_ingreso;
         const updatedEntry = await EntryRepository.updateEntryById(entry, existingEntry);
         const newAmount = updatedEntry.cantidad_ingreso;
@@ -67,5 +71,9 @@ export const updateEntries = async (entries: any[]) => {
     }
 
     return updatedEntries;
+};
+
+export const updateProductEntries = async (entryData: any[]) => {
+    return await EntryRepository.updateProductEntries(entryData);
 };
 

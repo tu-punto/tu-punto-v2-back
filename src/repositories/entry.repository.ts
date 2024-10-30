@@ -1,4 +1,5 @@
 import { In } from 'typeorm';
+import { format } from 'date-fns';
 import AppDataSource from '../config/dataSource';
 import { IngresoEntity } from '../entities/implements/IngresoEntity';
 import { IIngreso } from '../entities/IIngreso';
@@ -16,7 +17,7 @@ export const findBySellerId = async (sellerId: number): Promise<IngresoEntity[] 
     })
 }
 
-export const findByProductId = async (productId: number): Promise<IngresoEntity[]| null> => {
+export const findByProductId = async (productId: number): Promise<IngresoEntity[] | null> => {
     const entries = await entryRepository.find({
         where: {
             id_producto: productId
@@ -46,12 +47,24 @@ export const findByProductId = async (productId: number): Promise<IngresoEntity[
         }
     });
 
-    return entries;
+    return entries.map(entry => {
+        const formattedDate = format(new Date(entry.fecha_ingreso), 'dd/MM/yyyy HH:mm:ss');
+        return {
+            ...entry,
+            key: `${entry.id_ingreso}-${formattedDate}`
+        };
+    });
 };
 
 export const deleteEntriesByIds = async (entriesIds: number[]): Promise<any> => {
     return await entryRepository.delete({ id_ingreso: In(entriesIds) });
 };
+
+export const deleteProductEntries = async (entryData: any[]): Promise<any[]> => {
+    const ids = entryData.map(entry => entry.id_ingreso);
+    await entryRepository.delete({ id_ingreso: In(ids) });
+    return ids;
+  };
 
 export const findById = async (entryId: number) => {
     return await entryRepository.findOne({
@@ -65,6 +78,21 @@ export const updateEntryById = async (newData: any, entry: IIngreso) => {
     const newEntry = await entryRepository.save(entry);
     return newEntry;
 };
+
+export const updateProductEntries = async (entryData: any[]): Promise<any[]> => {
+    const ids = entryData.map(entry => entry.id_ingreso);
+    const entriesToUpdate = await entryRepository.findBy({ id_ingreso: In(ids) });
+
+    entriesToUpdate.forEach(entry => {
+        const newData = entryData.find(e => e.id_ingreso === entry.id_ingreso);
+        if (newData) {
+            entry.cantidad_ingreso = newData.cantidad_ingreso;
+        }
+    });
+
+    return await entryRepository.save(entriesToUpdate);
+};
+
 export const getEntriesByIds = async (entriesIds: number[]): Promise<IngresoEntity[]> => {
     if (!entriesIds || entriesIds.length === 0) {
         return [];

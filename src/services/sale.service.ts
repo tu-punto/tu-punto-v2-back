@@ -49,7 +49,8 @@ const getProductDetailsByProductId = async (productId: number) => {
             id_producto: sale.producto.id_producto,
             deposito_realizado: sale.deposito_realizado,
             cliente: sale.pedido.cliente,
-            fecha_pedido: sale.pedido.fecha_pedido
+            fecha_pedido: sale.pedido.fecha_pedido,
+            nombre_vendedor: `${sale.vendedor.nombre} ${sale.vendedor.apellido} - ${sale.vendedor.marca}`,
         };
     });
 
@@ -58,9 +59,9 @@ const getProductDetailsByProductId = async (productId: number) => {
 const getProductsBySellerId = async (sellerId: number) => {
     const sales = await SaleRepository.findBySellerId(sellerId);
 
-    if (sales.length === 0) 
+    if (sales.length === 0)
         return []
-        //throw new Error("No existen ventas con ese ID de vendedor");
+    //throw new Error("No existen ventas con ese ID de vendedor");
     const products = sales.map(sale => ({
         key: sale.producto.id_producto,
         producto: sale.producto.nombre_producto,
@@ -89,7 +90,7 @@ const updateSales = async (sales: any[]) => {
     const updatedSales = [];
     for (const sale of sales) {
         const isSale = await SaleRepository.findById(sale.id_venta);
-        if (isSale) { 
+        if (isSale) {
             const saleUpdate = {
                 id_venta: sale.id_venta,
                 cantidad: sale.cantidad,
@@ -99,12 +100,17 @@ const updateSales = async (sales: any[]) => {
                 ...(sale.id_producto && { id_producto: sale.id_producto }),
             };
             const updatedSale = await SaleRepository.updateSale(saleUpdate);
-            updatedSales.push(updatedSale); }
+            updatedSales.push(updatedSale);
+        }
         else {
             throw new Error(`No sale found with that saleId ${sale.id_venta}`)
         }
     }
     return updatedSales;
+};
+
+const updateSalesOfProducts = async (stockData: any[]) => {
+    return await SaleRepository.updateSalesOfProducts(stockData);
 };
 
 const deleteProducts = async (shippingId: number, prods: any[]) => {
@@ -119,6 +125,10 @@ const deleteSalesByIds = async (saleIds: number[]) => {
     await SaleRepository.deleteSalesByIds(saleIds);
 }
 
+const deleteSalesOfProducts = async (stockData: any[]) => {
+    return await SaleRepository.deleteSalesOfProducts(stockData);
+};
+
 const getDataPaymentProof = async (sellerId: number) => {
     const data = await SaleRepository.getDataPaymentProof(sellerId)
 
@@ -130,12 +140,12 @@ const getDataPaymentProof = async (sellerId: number) => {
     }))
 
     const payments = data.filter(venta => venta.pedido.adelanto_cliente !== 0)
-        .map( venta => ({
+        .map(venta => ({
             date: venta.pedido.fecha_pedido.toLocaleDateString(),
             client: venta.pedido.adelanto_cliente
         }))
 
-    return {products, payments}
+    return { products, payments }
 }
 
 export const SaleService = {
@@ -148,5 +158,7 @@ export const SaleService = {
     getProductsBySellerId,
     updateSales,
     deleteSalesByIds,
-    getDataPaymentProof
+    getDataPaymentProof,
+    updateSalesOfProducts,
+    deleteSalesOfProducts
 }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { deleteProducts, getProductsByShippingId, getProductDetailsByProductId, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales, getDataPaymentProof } from "../controllers/sale.controller";
+import { deleteSalesOfProducts, deleteProducts, getProductsByShippingId, getProductDetailsByProductId, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales, getDataPaymentProof, updateSalesOfProducts } from "../controllers/sale.controller";
 
 const saleRouter = Router();
 
@@ -17,9 +17,13 @@ saleRouter.post('/register', registerSale)
 
 saleRouter.put('/', updateSales)
 
+saleRouter.put('/products/', updateSalesOfProducts)
+
 saleRouter.delete('/products/delete/:id', deleteProducts)
 
 saleRouter.delete('/', deleteSales)
+
+saleRouter.delete('/products/', deleteSalesOfProducts)
 
 saleRouter.get('/payment/:id', getDataPaymentProof )
 

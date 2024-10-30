@@ -42,6 +42,20 @@ export const deleteEntries = async (req: Request, res: Response) => {
     }
 };
 
+export const deleteEntriesOfProducts = async (req: Request, res: Response) => {
+    const entryData = req.body;
+    try {
+      const deletedEntries = await EntryService.deleteProductEntries(entryData);
+      res.json({
+        status: true,
+        deletedEntries,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ msg: "Error deleting entries", error });
+    }
+  };
+
 export const updateEntry = async (req: Request, res: Response) => {
     const entries = req.body.entries
     try {
@@ -56,3 +70,17 @@ export const updateEntry = async (req: Request, res: Response) => {
         res.status(500).json({ msg: "Error updating entries", error });
     }
 };
+
+export const updateEntriesOfProducts = async (req: Request, res: Response) => {
+    const entryData = req.body;
+    try {
+      const updatedEntries = await EntryService.updateProductEntries(entryData);
+      res.json({
+        status: true,
+        updatedEntries,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ msg: "Error updating entries", error });
+    }
+  };
