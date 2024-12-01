@@ -13,6 +13,7 @@ import pdfRouter from "./routes/pdf.routes";
 import paymentProofRouter from "./routes/paymentProof.routes";
 import entryRouter from "./routes/entry.routes";
 import userRouter from "./routes/user.route";
+import whatsRouter from "./routes/whatsapp.route";
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/pdf', pdfRouter)
 router.use('/paymentProof', paymentProofRouter)
 router.use('/entry', entryRouter)
 router.use('/user', userRouter)
+router.use('/whats', whatsRouter)
 
 export default router;

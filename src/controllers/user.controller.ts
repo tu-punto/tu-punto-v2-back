@@ -36,6 +36,7 @@ export const registerUserController = async (req: Request, res: Response) => {
 export const loginUserController = async (req: Request, res: Response) => {
   const data = req.body;
   try {
+    console.log(data)
     const user = await UserService.findByEmailService(data.email);
     if (!user) {
       res.status(401).json({ error: "User with such email does not exist" });

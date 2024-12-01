@@ -47,11 +47,11 @@ async function authorize(): Promise<JWT> {
 
 const SCOPES: string[] = ['https://www.googleapis.com/auth/drive.file'];
 
-async function uploadFile(authClient: JWT, pdfBuffer: Buffer) {
+async function uploadFile(authClient: JWT, pdfBuffer: Buffer, title: String) {
     const drive = google.drive({ version: 'v3', auth: authClient });
     
     const fileMetaData = {
-        name: "comprobante.pdf",
+        name: `${title}-${new Date()}.pdf`,
         parents: ["1rHhylKi5ZkVvpR51O4hG0jdAnoZDle-I"]   
     }
 
@@ -151,7 +151,7 @@ const sentProductsPDF = async (tableData: any[]) => {
 
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
     // Upload the generated PDF
-    const response = await uploadFile(jwt, pdfBuffer);
+    const response = await uploadFile(jwt, pdfBuffer, 'ComprobanteProductos');
     return response
         
 }
@@ -233,7 +233,7 @@ const sentPaymentPDF = async (tableData: any[], paymentData: any[]) => {
    })
    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
    // Upload the generated PDF
-   const response = await uploadFile(jwt, pdfBuffer);
+   const response = await uploadFile(jwt, pdfBuffer, "ComprobantePago");
    return response
  } catch (error) {
   console.error(error)
