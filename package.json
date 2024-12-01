@@ -28,6 +28,7 @@
     "typeorm": "^0.3.20"
   },
   "devDependencies": {
+    "@types/axios": "^0.14.4",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",

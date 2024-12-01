@@ -10,7 +10,7 @@ dotenv.config();
 AppDataSource.initialize().then(() => {
   const app: Express = express();
   const port = process.env.SERVER_PORT;
-  const client_url = process.env.CLIENT_URL;
+  const client_url = process.env.CLIENT_URL || "http://localhost:5173";
 
   app.use(
     cors({
