@@ -27,6 +27,9 @@ export class CierreCajaEntity implements ICierreCaja {
   efectivo_inicial!: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
+  bancario_inicial!: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2 })
   ingresos_efectivo!: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
@@ -47,13 +50,16 @@ export class CierreCajaEntity implements ICierreCaja {
   @Column({ type: "decimal", precision: 10, scale: 2 })
   diferencia_bancario!: number;
 
+  @Column({ type: "varchar" })
+  observaciones!: string;
+
   @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   created_at!: string;
 
   @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   updated_at!: string;
 
-  @OneToOne(() => EfectivoDiarioEntity)
+  @OneToOne(() => EfectivoDiarioEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id_efectivo_diario" })
   id_efectivo_diario!: EfectivoDiarioEntity;
 }
