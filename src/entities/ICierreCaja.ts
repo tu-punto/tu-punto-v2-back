@@ -9,8 +9,11 @@ export interface ICierreCaja {
   ingresos_efectivo: number;
   efectivo_esperado: number;
   efectivo_real: number;
-  diferencia: number;
-  created_at: Date;
-  updated_at: Date;
+  bancario_esperado: number;
+  bancario_real: number;
+  diferencia_efectivo: number;
+  diferencia_bancario: number;
+  created_at: string;
+  updated_at: string;
   id_efectivo_diario: EfectivoDiarioEntity;
 }
