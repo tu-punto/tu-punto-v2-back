@@ -14,23 +14,27 @@ import paymentProofRouter from "./routes/paymentProof.routes";
 import entryRouter from "./routes/entry.routes";
 import userRouter from "./routes/user.route";
 import whatsRouter from "./routes/whatsapp.route";
+import boxCloseRouter from "./routes/boxClose.routes";
+import dailyEffectiveRouter from "./routes/dailyEffective.routes";
 
 const router = Router();
 
-router.use('/seller', sellerRouter)
-router.use('/product', productRouter)
-router.use('/feature', featureRouter)
-router.use('/category', categoryRouter)
-router.use('/sale', saleRouter)
-router.use('/group', groupRouter)
-router.use('/shipping', shippingRouter)
-router.use('/sucursal', sucursalRouter)
-router.use('/financeFlux', financeFluxRouter)
-router.use('/worker', workerRouter)
-router.use('/pdf', pdfRouter)
-router.use('/paymentProof', paymentProofRouter)
-router.use('/entry', entryRouter)
-router.use('/user', userRouter)
-router.use('/whats', whatsRouter)
+router.use("/seller", sellerRouter);
+router.use("/product", productRouter);
+router.use("/feature", featureRouter);
+router.use("/category", categoryRouter);
+router.use("/sale", saleRouter);
+router.use("/group", groupRouter);
+router.use("/shipping", shippingRouter);
+router.use("/sucursal", sucursalRouter);
+router.use("/financeFlux", financeFluxRouter);
+router.use("/worker", workerRouter);
+router.use("/pdf", pdfRouter);
+router.use("/paymentProof", paymentProofRouter);
+router.use("/entry", entryRouter);
+router.use("/user", userRouter);
+router.use("/whats", whatsRouter);
+router.use("/boxClose", boxCloseRouter);
+router.use("/dailyEffective", dailyEffectiveRouter);
 
 export default router;
