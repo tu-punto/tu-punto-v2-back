@@ -7,7 +7,11 @@ import { Categoria } from "../models/Categoria";
 const boxCloseRepository = AppDataSource.getRepository(CierreCajaEntity);
 
 const findAll = async (): Promise<ICierreCaja[]> => {
-  return await boxCloseRepository.find();
+  return await boxCloseRepository.find({
+    relations: {
+      id_efectivo_diario: true,
+    },
+  });
 };
 
 const registerBoxClose = async (
@@ -23,6 +27,9 @@ const getBoxCloseById = async (id: number) => {
     where: {
       id_cierre_caja: id,
     },
+    relations: {
+        id_efectivo_diario: true
+    }
   });
 };
 
