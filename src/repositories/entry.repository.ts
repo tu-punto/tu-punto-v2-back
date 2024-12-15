@@ -105,3 +105,8 @@ export const getEntriesByIds = async (entriesIds: number[]): Promise<IngresoEnti
     }
 
 }
+
+export const createEntry = async (entryData: any): Promise<IngresoEntity> => {
+    const newEntry = await entryRepository.save(entryData);
+    return newEntry;
+};

@@ -16,4 +16,6 @@ entryRouter.put('/', EntryController.updateEntry);
 
 entryRouter.put('/products/', EntryController.updateEntriesOfProducts);
 
+entryRouter.post('/', EntryController.createEntry); //This is just to create one entry
+
 export default entryRouter;

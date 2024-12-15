@@ -77,3 +77,7 @@ export const updateProductEntries = async (entryData: any[]) => {
     return await EntryRepository.updateProductEntries(entryData);
 };
 
+export const createEntry = async (entryData: any) => {
+    return await EntryRepository.createEntry(entryData);
+};
+
