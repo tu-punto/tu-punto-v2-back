@@ -6,20 +6,28 @@ import { GroupEntity } from "../entities/implements/GroupEntity";
 import { ProductoEntity } from "../entities/implements/ProductoEntity";
 import { IProducto } from "../entities/IProducto";
 import { Group } from "../models/Group";
+import { Not } from "typeorm";
 
 const productRepository = AppDataSource.getRepository(ProductoEntity)
 const groupRepository = AppDataSource.getRepository(GroupEntity)
 
 const getAllGroups = async () => {
-    return await groupRepository.find();
+    return await groupRepository.find({
+        where: {
+            name: Not("Sin Grupo")
+        }
+    });
 }
 
 const getAllGroupsWithProducts = async () => {
     return await groupRepository.find({
+        where: {
+            name: Not("Sin Grupo")
+        },
         relations: {
             products: true
         }
-    })
+    });
 }
 
 const getGroupById = async (id: number) => {

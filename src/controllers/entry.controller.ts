@@ -88,10 +88,10 @@ export const updateEntriesOfProducts = async (req: Request, res: Response) => {
 export const createEntry = async (req: Request, res: Response) => {
   const entryData = req.body;
   try {
-    const createdEntry = await EntryService.createEntry(entryData);
+    const entry = await EntryService.createEntry(entryData);
     res.json({
       status: true,
-      createdEntry,
+      entry,
     });
   } catch (error) {
     console.error(error);
