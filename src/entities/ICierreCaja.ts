@@ -6,6 +6,7 @@ export interface ICierreCaja {
   ventas_efectivo: number;
   ventas_qr: number;
   efectivo_inicial: number;
+  bancario_inicial: number;
   ingresos_efectivo: number;
   efectivo_esperado: number;
   efectivo_real: number;
@@ -13,6 +14,7 @@ export interface ICierreCaja {
   bancario_real: number;
   diferencia_efectivo: number;
   diferencia_bancario: number;
+  observaciones: string;
   created_at: string;
   updated_at: string;
   id_efectivo_diario: EfectivoDiarioEntity;

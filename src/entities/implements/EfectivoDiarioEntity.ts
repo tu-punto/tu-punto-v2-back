@@ -12,14 +12,41 @@ export class EfectivoDiarioEntity {
   @PrimaryGeneratedColumn()
   id_efectivo_diario!: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2 })
-  valor!: number;
+  @Column({ type: "integer", default: 0 })
+  corte_0_2!: number;
 
-  @Column()
-  cantidad!: number;
+  @Column({ type: "integer", default: 0 })
+  corte_0_5!: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2 })
-  total!: number;
+  @Column({ type: "integer", default: 0 })
+  corte_1!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_2!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_5!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_10!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_20!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_50!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_100!: number;
+
+  @Column({ type: "integer", default: 0 })
+  corte_200!: number;
+
+  @Column({ type: "integer", default: 0 })
+  total_coins!: number;
+
+  @Column({ type: "integer", default: 0 })
+  total_bills!: number;
 
   @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   created_at!: Date;
