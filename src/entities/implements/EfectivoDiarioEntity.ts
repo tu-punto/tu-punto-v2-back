@@ -48,10 +48,10 @@ export class EfectivoDiarioEntity {
   @Column({ type: "integer", default: 0 })
   total_bills!: number;
 
-  @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
+  @Column({type: 'timestamptz', nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   created_at!: Date;
 
-  @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
+  @Column({type: 'timestamptz', nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   updated_at!: Date;
 
   @OneToOne(() => CierreCajaEntity)

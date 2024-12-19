@@ -73,10 +73,10 @@ export class VendedorEntity implements IVendedor {
   @Column({ default: 0 })
   comision_fija!: number;
 
-  @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
+  @Column({type: 'timestamptz', nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   fecha!: Date;
 
-  @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
+  @Column({type: 'timestamptz', nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   fecha_vigencia!: Date;
 
   @Column()

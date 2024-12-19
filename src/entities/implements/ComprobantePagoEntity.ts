@@ -9,10 +9,10 @@ export class ComprobantePagoEntity implements IComprobantePago{
     @PrimaryGeneratedColumn()
     id_comprobante_pago!: number;
 
-    @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
+    @Column({type: 'timestamptz',nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     fecha_emision!: Date;
 
-    @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
+    @Column({type: 'timestamptz',nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     hora_emision!: Date;
 
     @Column({type: 'varchar'})

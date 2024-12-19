@@ -13,7 +13,7 @@ export class IngresoEntity implements IIngreso{
     @PrimaryGeneratedColumn()
     id_ingreso!: number;
     
-    @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
+    @Column({type: 'timestamptz',nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     fecha_ingreso!: Date;
     
     @Column({type: 'varchar'})
