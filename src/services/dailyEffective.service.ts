@@ -1,3 +1,4 @@
+import { IEfectivoDiario } from "../entities/IEfectivoDiario";
 import { DailyEffectiveRepository } from "../repositories/dailyEffective.repository";
 
 const getAllDailyEffective = async () => {
@@ -9,14 +10,29 @@ const registerDailyEffective = async (boxClose: any) => {
 };
 
 const getDailyEffectiveById = async (id: number) => {
-  const category = await DailyEffectiveRepository.getDailyEffectiveById(id);
-  if (!category)
+  const dailyEffective = await DailyEffectiveRepository.getDailyEffectiveById(
+    id
+  );
+  if (!dailyEffective)
     throw new Error("Doesn't exist a daily effective with such id");
-  return category;
+  return dailyEffective;
+};
+
+const updateDailyEffective = async (dailyEffectiveID: number, newData: any) => {
+  const dailyEffective = await DailyEffectiveRepository.getDailyEffectiveById(
+    dailyEffectiveID
+  );
+  if (!dailyEffective)
+    throw new Error(`dailyEffective with id ${dailyEffectiveID} doesn't exist`);
+  return await DailyEffectiveRepository.updateDailyEffective(
+    dailyEffective,
+    newData
+  );
 };
 
 export const DailyEffectiveService = {
   getAllDailyEffective,
   registerDailyEffective,
   getDailyEffectiveById,
+  updateDailyEffective,
 };

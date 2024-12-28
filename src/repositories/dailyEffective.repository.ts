@@ -31,8 +31,20 @@ const getDailyEffectiveById = async (id: number) => {
   });
 };
 
+const updateDailyEffective = async (
+  dailyEffective: IEfectivoDiario,
+  newData: any
+) => {
+  const updatedDailyEffective = { ...dailyEffective, ...newData };
+  const newDailyEffective = await dailyEffectiveRepository.save(
+    updatedDailyEffective
+  );
+  return newDailyEffective;
+};
+
 export const DailyEffectiveRepository = {
   findAll,
   registerDailyEffective,
   getDailyEffectiveById,
+  updateDailyEffective,
 };

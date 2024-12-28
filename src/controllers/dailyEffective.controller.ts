@@ -48,3 +48,21 @@ export const getDailyEffectiveByIdController = async (
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
+
+export const updateDailyEffectiveController = async (
+  req: Request,
+  res: Response
+) => {
+  const dailyEffectiveId = parseInt(req.params.id);
+  const { newData } = req.body;
+  try {
+    const updatedDailyEffective =
+      await DailyEffectiveService.updateDailyEffective(
+        dailyEffectiveId,
+        newData
+      );
+    res.json({ status: true, updatedDailyEffective });
+  } catch (error) {
+    res.status(500).json({ msg: "Internal server error", error });
+  }
+};
