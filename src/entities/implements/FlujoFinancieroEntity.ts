@@ -22,7 +22,7 @@ export class FlujoFinancieroEntity implements IFlujoFinanciero {
     @Column({ type: 'numeric', precision: 10, scale: 2, nullable: false })
     monto!: number;
 
-    @Column({ nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
+    @Column({ type: 'timestamptz',nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
     fecha!: Date;
 
     @Column({ default: false })

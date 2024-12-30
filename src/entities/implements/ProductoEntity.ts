@@ -26,7 +26,7 @@ export class ProductoEntity implements IProducto {
     @Column()
     precio!: number;
 
-    @Column({ nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
+    @Column({type: 'timestamptz', nullable: false, default: () => 'CURRENT_TIMESTAMP(6)' })
     fecha_de_ingreso!: Date;
 
     @Column({ type: 'varchar', default: "" })

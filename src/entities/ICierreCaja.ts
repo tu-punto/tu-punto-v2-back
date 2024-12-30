@@ -15,7 +15,7 @@ export interface ICierreCaja {
   diferencia_efectivo: number;
   diferencia_bancario: number;
   observaciones: string;
-  created_at: string;
-  updated_at: string;
+  created_at: Date;
+  updated_at: Date;
   id_efectivo_diario: EfectivoDiarioEntity;
 }

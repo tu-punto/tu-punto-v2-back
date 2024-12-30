@@ -24,13 +24,13 @@ export class PedidoEntity implements IPedido{
     @Column({type: 'varchar'})
     tipo_de_pago!: string;
 
-    @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
+    @Column({type: 'timestamptz',nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     fecha_pedido!: Date;
 
-    @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
+    @Column({type: 'timestamptz',nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     hora_entrega_acordada!: Date;
 
-    @Column({nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
+    @Column({type: 'timestamptz',nullable:false, default: () => 'CURRENT_TIMESTAMP(6)'})
     hora_entrega_real!: Date;
 
     @Column({type: 'varchar', default: ""})

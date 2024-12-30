@@ -53,11 +53,19 @@ export class CierreCajaEntity implements ICierreCaja {
   @Column({ type: "varchar" })
   observaciones!: string;
 
-  @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
-  created_at!: string;
+  @Column({
+    type: "timestamptz",
+    nullable: false,
+    default: () => "CURRENT_TIMESTAMP(6)",
+  })
+  created_at!: Date;
 
-  @Column({ nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
-  updated_at!: string;
+  @Column({
+    type: "timestamptz",
+    nullable: false,
+    default: () => "CURRENT_TIMESTAMP(6)",
+  })
+  updated_at!: Date;
 
   @OneToOne(() => EfectivoDiarioEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id_efectivo_diario" })
