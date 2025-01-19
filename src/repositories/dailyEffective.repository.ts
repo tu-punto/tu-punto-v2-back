@@ -1,10 +1,6 @@
 import AppDataSource from "../config/dataSource";
-import { ICategoria } from "../entities/ICategoria";
-import { ICierreCaja } from "../entities/ICierreCaja";
 import { IEfectivoDiario } from "../entities/IEfectivoDiario";
-import { CierreCajaEntity } from "../entities/implements/CierreCajaEntity";
 import { EfectivoDiarioEntity } from "../entities/implements/EfectivoDiarioEntity";
-import { Categoria } from "../models/Categoria";
 
 const dailyEffectiveRepository =
   AppDataSource.getRepository(EfectivoDiarioEntity);

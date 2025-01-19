@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { DailyEffectiveService } from "../services/dailyEffective.service";
-import { getProductDetailsByProductId } from "./sale.controller";
 
 export const getAllDailyEffectiveController = async (
   req: Request,
