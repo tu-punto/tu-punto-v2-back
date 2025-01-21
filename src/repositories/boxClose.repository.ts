@@ -10,6 +10,7 @@ const findAll = async (): Promise<ICierreCaja[]> => {
   return await boxCloseRepository.find({
     relations: {
       id_efectivo_diario: true,
+      id_sucursal: true,
     },
   });
 };
@@ -28,8 +29,8 @@ const getBoxCloseById = async (id: number) => {
       id_cierre_caja: id,
     },
     relations: {
-        id_efectivo_diario: true
-    }
+      id_efectivo_diario: true,
+    },
   });
 };
 

@@ -8,9 +8,11 @@ import { TrabajadorEntity } from './TrabajadorEntity';
 import { ITrabajador } from '../ITrabajador';
 import { IIngreso } from '../IIngreso';
 import { IngresoEntity } from './IngresoEntity';
+import { CierreCajaEntity } from './CierreCajaEntity';
+import { ICierreCaja } from '../ICierreCaja';
 
 @Entity({name:'Sucursal'})
-export class SucursalEntity implements ISucursal{
+export class SucursalEntity implements ISucursal {
 
     @PrimaryGeneratedColumn()
     id_sucursal!: number;
@@ -38,4 +40,8 @@ export class SucursalEntity implements ISucursal{
 
     @OneToMany(()=> IngresoEntity, ingresoEntity => ingresoEntity.sucursal)
     ingreso?: IIngreso[];
+
+    @OneToMany(()=> CierreCajaEntity, cierreCajaEntity => cierreCajaEntity.id_sucursal)
+    cierre_caja!: ICierreCaja[];
+
 }

@@ -5,9 +5,11 @@ import {
   OneToMany,
   OneToOne,
   JoinColumn,
+  ManyToOne,
 } from "typeorm";
 import { EfectivoDiarioEntity } from "./EfectivoDiarioEntity";
 import { ICierreCaja } from "../ICierreCaja";
+import { SucursalEntity } from "./SucursalEntity";
 
 @Entity({ name: "Cierre_Caja" })
 export class CierreCajaEntity implements ICierreCaja {
@@ -70,4 +72,8 @@ export class CierreCajaEntity implements ICierreCaja {
   @OneToOne(() => EfectivoDiarioEntity, { onDelete: "CASCADE" })
   @JoinColumn({ name: "id_efectivo_diario" })
   id_efectivo_diario!: EfectivoDiarioEntity;
+
+  @ManyToOne(() => SucursalEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "id_sucursal" })
+  id_sucursal!: SucursalEntity;
 }
