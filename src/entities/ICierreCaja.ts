@@ -1,4 +1,5 @@
 import { EfectivoDiarioEntity } from "./implements/EfectivoDiarioEntity";
+import { SucursalEntity } from "./implements/SucursalEntity";
 
 export interface ICierreCaja {
   id_cierre_caja: number;
@@ -18,4 +19,5 @@ export interface ICierreCaja {
   created_at: Date;
   updated_at: Date;
   id_efectivo_diario: EfectivoDiarioEntity;
+  id_sucursal: SucursalEntity;
 }
