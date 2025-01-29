@@ -10,7 +10,6 @@ import {
 } from "typeorm";
 import { IComprobanteEntrada } from "../IComprobanteEntrada";
 import { IComprobantePago } from "../IComprobantePago";
-import { IPedido } from "../IPedido";
 import { IProducto } from "../IProducto";
 import { ITrabajador } from "../ITrabajador";
 import { IVendedor } from "../IVendedor";
@@ -84,6 +83,9 @@ export class VendedorEntity implements IVendedor {
 
   @Column({ default: 0 })
   deuda!: number;
+
+  @Column({ default: false })
+  emite_factura!: boolean;
 
   @Column({ nullable: false })
   id_trabajador!: number;

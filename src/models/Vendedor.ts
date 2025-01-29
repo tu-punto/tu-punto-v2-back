@@ -28,6 +28,7 @@ export class Vendedor {
   fecha_vigencia: Date;
   almacen_caja: number;
   deuda: number;
+  emite_factura: boolean;
   id_trabajador: number;
 
   user: IUser;
@@ -59,7 +60,9 @@ export class Vendedor {
     this.fecha_vigencia = iVendedor.fecha_vigencia;
     this.almacen_caja = iVendedor.almacen_caja;
     this.deuda = iVendedor.deuda;
+    this.emite_factura = iVendedor.emite_factura;
     this.id_trabajador = iVendedor.id_trabajador;
+
     this.user = iVendedor.user;
     this.comprobante_entrada = iVendedor.comprobante_entrada;
     this.comprobante_pago = iVendedor.comprobante_pago;

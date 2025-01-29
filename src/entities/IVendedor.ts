@@ -27,6 +27,7 @@ export interface IVendedor {
     fecha_vigencia: Date;
     almacen_caja: number;
     deuda: number;
+    emite_factura: boolean;
     //TODO QUITAR LOS NULLS DE ID_TRABAJADOR Y DE TRABAJADOR
     id_trabajador: number;
 
@@ -38,5 +39,5 @@ export interface IVendedor {
     producto?: IProducto[];
     venta: IVenta[];
     flujoFinanciero?: IFlujoFinanciero[];
-    ingreso? : IIngreso[];
+    ingreso?: IIngreso[];
 }
