@@ -14,15 +14,9 @@ AppDataSource.initialize().then(() => {
 
   app.use(
     cors({
-      origin: (origin, callback) => {
-        callback(null, origin || "*");
-      },
+      origin: client_url,
       credentials: true,
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-      exposedHeaders: ["Content-Type", "Authorization"],
-    })
-  );
+    }));
 
   app.use(express.json());
   app.use(cookieParser());
