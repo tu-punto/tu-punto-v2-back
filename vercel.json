@@ -1,15 +1,10 @@
 {
-  "buildCommand": "npm install && npm run build",
+  "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "routes": [
+  "rewrites": [
     {
       "src": "/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/api/index.js"
     }
-  ],
-  "functions": {
-    "api/index.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  ]
 }
