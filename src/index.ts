@@ -14,9 +14,10 @@ AppDataSource.initialize().then(() => {
 
   app.use(
     cors({
-      origin: client_url,
+      origin: "*",
       credentials: true,
-    }));
+    })
+  );
   app.use(express.json());
   app.use(cookieParser());
   app.use(express.urlencoded({ extended: false }));

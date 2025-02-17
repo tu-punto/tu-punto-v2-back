@@ -3,4 +3,3 @@ dist/
 .vercel
 .env
 src/api/drive/pk.json
-api
