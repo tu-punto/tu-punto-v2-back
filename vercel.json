@@ -6,5 +6,10 @@
       "src": "/(.*)",
       "dest": "/dist/index.js"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.js": {
+      "runtime": "nodejs20.x"
+    }
+  }
 }
