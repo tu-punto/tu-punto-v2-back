@@ -48,13 +48,20 @@ export const loginUserController = async (req: Request, res: Response) => {
       return;
     }
     const token = generateToken(user.id_user, user.role);
-
+    console.log({
+      maxAge: 900000,
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: isSecure ? "none" : "lax",
+      path: "/",  
+    })
     res
       .cookie("token", token, {
         maxAge: 900000,
         httpOnly: true,
         secure: isSecure,
         sameSite: isSecure ? "none" : "lax",
+        path: "/",  
       })
       .json({ ...user, password: "" });
   } catch (error) {
@@ -65,6 +72,7 @@ export const loginUserController = async (req: Request, res: Response) => {
 
 export const getUserInfoController = async (req: Request, res: Response) => {
   const { token } = req.cookies;
+  console.log(token);
   if (!token) {
     res.status(500).json({ msg: "Error getting token" });
     return;
