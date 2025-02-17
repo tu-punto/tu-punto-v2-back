@@ -1,16 +1,15 @@
 {
-  "buildCommand": "npm install && npm run build",
-  "installCommand": "npm install",
-  "functions": {
-    "api/*.js": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
+  "version": 2,
+  "builds": [
+      {
+          "src": "./src/index.ts",
+          "use": "@vercel/node"
+      }
+  ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "dist/index.js"
-    }
+      {
+          "src": "/(.*)",
+          "dest": "/src/index.ts"
+      }
   ]
 }
