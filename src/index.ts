@@ -19,8 +19,8 @@ AppDataSource.initialize().then(() => {
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["*"],
-      exposedHeaders: ["*"],
+      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+      exposedHeaders: ["Content-Type", "Authorization"],
     })
   );
 
