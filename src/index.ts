@@ -18,6 +18,7 @@ AppDataSource.initialize().then(() => {
     cors({
       origin: [client_url, client_url2],
       credentials: true,
+      exposedHeaders: ["Set-Cookie"]
     }));
 
   app.use(express.json());
