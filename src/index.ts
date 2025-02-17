@@ -11,10 +11,12 @@ AppDataSource.initialize().then(() => {
   const app: Express = express();
   const port = process.env.SERVER_PORT;
   const client_url = process.env.CLIENT_URL || "http://localhost:5173";
+  const client_url2 = process.env.CLIENT_URL_2 || "http://localhost:5173";
+
 
   app.use(
     cors({
-      origin: client_url,
+      origin: [client_url, client_url2],
       credentials: true,
     }));
 
