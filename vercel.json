@@ -1,8 +1,8 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm install && npm run build",
   "installCommand": "npm install",
   "functions": {
-    "dist/*.js": {
+    "*s.js": {
       "memory": 1024,
       "maxDuration": 60
     }
@@ -10,7 +10,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "dist/index.js"
     }
   ]
 }
