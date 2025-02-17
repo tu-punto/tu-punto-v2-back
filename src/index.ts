@@ -14,9 +14,16 @@ AppDataSource.initialize().then(() => {
 
   app.use(
     cors({
-      origin: "*",
+      origin: (origin, callback) => {
+        callback(null, origin || "*");
+      },
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["*"],
+      exposedHeaders: ["*"],
     })
   );
+
   app.use(express.json());
   app.use(cookieParser());
   app.use(express.urlencoded({ extended: false }));
