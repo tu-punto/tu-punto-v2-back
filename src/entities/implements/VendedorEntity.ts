@@ -78,7 +78,7 @@ export class VendedorEntity implements IVendedor {
   @Column({type: 'timestamptz', nullable: false, default: () => "CURRENT_TIMESTAMP(6)" })
   fecha_vigencia!: Date;
 
-  @Column()
+  @Column({nullable: true})
   almacen_caja!: number;
 
   @Column({ default: 0 })
@@ -86,9 +86,6 @@ export class VendedorEntity implements IVendedor {
 
   @Column({ default: false })
   emite_factura!: boolean;
-
-  @Column({ nullable: false })
-  id_trabajador!: number;
 
   @OneToMany(
     () => ComprobanteEntradaEntity,

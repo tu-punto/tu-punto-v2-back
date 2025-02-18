@@ -29,7 +29,6 @@ export interface IVendedor {
     deuda: number;
     emite_factura: boolean;
     //TODO QUITAR LOS NULLS DE ID_TRABAJADOR Y DE TRABAJADOR
-    id_trabajador: number;
 
     user: IUser;
     comprobante_entrada?: IComprobanteEntrada[];

@@ -29,7 +29,6 @@ export class Vendedor {
   almacen_caja: number;
   deuda: number;
   emite_factura: boolean;
-  id_trabajador: number;
 
   user: IUser;
   comprobante_entrada?: IComprobanteEntrada[];
@@ -61,7 +60,6 @@ export class Vendedor {
     this.almacen_caja = iVendedor.almacen_caja;
     this.deuda = iVendedor.deuda;
     this.emite_factura = iVendedor.emite_factura;
-    this.id_trabajador = iVendedor.id_trabajador;
 
     this.user = iVendedor.user;
     this.comprobante_entrada = iVendedor.comprobante_entrada;
