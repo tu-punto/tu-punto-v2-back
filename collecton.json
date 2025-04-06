@@ -1,0 +1,156 @@
+{
+    "user": {
+        "id_user": "number",
+        "type": "string",
+        "marca": "string",
+        "nombre": "string",
+        "apellido": "string",
+        "telefono": "string",
+        "carnet": "string",
+        "direccion": "string",
+        "mail": "string",
+        "alquiler": "number",
+        "exhibicion": "number",
+        "delivery": "number",
+        "adelanto_servicio": "number",
+        "comision_porcentual": "number",
+        "comision_fija": "number",
+        "fecha": "timestamp",
+        "fecha_vigencia": "timestamp",
+        "almacen_caja": "number",
+        "deuda": "number",
+        "emite_factura": "boolean",
+        "comprobante_entrada": [
+            {
+                "id_comprobante_entrada": "number",
+                "fecha_emision": "timestamp",
+                "hora_emision": "timestamp",
+                "comprobante_pdf": "string"
+            }
+        ],
+        "comprobante_pago": [
+            {
+                "id_comprobante_pago": "number",
+                "fecha_emision": "timestamp",
+                "hora_emision": "timestamp",
+                "comprobante_entrada_pdf": "string",
+                "total_ventas": "number",
+                "total_adelantos": "number"
+            }
+        ]
+    },
+    "ventas": {
+        "id_venta": "number",
+        "id_producto": "number",
+        "id_vendedor": "number",
+        "cantidad": "number",
+        "precio_unitario": "number",
+        "utilidad": "number",
+        "deposito_realizado": "boolean",
+        "pedido": {
+            "id_pedido": "number",
+            "cliente": "string",
+            "telefono_cliente": "string",
+            "tipo_de_pago": "string",
+            "fecha_pedido": "timestamp",
+            "hora_entrega_acordada": "timestamp",
+            "hora_entrega_real": "timestamp",
+            "observaciones": "string",
+            "lugar_entrega": "string",
+            "costo_delivery": "number",
+            "cargo_delivery": "number",
+            "estado_pedido": "string",
+            "adelanto_cliente": "number",
+            "pagado_al_vendedor": "boolean",
+            "subtotal_qr": "number",
+            "subtotal_efectivo": "number"
+        }
+    },
+    "producto": {
+        "id_producto": "number",
+        "id_vendedor": "number",
+        "nombre_producto": "string",
+        "precio": "number",
+        "fecha_de_ingreso": "timestamp",
+        "imagen": "string",
+        "stock_total": "number",
+        "sucursales": [
+            {
+                "id_sucursal": "number",
+                "cantidad_por_sucursal": "number"
+            }
+        ],
+        "categoria": {
+            "id_categoria": "number",
+            "categoria": "string"
+        },
+        "caracteristicas": [
+            {
+                "id_caracteristicas": "number",
+                "feature": "string",
+                "value": "string"
+            }
+        ],
+        "ingresos": [
+            {
+                "id_ingreso": "number",
+                "fecha_ingreso": "timestamp",
+                "estado": "string",
+                "cantidad_ingreso": "number",
+                "id_sucursal": "number"
+            }
+        ]
+    },
+    "cierre_caja": {
+        "id_cierre_caja": "number",
+        "responsable": "string",
+        "ventas_efectivo": "number",
+        "ventas_qr": "number",
+        "efectivo_inicial": "number",
+        "bancario_inicial": "number",
+        "ingresos_efectivo": "number",
+        "efectivo_esperado": "number",
+        "efectivo_real": "number",
+        "bancario_esperado": "number",
+        "bancario_real": "number",
+        "diferencia_efectivo": "number",
+        "diferencia_bancario": "number",
+        "observaciones": "string",
+        "created_at": "timestamp",
+        "updated_at": "timestamp",
+        "id_sucursal": "number",
+        "efectivo_diario": {
+            "id_efectivo_diario": "number",
+            "corte_0_2": "number",
+            "corte_0_5": "number",
+            "corte_1": "number",
+            "corte_2": "number",
+            "corte_5": "number",
+            "corte_10": "number",
+            "corte_20": "number",
+            "corte_50": "number",
+            "corte_100": "number",
+            "corte_200": "number",
+            "total_coins": "number",
+            "total_bills": "number",
+            "created_at": "timestamp",
+            "updated_at": "timestamp"
+        }
+    },
+    "flujo_financiero": {
+        "id_flujo_financiero": "number",
+        "tipo": "string",
+        "categoria": "string",
+        "concepto": "string",
+        "monto": "number",
+        "fecha": "timestamp",
+        "esDeuda": "boolean",
+        "id_sucursal": "number"
+    },
+    "sucursal": {
+        "nombre": "string",
+        "direccion": "string",
+        "ciudad": "string",
+        "telefono": "string"
+    }
+}
