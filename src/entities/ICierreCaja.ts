@@ -1,7 +1,5 @@
 import { Types } from 'mongoose';
-
 export interface ICierreCaja {
-  id_cierre_caja: number;
   responsible: string;
   ventas_efectivo: number;
   ventas_qr: number;
@@ -17,10 +15,10 @@ export interface ICierreCaja {
   observaciones: string;
   created_at: Date;
   updated_at: Date;
-  // Ahora hacemos referencia a los documentos de Mongoose mediante ObjectId
   id_efectivo_diario: Types.ObjectId;
   id_sucursal: Types.ObjectId;
 }
+
 
 
 
