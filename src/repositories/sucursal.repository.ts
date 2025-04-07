@@ -1,5 +1,5 @@
 import AppDataSource from "../config/dataSource";
-import { SucursalEntity } from "../entities/implements/SucursalEntity";
+import { SucursalEntity } from "../entities/implements/SucursalSchema";
 import { ISucursal } from "../entities/ISucursal";
 
 const sucursalRepository = AppDataSource.getRepository(SucursalEntity);

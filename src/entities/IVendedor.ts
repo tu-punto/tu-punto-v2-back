@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { IComprobanteEntrada } from "./IComprobanteEntrada";
 import { IComprobantePago } from "./IComprobantePago";
 import { IFlujoFinanciero } from "./IFlujoFinanciero";
@@ -28,15 +29,14 @@ export interface IVendedor {
     almacen_caja: number;
     deuda: number;
     emite_factura: boolean;
-    //TODO QUITAR LOS NULLS DE ID_TRABAJADOR Y DE TRABAJADOR
 
-    user: IUser;
-    comprobante_entrada?: IComprobanteEntrada[];
-    comprobante_pago?: IComprobantePago[];
-    trabajador: ITrabajador;
-    pedido?: IPedido[];
-    producto?: IProducto[];
-    venta: IVenta[];
-    flujoFinanciero?: IFlujoFinanciero[];
-    ingreso?: IIngreso[];
+    user: Types.ObjectId;
+    comprobante_entrada?: Types.ObjectId[];
+    comprobante_pago?: Types.ObjectId[];
+    trabajador: Types.ObjectId;
+    pedido?: Types.ObjectId[];
+    producto?: Types.ObjectId[];
+    venta: Types.ObjectId[];
+    flujoFinanciero?: Types.ObjectId[];
+    ingreso?: Types.ObjectId[];
 }

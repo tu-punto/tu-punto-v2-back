@@ -1,7 +1,5 @@
-import { IProducto } from "./IProducto";
-import { ISucursal } from "./ISucursal";
-import { IVendedor } from "./IVendedor";
 
+import { Types } from 'mongoose';
 export interface IIngreso{
     id_ingreso: number;
     fecha_ingreso: Date;
@@ -11,7 +9,7 @@ export interface IIngreso{
     id_sucursal: number;
     id_vendedor: number;
 
-    producto: IProducto;
-    vendedor: IVendedor;
-    sucursal: ISucursal;
+    producto: Types.ObjectId;
+    vendedor: Types.ObjectId;
+    sucursal: Types.ObjectId;
 }

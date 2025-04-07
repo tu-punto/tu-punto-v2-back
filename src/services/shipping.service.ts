@@ -1,5 +1,5 @@
-import { PedidoEntity } from "../entities/implements/PedidoEntity";
-import { VentaEntity } from "../entities/implements/VentaEntity";
+import { PedidoEntity } from "../entities/implements/PedidoSchema";
+import { VentaEntity } from "../entities/implements/VentaSchema";
 import { Venta } from "../models/Venta";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";

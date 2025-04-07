@@ -1,7 +1,7 @@
 import { In } from "typeorm";
 import AppDataSource from "../config/dataSource";
-import { ProductoEntity } from "../entities/implements/ProductoEntity";
-import { VentaEntity } from "../entities/implements/VentaEntity";
+import { ProductoEntity } from "../entities/implements/ProductoSchema";
+import { VentaEntity } from "../entities/implements/VentaSchema";
 import { IVenta } from "../entities/IVenta";
 import { Venta } from "../models/Venta";
 

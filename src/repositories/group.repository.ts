@@ -2,8 +2,8 @@
 import { group } from "console";
 import AppDataSource from "../config/dataSource";
 import { IGroup } from "../entities/IGroup";
-import { GroupEntity } from "../entities/implements/GroupEntity";
-import { ProductoEntity } from "../entities/implements/ProductoEntity";
+import { GroupEntity } from "../entities/implements/GroupSchema";
+import { ProductoEntity } from "../entities/implements/ProductoSchema";
 import { IProducto } from "../entities/IProducto";
 import { Group } from "../models/Group";
 import { Not } from "typeorm";

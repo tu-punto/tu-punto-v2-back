@@ -1,6 +1,6 @@
 import AppDataSource from "../config/dataSource";
 import { ICategoria } from "../entities/ICategoria";
-import { CategoriaEntity } from "../entities/implements/CategoriaEntity";
+import { CategoriaEntity } from "../entities/implements/CategoriaSchema";
 import { Categoria } from "../models/Categoria";
 
 const categoryRepository = AppDataSource.getRepository(CategoriaEntity);

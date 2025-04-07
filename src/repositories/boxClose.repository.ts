@@ -1,7 +1,7 @@
 import AppDataSource from "../config/dataSource";
 import { ICategoria } from "../entities/ICategoria";
 import { ICierreCaja } from "../entities/ICierreCaja";
-import { CierreCajaEntity } from "../entities/implements/CierreCajaEntity";
+import { CierreCajaEntity } from "../entities/implements/CierreCajaSchema";
 import { Categoria } from "../models/Categoria";
 
 const boxCloseRepository = AppDataSource.getRepository(CierreCajaEntity);

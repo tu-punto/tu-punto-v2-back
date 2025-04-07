@@ -1,6 +1,6 @@
 import AppDataSource from "../config/dataSource"
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero"
-import { FlujoFinancieroEntity } from "../entities/implements/FlujoFinancieroEntity"
+import { FlujoFinancieroEntity } from "../entities/implements/FlujoFinancieroSchema"
 import { FlujoFinanciero } from "../models/FlujoFinanciero"
 
 const financeFluxRepository = AppDataSource.getRepository(FlujoFinancieroEntity)

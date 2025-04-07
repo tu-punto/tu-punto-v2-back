@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { ITrabajador } from "./ITrabajador";
 import { IVendedor } from "./IVendedor";
 
@@ -7,6 +8,6 @@ export interface IUser {
   password: string;
   role: string;
 
-  vendedor: IVendedor;
-  trabajador: ITrabajador;
+  vendedor: Types.ObjectId;
+  trabajador: Types.ObjectId;
 }

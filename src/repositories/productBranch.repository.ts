@@ -1,6 +1,6 @@
 import AppDataSource from "../config/dataSource";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
-import { Producto_SucursalEntity } from "../entities/implements/Producto_SucursalEntity";
+import { Producto_SucursalEntity } from "../entities/implements/ProductoSucursalSchema";
 import { Producto_Sucursal } from "../models/Producto_Sucursal";
 
 const productBranchRepository = AppDataSource.getRepository(Producto_SucursalEntity)

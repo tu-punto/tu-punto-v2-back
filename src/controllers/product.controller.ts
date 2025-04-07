@@ -3,7 +3,7 @@ import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
 import { IGroup } from "../entities/IGroup";
 import { GroupRepository } from "../repositories/group.repository";
-import { GroupEntity } from "../entities/implements/GroupEntity";
+import { GroupEntity } from "../entities/implements/GroupSchema";
 import { IProducto } from "../entities/IProducto";
 import { ProductBranchService } from "../services/productBranch.service";
 export const getProduct = async (req: Request, res: Response) => {

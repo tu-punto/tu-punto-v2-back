@@ -1,7 +1,7 @@
 import { In } from 'typeorm';
 import { format } from 'date-fns';
 import AppDataSource from '../config/dataSource';
-import { IngresoEntity } from '../entities/implements/IngresoEntity';
+import { IngresoEntity } from '../entities/implements/IngresoSchema';
 import { IIngreso } from '../entities/IIngreso';
 
 const entryRepository = AppDataSource.getRepository(IngresoEntity);

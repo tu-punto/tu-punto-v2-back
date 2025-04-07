@@ -1,4 +1,4 @@
-import { CierreCajaEntity } from "./implements/CierreCajaEntity";
+import { Types } from 'mongoose';
 
 export interface IEfectivoDiario {
   id_efectivo_diario: number;
@@ -16,5 +16,5 @@ export interface IEfectivoDiario {
   total_bills: number;
   created_at: Date;
   updated_at: Date;
-  id_cierre_caja: CierreCajaEntity;
+  id_cierre_caja: Types.ObjectId; 
 }

@@ -1,6 +1,6 @@
 import { Trabajador } from './../models/Trabajador';
 import AppDataSource from "../config/dataSource";
-import { TrabajadorEntity } from "../entities/implements/TrabajadorEntity";
+import { TrabajadorEntity } from "../entities/implements/TrabajadorSchema";
 import { ITrabajador } from '../entities/ITrabajador';
 
 const workerRepository = AppDataSource.getRepository(TrabajadorEntity);

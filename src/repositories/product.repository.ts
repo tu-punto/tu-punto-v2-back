@@ -1,10 +1,10 @@
 import { Producto } from "../models/Producto";
 import AppDataSource from '../config/dataSource';
-import { ProductoEntity } from '../entities/implements/ProductoEntity';
+import { ProductoEntity } from '../entities/implements/ProductoSchema';
 import { IProducto } from "../entities/IProducto";
 import { IVenta } from "../entities/IVenta";
-import { VentaEntity } from "../entities/implements/VentaEntity";
-import { Producto_SucursalEntity } from "../entities/implements/Producto_SucursalEntity";
+import { VentaEntity } from "../entities/implements/VentaSchema";
+import { Producto_SucursalEntity } from "../entities/implements/ProductoSucursalSchema";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 
 const productRepository = AppDataSource.getRepository(ProductoEntity);

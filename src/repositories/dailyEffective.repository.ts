@@ -1,6 +1,6 @@
 import AppDataSource from "../config/dataSource";
 import { IEfectivoDiario } from "../entities/IEfectivoDiario";
-import { EfectivoDiarioEntity } from "../entities/implements/EfectivoDiarioEntity";
+import { EfectivoDiarioEntity } from "../entities/implements/EfectivoDiarioSchema";
 
 const dailyEffectiveRepository =
   AppDataSource.getRepository(EfectivoDiarioEntity);

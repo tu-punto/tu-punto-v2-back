@@ -1,4 +1,4 @@
-import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity";
+import { CaracteristicasEntity } from "../entities/implements/CaracteristicasSchema";
 import { Caracteristicas } from "../models/Caracteristicas";
 import { FeatureRepository } from "../repositories/feature.repository";
 import { ProductRepository } from "../repositories/product.repository";

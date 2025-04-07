@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { ICierreCaja } from "./ICierreCaja";
 import { IIngreso } from "./IIngreso";
 import { IPedido } from "./IPedido";
@@ -11,9 +12,9 @@ export interface ISucursal {
     ciudad: string;
     telefono: number;
     
-    producto_sucursal?: IProducto_Sucursal[];
-    pedido?: IPedido;
-    trabajador: ITrabajador[];
-    ingreso?: IIngreso[]
-    cierre_caja: ICierreCaja[];
+    producto_sucursal?: Types.ObjectId[]; 
+    pedido?: Types.ObjectId[];  
+    trabajador: Types.ObjectId[]; 
+    ingreso?: Types.ObjectId[];  
+    cierre_caja: Types.ObjectId[]; 
 }

@@ -1,7 +1,7 @@
 
 import AppDataSource from "../config/dataSource"
 import { ICaracteristicas } from "../entities/ICaracteristicas"
-import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity"
+import { CaracteristicasEntity } from "../entities/implements/CaracteristicasSchema"
 import { IProducto } from "../entities/IProducto"
 import { Caracteristicas } from "../models/Caracteristicas"
 

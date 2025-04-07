@@ -1,5 +1,5 @@
 import AppDataSource from "../config/dataSource";
-import { VendedorEntity } from "../entities/implements/VendedorEntity";
+import { VendedorEntity } from "../entities/implements/VendedorSchema";
 import { IVendedor } from "../entities/IVendedor";
 import { Vendedor } from "../models/Vendedor";
 

@@ -1,5 +1,5 @@
 import AppDataSource from "../config/dataSource"
-import { ComprobantePagoEntity } from "../entities/implements/ComprobantePagoEntity"
+import { ComprobantePagoEntity } from "../entities/implements/ComprobantePagoSchema"
 
 const paymentProofRepository = AppDataSource.getRepository(ComprobantePagoEntity)
 

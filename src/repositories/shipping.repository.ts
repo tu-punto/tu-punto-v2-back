@@ -1,6 +1,6 @@
 import { In } from "typeorm";
 import AppDataSource from "../config/dataSource";
-import { PedidoEntity } from "../entities/implements/PedidoEntity";
+import { PedidoEntity } from "../entities/implements/PedidoSchema";
 import { IPedido } from "../entities/IPedido";
 import { Pedido } from "../models/Pedido";
 

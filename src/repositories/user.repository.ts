@@ -1,5 +1,5 @@
 import AppDataSource from "../config/dataSource";
-import { UserEntity } from "../entities/implements/UserEntity";
+import { UserEntity } from "../entities/implements/UserSchema";
 import { IUser } from "../entities/IUser";
 import { User } from "../models/User";
 
