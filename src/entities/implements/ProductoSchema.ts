@@ -1,5 +1,6 @@
 
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema,model, Document } from "mongoose";
+import { IProductoDocument } from "../documents/IProductoDocument";
 
 const ProductoSchema = new Schema({
   nombre_producto: { type: String, required: true },
@@ -21,7 +22,7 @@ const ProductoSchema = new Schema({
   timestamps: true,
 });
 
-export const ProductoModel = mongoose.model("Producto", ProductoSchema);
+export const ProductoModel = model<IProductoDocument>("Producto", ProductoSchema);
 
 
 

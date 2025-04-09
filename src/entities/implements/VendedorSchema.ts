@@ -1,6 +1,6 @@
 import { Schema, model, Types } from 'mongoose';
 
-const VendedorSchema = new Schema({
+export const VendedorSchema = new Schema({
   marca: {
     type: String,
     required: true

@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 
 export interface IGroup {
-  id: number;
+  _id?: Types.ObjectId;
   name: string;
   products: Types.ObjectId[];
 }

@@ -1,6 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
+import { IUserDocument } from '../documents/IUserDocument';
 
-const UserSchema = new Schema({
+const UserSchema = new Schema<IUserDocument>({
   email: {
     type: String,
     required: true
@@ -14,12 +15,12 @@ const UserSchema = new Schema({
     required: true
   },
   vendedor: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Vendedor',
     required: false
   },
   trabajador: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Trabajador',
     required: false
   }
@@ -28,4 +29,4 @@ const UserSchema = new Schema({
   timestamps: false
 });
 
-export const UserModel = model('User', UserSchema);
+export const UserModel = model<IUserDocument>('User', UserSchema);

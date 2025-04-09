@@ -16,15 +16,12 @@ const registerFinanceFlux = async (financeFlux: IFlujoFinanciero) => {
   return newFinanceFlux;
 };
 
-const getWorkerById = async (workerId: number) => {
+const getWorkerById = async (workerId: any) => {
   const financeFlux = await FinanceFluxRepository.findWorkerById(workerId);
   if (!financeFlux)
-    throw new Error(
-      "Doesn't exist such worker with that id fk from FinanceFlux"
-    );
-  const worker = await WorkerRepository.getWorkerByFinanceFlux(
-    financeFlux.trabajador.id_trabajador
-  );
+    throw new Error("Doesn't exist such worker with that id fk from FinanceFlux");
+
+  const worker = financeFlux.trabajador; 
 
   if (!worker) {
     throw new Error("No worker found with the given id");
@@ -35,6 +32,8 @@ const getWorkerById = async (workerId: number) => {
     nombre: worker.nombre,
   };
 };
+
+
 
 const getSellerById = async (sellerId: number) => {
   const financeFlux = await FinanceFluxRepository.findSellerById(sellerId);

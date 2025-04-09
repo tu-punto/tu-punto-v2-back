@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/mi_bd_local";
+const mongoUri = process.env.MONGO_DB_URL || "mongodb://localhost:27017/tupuntoDB";
 
 const connectToMongoDB = async () => {
   try {

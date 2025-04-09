@@ -1,6 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
+import { ICaracteristicasDocument } from '../documents/ICaracteristicasDocument';
 
-const CaracteristicasSchema = new Schema({
+const CaracteristicasSchema = new Schema<ICaracteristicasDocument>({
   feature: {
     type: String,
     required: true,
@@ -10,13 +11,13 @@ const CaracteristicasSchema = new Schema({
     required: true,
   },
   product: {
-    type: Types.ObjectId,
-    ref: 'Producto', // nombre del modelo referenciado
+    type: Schema.Types.ObjectId,
+    ref: 'Producto', 
     required: true,
   }
 }, {
   collection: 'Caracteristicas',
-  timestamps: true // opcional: si quieres createdAt y updatedAt
+  timestamps: true 
 });
 
-export const CaracteristicasModel = model('Caracteristicas', CaracteristicasSchema);
+export const CaracteristicasModel = model<ICaracteristicasDocument>('Caracteristicas', CaracteristicasSchema);

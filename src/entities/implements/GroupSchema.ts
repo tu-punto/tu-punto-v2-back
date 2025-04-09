@@ -1,6 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
+import { IGroupDocument } from '../documents/IGroupDocument';
 
-const GroupSchema = new Schema({
+const GroupSchema = new Schema<IGroupDocument>({
   name: {
     type: String,
     required: true
@@ -11,7 +12,7 @@ const GroupSchema = new Schema({
   }]
 }, {
   collection: 'Group',
-  timestamps: false
+  timestamps: true
 });
 
-export const GroupModel = model('Group', GroupSchema);
+export const GroupModel = model<IGroupDocument>('Group', GroupSchema);

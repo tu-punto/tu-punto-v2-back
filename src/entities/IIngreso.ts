@@ -1,7 +1,6 @@
 
 import { Types } from 'mongoose';
 export interface IIngreso{
-    id_ingreso: number;
     fecha_ingreso: Date;
     estado: string;
     cantidad_ingreso: number;

@@ -1,6 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
+import { IComprobantePagoDocument } from '../documents/IComprobantePagoDocument';
 
-const ComprobantePagoSchema = new Schema({
+const ComprobantePagoSchema = new Schema<IComprobantePagoDocument>({
   fecha_emision: {
     type: Date,
     required: true,
@@ -24,13 +25,13 @@ const ComprobantePagoSchema = new Schema({
     required: true,
   },
   vendedor: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Vendedor',
     required: true,
   }
 }, {
   collection: 'Comprobante_Pago',
-  timestamps: false
+  timestamps: true
 });
 
-export const ComprobantePagoModel = model('ComprobantePago', ComprobantePagoSchema);
+export const ComprobantePagoModel = model<IComprobantePagoDocument>('ComprobantePago', ComprobantePagoSchema);

@@ -1,4 +1,5 @@
 import { Schema, model, Types } from 'mongoose';
+import { IEfectivoDiarioDocument } from '../documents/IEfectivoDiarioDocument';
 
 export const EfectivoDiarioSchema = new Schema({
   corte_0_2: { type: Number, default: 0 },
@@ -36,4 +37,4 @@ export const EfectivoDiarioSchema = new Schema({
   timestamps: false
 });
 
-export const EfectivoDiarioModel = model('EfectivoDiario', EfectivoDiarioSchema);
+export const EfectivoDiarioModel = model<IEfectivoDiarioDocument>('EfectivoDiario', EfectivoDiarioSchema);

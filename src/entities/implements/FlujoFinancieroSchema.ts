@@ -1,4 +1,5 @@
 import { Schema, model, Types } from 'mongoose';
+import { IFlujoFinancieroDocument } from '../documents/IFlujoFinancieroDocument';
 
 const FlujoFinancieroSchema = new Schema({
   tipo: {
@@ -41,7 +42,7 @@ const FlujoFinancieroSchema = new Schema({
 
 }, {
   collection: 'Flujo_Financiero',
-  timestamps: false
+  timestamps: true
 });
 
-export const FlujoFinancieroModel = model('FlujoFinanciero', FlujoFinancieroSchema);
+export const FlujoFinancieroModel = model<IFlujoFinancieroDocument>('FlujoFinanciero', FlujoFinancieroSchema);

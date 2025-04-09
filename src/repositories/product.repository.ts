@@ -1,88 +1,81 @@
-import { Producto } from "../models/Producto";
-import AppDataSource from '../config/dataSource';
-import { ProductoEntity } from '../entities/implements/ProductoSchema';
-import { IProducto } from "../entities/IProducto";
-import { IVenta } from "../entities/IVenta";
-import { VentaEntity } from "../entities/implements/VentaSchema";
-import { Producto_SucursalEntity } from "../entities/implements/ProductoSucursalSchema";
-import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
+import { ProductoModel } from '../entities/implements/ProductoSchema';
+import { ProductoSucursalModel } from '../entities/implements/ProductoSucursalSchema';
+import { IProducto } from '../entities/IProducto';
+import { IVentaDocument } from '../entities/documents/IVentaDocument';
+import { IProducto_Sucursal } from '../entities/IProducto_Sucursal';
+import { IProductoDocument } from '../entities/documents/IProductoDocument';
 
-const productRepository = AppDataSource.getRepository(ProductoEntity);
-const productSucursalRepository = AppDataSource.getRepository(Producto_SucursalEntity)
-
-const findAll = async (): Promise<ProductoEntity[]> => {
-    return await productRepository.find({
-        relations: {
-            features: true,
-            producto_sucursal: true,
-            categoria: true,
-            group: true
-        }
-    })
+const findAll = async (): Promise<IProductoDocument[]> => {
+  return await ProductoModel.find()
+    .populate('features')
+    .populate('producto_sucursal')
+    .populate('categoria')
+    .populate('group')
+    .exec();
 }
 
-const findById = async (productoId: number): Promise<ProductoEntity | null> => {
-    return await productRepository.findOne({
-        where: {
-            id_producto: productoId
-        }
-    })
-}
-const findBySellerId = async (sellerId: number): Promise<ProductoEntity[] | null> => {
-    return await productRepository.find({
-        where: {
-            id_vendedor: sellerId
-        },
-        relations: {
-            ingreso:true
-        }
-    })
+const findById = async (productoId: number): Promise<IProductoDocument | null> => {
+  return await ProductoModel.findOne({ id_producto: productoId }).exec();
 }
 
-const registerProduct = async (product: IProducto): Promise<Producto> => {
-    const newProduct = productRepository.create(product);
-    const savedProduct = await productRepository.save(newProduct);
-    return new Producto(savedProduct);
+const findBySellerId = async (sellerId: number): Promise<IProductoDocument[]> => {
+  return await ProductoModel.find({ id_vendedor: sellerId })
+    .populate('ingreso')
+    .exec();
 }
 
-const getProductsBySales = async (sales: VentaEntity[]) => {
-    const productIds = sales.map(sale => sale.producto.id_producto);
+const registerProduct = async (product: IProducto): Promise<IProductoDocument> => {
+  const newProduct = new ProductoModel(product);
+  return await newProduct.save();
+}
+
+const getProductsBySales = async (sales: IVentaDocument[]) => {
+  const productIds = sales.map(sale => sale.producto);
+  return await ProductoModel.find({ _id: { $in: productIds } }).exec();
+}
+
+const getStockProduct = async (idProduct: number, idSucursal: number = 3): Promise<IProducto_Sucursal | null> => {
+  return await ProductoSucursalModel.findOne({
+    id_producto: idProduct,
+    id_sucursal: idSucursal
+  }).exec();
+}
+
+const updateStock = async (stock: IProducto_Sucursal, newData: any): Promise<IProducto_Sucursal> => {
     
-    // Usando los IDs de producto para buscar los productos correspondientes
-    const products = await productRepository.findByIds(productIds);
+    const existingStock = await ProductoSucursalModel.findOne({ _id: stock._id });
+  
+    if (existingStock) {
+      
+      Object.assign(existingStock, newData);
+      await existingStock.save();
+      return existingStock;
+    } else {
+      throw new Error("Stock no encontrado");
+    }
+  }
+  
 
-    return products;
-}
-
-const getStockProduct = async (idProduct: number, idSucursal: number = 3) => {
-    const productSucursal = await productSucursalRepository.findOne({
-        where: {
-            id_producto: idProduct,
-            id_sucursal: idSucursal
-        }
-    })
-    return productSucursal
-}
-
-const updateStock = async (stock: IProducto_Sucursal, newData: any) => {
-    stock = {...stock, ...newData}
-    const newStock = await productSucursalRepository.save(stock)
-    return newStock
-}
-
-const updateProduct = async (product: IProducto, newData: any) => {
-    product = {...product, ...newData}
-    const newProduct = await productRepository.save(product)
-    return newProduct
-}
+  const updateProduct = async (product: IProducto, newData: any): Promise<IProductoDocument> => {
+    const existingProduct = await ProductoModel.findOne({ _id: product._id });
+  
+    if (existingProduct) {
+      Object.assign(existingProduct, newData);
+      await existingProduct.save();
+      return existingProduct;
+    } else {
+      throw new Error("Producto no encontrado");
+    }
+  }
+  
 
 export const ProductRepository = {
-    findAll,
-    findById,
-    findBySellerId,
-    registerProduct,
-    getProductsBySales,
-    getStockProduct,
-    updateStock,
-    updateProduct
+  findAll,
+  findById,
+  findBySellerId,
+  registerProduct,
+  getProductsBySales,
+  getStockProduct,
+  updateStock,
+  updateProduct
 };

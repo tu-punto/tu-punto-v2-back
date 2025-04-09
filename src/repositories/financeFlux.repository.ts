@@ -1,50 +1,43 @@
-import AppDataSource from "../config/dataSource"
-import { IFlujoFinanciero } from "../entities/IFlujoFinanciero"
-import { FlujoFinancieroEntity } from "../entities/implements/FlujoFinancieroSchema"
-import { FlujoFinanciero } from "../models/FlujoFinanciero"
+import { Types } from 'mongoose';
+import { FlujoFinancieroModel } from '../entities/implements/FlujoFinancieroSchema';
+import { IFlujoFinanciero } from '../entities/IFlujoFinanciero';
+import { IFlujoFinancieroDocument } from '../entities/documents/IFlujoFinancieroDocument';
 
-const financeFluxRepository = AppDataSource.getRepository(FlujoFinancieroEntity)
+const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
+  return await FlujoFinancieroModel.find().exec();
+};
 
-const findAll = async (): Promise<FlujoFinanciero[]> => {
-    return await financeFluxRepository.find()
-}
+const registerFinanceFlux = async (financeFlux: IFlujoFinanciero): Promise<IFlujoFinancieroDocument> => {
+  const newFinanceFlux = new FlujoFinancieroModel(financeFlux);
+  return await newFinanceFlux.save();
+};
 
-const registerFinanceFlux = async (financeFlux: IFlujoFinanciero) => {
-    const newFinanceFlux = financeFluxRepository.create(financeFlux)
-    const savedFinanceFlux: IFlujoFinanciero = await financeFluxRepository.save(newFinanceFlux)
-    return new FlujoFinanciero(savedFinanceFlux)
-}
-const findWorkerById = async (workerId: number): Promise<FlujoFinancieroEntity | null> => {
-    return await financeFluxRepository.findOne({
-        where: {
-            trabajador: {
-                id_trabajador: workerId
-            }
-        },
-        relations: ['trabajador']
-    })
-}
-const findSellerById = async (sellerId: number): Promise<FlujoFinancieroEntity | null> => {
-    return await financeFluxRepository.findOne({
-        where: {
-            vendedor: {
-                id_vendedor: sellerId
-            }
-        },
-        relations: ['vendedor']
-    })
-}
-const findSellerInfoById = async (sellerId: number): Promise<FlujoFinancieroEntity[] | null> => {
-    return await financeFluxRepository.find({
-        where: {
-           id_vendedor: sellerId
-        },
-    })
-}
+const findWorkerById = async (workerId: Types.ObjectId): Promise<IFlujoFinancieroDocument | null> => {
+  return await FlujoFinancieroModel.findOne({
+    trabajador: workerId
+  })
+    .populate('trabajador') 
+    .exec();
+};
+
+
+const findSellerById = async (sellerId: Types.ObjectId): Promise<IFlujoFinancieroDocument | null> => {
+  return await FlujoFinancieroModel.findOne({
+    where: {
+      vendedor: sellerId
+    },
+    populate: ['vendedor']
+  }).exec();
+};
+
+const findSellerInfoById = async (sellerId: Types.ObjectId): Promise<IFlujoFinancieroDocument[]> => {
+  return await FlujoFinancieroModel.find({ vendedor: sellerId }).exec();
+};
+
 export const FinanceFluxRepository = {
-    findAll,
-    registerFinanceFlux,
-    findWorkerById,
-    findSellerById,
-    findSellerInfoById
-}
+  findAll,
+  registerFinanceFlux,
+  findWorkerById,
+  findSellerById,
+  findSellerInfoById
+};

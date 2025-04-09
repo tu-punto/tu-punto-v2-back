@@ -1,6 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
+import { IVentaDocument } from '../documents/IVentaDocument';
 
-const VentaSchema = new Schema({
+const VentaSchema = new Schema<IVentaDocument>({
   cantidad: {
     type: Number,
     required: true
@@ -30,15 +31,15 @@ const VentaSchema = new Schema({
     required: true
   },
   producto: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Producto'
   },
   pedido: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Pedido'
   },
   vendedor: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Vendedor'
   }
 }, {
@@ -46,4 +47,4 @@ const VentaSchema = new Schema({
   timestamps: false
 });
 
-export const VentaModel = model('Venta', VentaSchema);
+export const VentaModel = model<IVentaDocument>('Venta', VentaSchema);

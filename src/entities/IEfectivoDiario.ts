@@ -1,7 +1,7 @@
 import { Types } from 'mongoose';
 
 export interface IEfectivoDiario {
-  id_efectivo_diario: number;
+  _id?: Types.ObjectId;
   corte_0_2: number;
   corte_0_5: number;
   corte_1: number;

@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-import { ICierreCajaDocument } from "./ICierreCajaDocument"; 
+import { ICierreCajaDocument } from "../documents/ICierreCajaDocument"; 
 
 const CierreCajaSchema = new Schema<ICierreCajaDocument>({
   responsible: String,

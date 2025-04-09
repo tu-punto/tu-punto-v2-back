@@ -1,42 +1,32 @@
-import AppDataSource from "../config/dataSource";
 import { IEfectivoDiario } from "../entities/IEfectivoDiario";
-import { EfectivoDiarioEntity } from "../entities/implements/EfectivoDiarioSchema";
-
-const dailyEffectiveRepository =
-  AppDataSource.getRepository(EfectivoDiarioEntity);
+import { EfectivoDiarioModel } from "../entities/implements/EfectivoDiarioSchema";
 
 const findAll = async (): Promise<IEfectivoDiario[]> => {
-  return await dailyEffectiveRepository.find();
+  return await EfectivoDiarioModel.find().lean();
 };
+
 
 const registerDailyEffective = async (
   dailyEffective: IEfectivoDiario
 ): Promise<IEfectivoDiario> => {
-  const newDailyEffective = dailyEffectiveRepository.create(dailyEffective);
-  const savedDailyEffective = await dailyEffectiveRepository.save(
-    newDailyEffective
-  );
-  return savedDailyEffective;
+  const newDailyEffective = new EfectivoDiarioModel(dailyEffective);
+  return await newDailyEffective.save();
 };
 
-const getDailyEffectiveById = async (id: number) => {
-  return await dailyEffectiveRepository.findOne({
-    where: {
-      id_efectivo_diario: id,
-    },
-  });
+const getDailyEffectiveById = async (id: string): Promise<IEfectivoDiario | null> => {
+  return await EfectivoDiarioModel.findById(id).lean();
 };
 
 const updateDailyEffective = async (
-  dailyEffective: IEfectivoDiario,
-  newData: any
-) => {
-  const updatedDailyEffective = { ...dailyEffective, ...newData };
-  const newDailyEffective = await dailyEffectiveRepository.save(
-    updatedDailyEffective
-  );
-  return newDailyEffective;
+  id: any,
+  newData: Partial<IEfectivoDiario>
+): Promise<IEfectivoDiario | null> => {
+  
+  return await EfectivoDiarioModel.findByIdAndUpdate(id, newData, {
+    new: true,
+  }).lean();
 };
+
 
 export const DailyEffectiveRepository = {
   findAll,
@@ -44,3 +34,4 @@ export const DailyEffectiveRepository = {
   getDailyEffectiveById,
   updateDailyEffective,
 };
+

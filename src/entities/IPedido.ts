@@ -4,7 +4,7 @@ import { ISucursal } from "./ISucursal";
 import { ITrabajador } from "./ITrabajador";
 
 export interface IPedido {
-  id_pedido: number;
+  id_pedido?: Types.ObjectId;
   cliente: string;
   telefono_cliente: number;
   tipo_de_pago: string;

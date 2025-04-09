@@ -1,4 +1,5 @@
 import { Schema, model, Types } from 'mongoose';
+import { IIngresoDocument } from '../documents/IIngresoDocument';
 
 const IngresoSchema = new Schema({
   fecha_ingreso: {
@@ -33,4 +34,4 @@ const IngresoSchema = new Schema({
   timestamps: false
 });
 
-export const IngresoModel = model('Ingreso', IngresoSchema);
+export const IngresoModel = model<IIngresoDocument>('Ingreso', IngresoSchema);

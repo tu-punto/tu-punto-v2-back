@@ -1,32 +1,44 @@
-import AppDataSource from "../config/dataSource";
-import { SucursalEntity } from "../entities/implements/SucursalSchema";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { ISucursal } from "../entities/ISucursal";
 
-const sucursalRepository = AppDataSource.getRepository(SucursalEntity);
-
 const getAllSucursals = async () => {
-  const sucursal = await sucursalRepository.find();
-  return sucursal;
+  const sucursales = await SucursalModel.find().populate([
+    'producto_sucursal',
+    'pedido',
+    'trabajador',
+    'ingreso',
+    'cierre_caja'
+  ]);
+  return sucursales;
 };
 
 const getSucursalByID = async (id: number) => {
-  return await sucursalRepository.findOne({ where: { id_sucursal: id } });
+  return await SucursalModel.findOne({ id_sucursal: id }).populate([
+    'producto_sucursal',
+    'pedido',
+    'trabajador',
+    'ingreso',
+    'cierre_caja'
+  ]);
 };
 
 const registerSucursal = async (sucursal: ISucursal) => {
-  const createdSucursal = sucursalRepository.create(sucursal);
-  const newSucursal = await sucursalRepository.save(createdSucursal);
-  return newSucursal;
+  const newSucursal = new SucursalModel(sucursal);
+  return await newSucursal.save();
 };
 
 const updateSucursal = async (
   sucursal: ISucursal,
   newData: Partial<ISucursal>
 ) => {
-  const toUpdateSucursal = { ...sucursal, ...newData };
-  const updatedSucursal = await sucursalRepository.save(toUpdateSucursal);
-  return updatedSucursal;
+  const updated = await SucursalModel.findOneAndUpdate(
+    { id_sucursal: sucursal.id_sucursal },
+    { ...sucursal, ...newData },
+    { new: true }
+  );
+  return updated;
 };
+
 
 export const SucursalRepository = {
   getAllSucursals,

@@ -1,17 +1,17 @@
 import { Schema, model, Types } from 'mongoose';
-
-const CategoriaSchema = new Schema({
+import { ICategoriaDocument } from '../documents/ICategoriaDocument';
+const CategoriaSchema = new Schema<ICategoriaDocument>({
   categoria: {
     type: String,
     required: true,
   },
   producto: [{
     type: Types.ObjectId,
-    ref: 'Producto' // nombre del modelo referenciado
+    ref: 'Producto' 
   }]
 }, {
   collection: 'Categoria',
-  timestamps: true // opcional
+  timestamps: true 
 });
 
-export const CategoriaModel = model('Categoria', CategoriaSchema);
+export const CategoriaModel = model<ICategoriaDocument>('Categoria', CategoriaSchema);

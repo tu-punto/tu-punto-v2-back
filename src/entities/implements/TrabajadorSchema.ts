@@ -1,6 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
+import { ITrabajadorDocument } from '../documents/ITrabajadorDocument';
 
-const TrabajadorSchema = new Schema({
+const TrabajadorSchema = new Schema<ITrabajadorDocument>({
   nombre: {
     type: String,
     required: true
@@ -18,7 +19,7 @@ const TrabajadorSchema = new Schema({
     required: true
   },
   user: {
-    type: Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
@@ -43,4 +44,4 @@ const TrabajadorSchema = new Schema({
   timestamps: false
 });
 
-export const TrabajadorModel = model('Trabajador', TrabajadorSchema);
+export const TrabajadorModel = model<ITrabajadorDocument>('Trabajador', TrabajadorSchema);

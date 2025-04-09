@@ -1,14 +1,15 @@
 import { Schema, model, Types } from 'mongoose';
+import { IProductoSucursalDocument } from '../documents/IProductoSucursal';
 
 const ProductoSucursalSchema = new Schema({
   id_producto: {
     type: Types.ObjectId,
-    ref: 'Producto',  // Referencia al modelo de Producto
+    ref: 'Producto',  
     required: true
   },
   id_sucursal: {
     type: Types.ObjectId,
-    ref: 'Sucursal',  // Referencia al modelo de Sucursal
+    ref: 'Sucursal',  
     required: true
   },
   cantidad_por_sucursal: {
@@ -24,4 +25,4 @@ const ProductoSucursalSchema = new Schema({
   timestamps: false
 });
 
-export const ProductoSucursalModel = model('Producto_Sucursal', ProductoSucursalSchema);
+export const ProductoSucursalModel = model<IProductoSucursalDocument>('Producto_Sucursal', ProductoSucursalSchema);

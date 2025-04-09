@@ -1,84 +1,75 @@
-
-import { group } from "console";
-import AppDataSource from "../config/dataSource";
 import { IGroup } from "../entities/IGroup";
-import { GroupEntity } from "../entities/implements/GroupSchema";
-import { ProductoEntity } from "../entities/implements/ProductoSchema";
-import { IProducto } from "../entities/IProducto";
-import { Group } from "../models/Group";
-import { Not } from "typeorm";
+import { IGroupDocument } from "../entities/documents/IGroupDocument";
+import { ProductoModel } from "../entities/implements/ProductoSchema"; 
+import { GroupModel } from "../entities/implements/GroupSchema";
+import { IProductoDocument } from "../entities/documents/IProductoDocument";
 
-const productRepository = AppDataSource.getRepository(ProductoEntity)
-const groupRepository = AppDataSource.getRepository(GroupEntity)
 
-const getAllGroups = async () => {
-    return await groupRepository.find({
-        where: {
-            name: Not("Sin Grupo")
-        }
+const getAllGroups = async (): Promise<IGroupDocument[]> => {
+  return await GroupModel.find({ name: { $ne: "Sin Grupo" } }).exec();
+};
+
+
+const getAllGroupsWithProducts = async (): Promise<IGroupDocument[]> => {
+  return await GroupModel.find({ name: { $ne: "Sin Grupo" } })
+    .populate('products')
+    .exec();
+};
+
+const getGroupById = async (id: number): Promise<IGroupDocument | null> => {
+  return await GroupModel.findOne({ _id: id }).exec();
+};
+
+const getProductsInGroup = async (group: IGroup): Promise<any[]> => {
+    const products = await ProductoModel.find({
+      group: group._id 
+    })
+      .populate('group categoria features vendedor producto_sucursal') 
+      .exec();
+  
+    return products.map(product => {
+      return {
+        ...product.toObject(), 
+        key: `${product._id}` 
+      };
     });
-}
+  };
 
-const getAllGroupsWithProducts = async () => {
-    return await groupRepository.find({
-        where: {
-            name: Not("Sin Grupo")
-        },
-        relations: {
-            products: true
-        }
-    });
-}
+const registerGroup = async (group: IGroup): Promise<IGroupDocument> => {
+  const newGroup = new GroupModel(group);
+  return await newGroup.save();
+};
 
-const getGroupById = async (id: number) => {
-    return await groupRepository.findOne({
-        where: {
-            id
-        }
-    })
-}
+const getExampleProduct = async (group: IGroup): Promise<any | null> => {
+    const product = await ProductoModel.findOne({ group: group._id }) 
+      .populate('group categoria features vendedor producto_sucursal') 
+      .exec();
+  
+    if (product) {
+      return {
+        ...product.toObject(), 
+        key: `${product._id}` 
+      };
+    }
+  
+    return null; 
+  };
+  
 
-const getProductsInGroup = async (group: any) => {
-    return await productRepository.find({
-        where: {
-            groupId: group.id
-        },
-        relations: {
-            group: true,
-            categoria: true,
-            features: true,
-            vendedor: true,
-            producto_sucursal: true,
-        }
-    })
-}
+const updateGroup = async (newData: any, groupId: IGroup): Promise<IGroupDocument> => {
+  const updatedGroup = await GroupModel.findByIdAndUpdate(groupId._id, newData, { 
+    new: true 
+  }).exec();
+  return updatedGroup!; 
+};
 
-const registerGroup = async (group: IGroup) => {
-    const newGroup: GroupEntity = groupRepository.create(group)
-    const savedGroup: IGroup = await groupRepository.save(newGroup)
-    return new Group(savedGroup)
-}
-
-const getExampleProduct = async (group: IGroup) => {
-    return await productRepository.findOne({
-        where: {
-            groupId: group.id
-        }
-    })
-}
-
-const updateGroup = async (newData: any, groupId: IGroup) => {
-    const updatedGroup = { ...groupId, ...newData }
-    const newGroup = await groupRepository.save(updatedGroup)
-    return newGroup
-}
 
 export const GroupRepository = {
-    getProductsInGroup,
-    getGroupById,
-    registerGroup,
-    getAllGroups,
-    getExampleProduct,
-    getAllGroupsWithProducts,
-    updateGroup
-}
+  getProductsInGroup,
+  getGroupById,
+  registerGroup,
+  getAllGroups,
+  getExampleProduct,
+  getAllGroupsWithProducts,
+  updateGroup
+};

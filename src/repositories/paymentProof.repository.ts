@@ -1,11 +1,11 @@
-import AppDataSource from "../config/dataSource"
-import { ComprobantePagoEntity } from "../entities/implements/ComprobantePagoSchema"
+import { IComprobantePago } from "../entities/IComprobantePago";
+import { IComprobantePagoDocument } from "../entities/documents/IComprobantePagoDocument";
+import { ComprobantePagoModel } from "../entities/implements/ComprobantePagoSchema";
 
-const paymentProofRepository = AppDataSource.getRepository(ComprobantePagoEntity)
-
-export const getPaymentProofsBySellerId = async (sellerId:number): Promise<ComprobantePagoEntity[]> => {
-    const paymentProofs = await paymentProofRepository.find({
-        where: {id_vendedor:sellerId}
-    })
-    return paymentProofs
-}
+export const getPaymentProofsBySellerId = async (sellerId: number): Promise<IComprobantePagoDocument[]> => {
+  const paymentProofs = await ComprobantePagoModel.find({ id_vendedor: sellerId })
+    .populate('vendedor') 
+    .exec();
+  
+  return paymentProofs;
+};

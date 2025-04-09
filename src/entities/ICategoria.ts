@@ -1,8 +1,9 @@
 import { Types } from 'mongoose';
+import { IProducto } from './IProducto';
 
 export interface ICategoria {
-  id_categoria: number;
+ 
   categoria: string;
 
-  producto?: Types.ObjectId[]; 
+  producto?: Types.ObjectId[] | IProducto[]; 
 }

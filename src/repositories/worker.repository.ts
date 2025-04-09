@@ -1,28 +1,24 @@
-import { Trabajador } from './../models/Trabajador';
-import AppDataSource from "../config/dataSource";
-import { TrabajadorEntity } from "../entities/implements/TrabajadorSchema";
-import { ITrabajador } from '../entities/ITrabajador';
+import { ITrabajador } from "../entities/ITrabajador";
+import { TrabajadorModel } from "../entities/implements/TrabajadorSchema";
+import { ITrabajadorDocument } from "../entities/documents/ITrabajadorDocument";
 
-const workerRepository = AppDataSource.getRepository(TrabajadorEntity);
+const findAll = async (): Promise<ITrabajadorDocument[]> => {
+  const workers = await TrabajadorModel.find(); 
+  return workers; 
+};
+const registerWorker = async (worker: ITrabajador): Promise<ITrabajadorDocument> => {
+  const newWorker = new TrabajadorModel(worker); 
+  const savedWorker = await newWorker.save(); 
+  return savedWorker; 
+};
 
-const findAll = async (): Promise<Trabajador[]> => {
-    return await workerRepository.find();
-}
-
-const registerWorker = async (worker: ITrabajador): Promise<Trabajador> => {
-    const newWorker = workerRepository.create(worker);
-    const saveWorker = await workerRepository.save(newWorker);
-    return new Trabajador(saveWorker);
-} 
-export const getWorkerByFinanceFlux = async (workerId: number): Promise<TrabajadorEntity | null> => {
-    const worker = await workerRepository.findOne({
-        where: { id_trabajador: workerId }
-    });
-    return worker;
+const getWorkerByFinanceFlux = async (workerId: string): Promise<ITrabajadorDocument | null> => {
+  const worker = await TrabajadorModel.findOne({ _id: workerId }); // Buscar por _id
+  return worker; 
 };
 
 export const WorkerRepository = {
-    findAll,
-    registerWorker,
-    getWorkerByFinanceFlux
-}
+  findAll,
+  registerWorker,
+  getWorkerByFinanceFlux
+};

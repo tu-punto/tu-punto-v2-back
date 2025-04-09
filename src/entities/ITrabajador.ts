@@ -6,7 +6,6 @@ import { IFlujoFinanciero } from "./IFlujoFinanciero";
 import { ISucursal } from "./ISucursal";
 
 export interface ITrabajador {
-    id_trabajador: number;
     nombre: string;
     numero: number;
     rol: string;

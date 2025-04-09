@@ -1,39 +1,30 @@
 
-import AppDataSource from "../config/dataSource"
-import { ICaracteristicas } from "../entities/ICaracteristicas"
-import { CaracteristicasEntity } from "../entities/implements/CaracteristicasSchema"
-import { IProducto } from "../entities/IProducto"
-import { Caracteristicas } from "../models/Caracteristicas"
+import { Types } from 'mongoose';
+import { CaracteristicasModel } from '../entities/implements/CaracteristicasSchema';
+import { ICaracteristicas } from '../entities/ICaracteristicas';
+import { ICaracteristicasDocument } from '../entities/documents/ICaracteristicasDocument';
 
-const featureRepository = AppDataSource.getRepository(CaracteristicasEntity)
+const findById = async (featureId: Types.ObjectId): Promise<ICaracteristicasDocument | null> => {
+  return await CaracteristicasModel.findById(featureId).exec();
+};
 
-const findById = async (featureId: number): Promise<CaracteristicasEntity | null> => {
-    return featureRepository.findOne({
-        where: {
-            id_caracteristicas: featureId
-        }
-    })
-}
+const findAll = async (): Promise<ICaracteristicasDocument[]> => {
+  return await CaracteristicasModel.find().exec();
+};
 
-const findAll = async (): Promise<Caracteristicas[]> => {
-    return await featureRepository.find()
-}
+const registerFeature = async (feature: ICaracteristicas): Promise<ICaracteristicasDocument> => {
+  const newFeature = new CaracteristicasModel(feature);
+  return await newFeature.save();
+};
 
-const registerFeature = async (feature: ICaracteristicas): Promise<Caracteristicas> => {
-    const newfeature = featureRepository.create(feature);
-    const savedFeature = await featureRepository.save(newfeature);
-    return new Caracteristicas(savedFeature);
-}
-
-const getFeaturesByProductId = async (productId: IProducto) => {
-    return await featureRepository.find({
-        where: {product: productId}
-    })
-}
+const getFeaturesByProductId = async (productId: Types.ObjectId): Promise<ICaracteristicasDocument[]> => {
+  return await CaracteristicasModel.find({ product: productId }).exec();
+};
 
 export const FeatureRepository = {
-    findById,
-    registerFeature,
-    findAll,
-    getFeaturesByProductId
-}
+  findById,
+  findAll,
+  registerFeature,
+  getFeaturesByProductId
+  
+};
