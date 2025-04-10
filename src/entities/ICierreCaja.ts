@@ -1,8 +1,5 @@
-import { EfectivoDiarioEntity } from "./implements/EfectivoDiarioEntity";
-import { SucursalEntity } from "./implements/SucursalEntity";
-
+import { Types } from 'mongoose';
 export interface ICierreCaja {
-  id_cierre_caja: number;
   responsible: string;
   ventas_efectivo: number;
   ventas_qr: number;
@@ -18,6 +15,11 @@ export interface ICierreCaja {
   observaciones: string;
   created_at: Date;
   updated_at: Date;
-  id_efectivo_diario: EfectivoDiarioEntity;
-  id_sucursal: SucursalEntity;
+  id_efectivo_diario: Types.ObjectId;
+  id_sucursal: Types.ObjectId;
 }
+
+
+
+
+

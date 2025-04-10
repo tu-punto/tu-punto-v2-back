@@ -3,6 +3,8 @@ import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { WorkerRepository } from "../repositories/worker.repository";
 import { FinanceFluxInteractor } from "../interactors/financeFlux.interactor";
+import { ITrabajador } from "../entities/ITrabajador";
+import { IVendedor } from "../entities/IVendedor";
 
 const getAllFinanceFluxes = async () => {
   const financeFluxes = await FinanceFluxRepository.findAll();
@@ -16,15 +18,12 @@ const registerFinanceFlux = async (financeFlux: IFlujoFinanciero) => {
   return newFinanceFlux;
 };
 
-const getWorkerById = async (workerId: number) => {
+const getWorkerById = async (workerId: any) => {
   const financeFlux = await FinanceFluxRepository.findWorkerById(workerId);
   if (!financeFlux)
-    throw new Error(
-      "Doesn't exist such worker with that id fk from FinanceFlux"
-    );
-  const worker = await WorkerRepository.getWorkerByFinanceFlux(
-    financeFlux.trabajador.id_trabajador
-  );
+    throw new Error("Doesn't exist such worker with that id fk from FinanceFlux");
+
+  const worker = financeFlux.trabajador as ITrabajador; 
 
   if (!worker) {
     throw new Error("No worker found with the given id");
@@ -36,16 +35,18 @@ const getWorkerById = async (workerId: number) => {
   };
 };
 
-const getSellerById = async (sellerId: number) => {
+
+
+const getSellerById = async (sellerId: any) => {
   const financeFlux = await FinanceFluxRepository.findSellerById(sellerId);
   if (!financeFlux)
     throw new Error(
       "Doesn't exist such seller with that id fk from FinanceFlux"
     );
-  const seller = await SellerRepository.findById(
-    financeFlux.vendedor.id_vendedor
-  );
 
+   const sellerData = financeFlux.vendedor as IVendedor;
+
+  const seller = await SellerRepository.findById(sellerData.id_vendedor);
   if (!seller) {
     throw new Error("No seller found with the given id");
   }
@@ -58,7 +59,7 @@ const getSellerById = async (sellerId: number) => {
   };
 };
 
-const getSellerInfoById = async (sellerId: number) => {
+const getSellerInfoById = async (sellerId: any) => {
   const financeFlux = await FinanceFluxRepository.findSellerInfoById(sellerId);
   if (!financeFlux)
     throw new Error(

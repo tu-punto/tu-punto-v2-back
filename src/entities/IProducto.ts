@@ -1,27 +1,20 @@
-import { ICaracteristicas } from "./ICaracteristicas";
-import { ICategoria } from "./ICategoria";
-import { IGroup } from "./IGroup";
-import { IIngreso } from "./IIngreso";
-import { IProducto_Sucursal } from "./IProducto_Sucursal";
-import { IVendedor } from "./IVendedor";
-import { IVenta } from "./IVenta";
+import { Types } from 'mongoose';
+import { ICaracteristicas } from './ICaracteristicas';
 
-export interface IProducto{
-    id_producto: number;
-    nombre_producto: string;
-    precio: number;
-    fecha_de_ingreso: Date;
-    imagen: string;
-    id_categoria: number;
-    id_vendedor: number;
-
-    vendedor: IVendedor;
-    features: ICaracteristicas[];
-    categoria: ICategoria;
-    venta: IVenta[];
-    producto_sucursal?: IProducto_Sucursal[];
-    ingreso?: IIngreso[];
-
-
-    group: IGroup
+export interface IProducto {
+  _id?: Types.ObjectId;
+  nombre_producto: string;
+  precio: number;
+  fecha_de_ingreso: Date;
+  imagen: string;
+  id_categoria: number;
+  id_vendedor: number;
+  groupId: number;
+  vendedor: Types.ObjectId;     
+  features: ICaracteristicas[];
+  categoria: Types.ObjectId;
+  venta: Types.ObjectId[];             
+  producto_sucursal?: Types.ObjectId[];
+  ingreso?: Types.ObjectId[];
+  group: Types.ObjectId;  
 }

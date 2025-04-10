@@ -1,4 +1,4 @@
-import { IPedido } from "../entities/IPedido";
+/* import { IPedido } from "../entities/IPedido";
 import { ISucursal } from "../entities/ISucursal";
 import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
@@ -51,4 +51,4 @@ export class Pedido {
         this.sucursal = iPedido.sucursal;
         this.trabajador = iPedido.trabajador;
     }
-}
+} */

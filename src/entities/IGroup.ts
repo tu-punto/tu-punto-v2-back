@@ -1,8 +1,7 @@
-import { ProductoEntity } from "./implements/ProductoEntity"
+import { Types } from 'mongoose';
 
-
-export interface IGroup{
-    id: number
-    name: string
-    products: ProductoEntity[]
+export interface IGroup {
+  _id?: Types.ObjectId;
+  name: string;
+  products: Types.ObjectId[];
 }

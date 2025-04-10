@@ -9,7 +9,7 @@ const registerDailyEffective = async (boxClose: any) => {
   return await DailyEffectiveRepository.registerDailyEffective(boxClose);
 };
 
-const getDailyEffectiveById = async (id: number) => {
+const getDailyEffectiveById = async (id: any) => {
   const dailyEffective = await DailyEffectiveRepository.getDailyEffectiveById(
     id
   );
@@ -18,7 +18,7 @@ const getDailyEffectiveById = async (id: number) => {
   return dailyEffective;
 };
 
-const updateDailyEffective = async (dailyEffectiveID: number, newData: any) => {
+const updateDailyEffective = async (dailyEffectiveID: any, newData: any) => {
   const dailyEffective = await DailyEffectiveRepository.getDailyEffectiveById(
     dailyEffectiveID
   );

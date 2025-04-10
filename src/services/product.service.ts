@@ -1,5 +1,5 @@
-import { CaracteristicasEntity } from "../entities/implements/CaracteristicasEntity";
-import { Caracteristicas } from "../models/Caracteristicas";
+
+import { ICaracteristicas } from "../entities/ICaracteristicas";
 import { FeatureRepository } from "../repositories/feature.repository";
 import { ProductRepository } from "../repositories/product.repository";
 
@@ -38,14 +38,18 @@ const getFeaturesById = async (productId: number) => {
 }
 
 const addFeatureToProduct = async (productId: number, featureWithOutProductId: any) => {
-    const product = await ProductRepository.findById(productId)
-    if(!product)
-        throw new Error("Doesn't exist such product with that id")
-    const feature = new Caracteristicas({...featureWithOutProductId})
-    feature.product = product
-    return await FeatureRepository.registerFeature(feature)
-
-}
+    const product = await ProductRepository.findById(productId);
+    
+    if (!product)
+      throw new Error("Doesn't exist such product with that id");
+    
+    const feature: ICaracteristicas = {
+      ...featureWithOutProductId,
+      product: product._id // 👈 asignamos solo el ObjectId
+    };
+  
+    return await FeatureRepository.registerFeature(feature);
+  };
 
 const getProductById = async (productId: number) => {
     const product = await ProductRepository.findById(productId)

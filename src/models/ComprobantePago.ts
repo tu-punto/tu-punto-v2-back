@@ -1,4 +1,4 @@
-import { IComprobantePago } from "../entities/IComprobantePago";
+/* import { IComprobantePago } from "../entities/IComprobantePago";
 import { IVendedor } from "../entities/IVendedor";
 
 export class ComprobantePago{
@@ -22,4 +22,4 @@ export class ComprobantePago{
         this.vendedor= iComprobantePago.vendedor;
         this.id_vendedor = iComprobantePago.id_vendedor;
     }
-}
+} */

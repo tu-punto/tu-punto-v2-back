@@ -1,4 +1,4 @@
-import { ICaracteristicas } from "../entities/ICaracteristicas";
+/* import { ICaracteristicas } from "../entities/ICaracteristicas";
 import { IProducto } from "../entities/IProducto";
 
 export class Caracteristicas{
@@ -6,6 +6,7 @@ export class Caracteristicas{
     feature: string;
     value: string;
     product: IProducto
+    feature: import("mongoose").Types.ObjectId;
 
     constructor(iCaracteristicas: ICaracteristicas){
         this.id_caracteristicas = iCaracteristicas.id_caracteristicas;
@@ -13,4 +14,4 @@ export class Caracteristicas{
         this.value = iCaracteristicas.value
         this.product = iCaracteristicas.product
     }
-}
+} */

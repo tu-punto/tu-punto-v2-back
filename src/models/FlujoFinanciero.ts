@@ -1,4 +1,4 @@
-import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
+/* import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
 
@@ -24,4 +24,4 @@ export class FlujoFinanciero implements IFlujoFinanciero {
         this.trabajador = iFlujoFinanciero.trabajador
         this.esDeuda = iFlujoFinanciero.esDeuda
     }
-}
+} */

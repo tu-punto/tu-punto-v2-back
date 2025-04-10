@@ -3,7 +3,7 @@ import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
 import { IGroup } from "../entities/IGroup";
 import { GroupRepository } from "../repositories/group.repository";
-import { GroupEntity } from "../entities/implements/GroupEntity";
+import { GroupModel } from "../entities/implements/GroupSchema";
 import { IProducto } from "../entities/IProducto";
 import { ProductBranchService } from "../services/productBranch.service";
 export const getProduct = async (req: Request, res: Response) => {
@@ -20,7 +20,7 @@ const registerProduct = async (req: Request, res: Response) => {
     const {product, stock} = req.body;
     try {
         const newProduct = await ProductService.registerProduct(product);
-        const newStock = await ProductBranchService.registerProductBranch({id_producto: newProduct.id_producto,...stock})
+        const newStock = await ProductBranchService.registerProductBranch({id_producto: newProduct._id,...stock})
         res.json({
             status: true,
             newProduct,
@@ -112,7 +112,7 @@ const registerProductVariants = async (req: Request, res: Response) => {
         const {cantidad_por_sucursal} = variant
         
         const newStock = await ProductBranchService.registerProductBranch({
-            id_producto: newProduct.id_producto,
+            id_producto: newProduct._id,
             id_sucursal,
             cantidad_por_sucursal})
         products.push({newProduct, newStock})

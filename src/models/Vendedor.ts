@@ -1,4 +1,4 @@
-import { IComprobanteEntrada } from "../entities/IComprobanteEntrada";
+/* import { IComprobanteEntrada } from "../entities/IComprobanteEntrada";
 import { IComprobantePago } from "../entities/IComprobantePago";
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { IIngreso } from "../entities/IIngreso";
@@ -72,3 +72,4 @@ export class Vendedor {
     this.ingreso = iVendedor.ingreso;
   }
 }
+ */

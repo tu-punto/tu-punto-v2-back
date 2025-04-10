@@ -1,34 +1,31 @@
-import AppDataSource from "../config/dataSource";
+import { ProductoSucursalModel } from "../entities/implements/ProductoSucursalSchema";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
-import { Producto_SucursalEntity } from "../entities/implements/Producto_SucursalEntity";
-import { Producto_Sucursal } from "../models/Producto_Sucursal";
+import { IProductoSucursalDocument } from "../entities/documents/IProductoSucursal";
 
-const productBranchRepository = AppDataSource.getRepository(Producto_SucursalEntity)
-
-const findAll = async (): Promise<Producto_SucursalEntity[]> => {
-    return await productBranchRepository.find({
-        relations: {
-            producto: true,
-            sucursal: true
-        }
-    })
+const findAll = async (): Promise<IProductoSucursalDocument[]> => {
+    return await ProductoSucursalModel.find()
+        .populate('producto')
+        .populate('sucursal');
 }
 
-const findById = async (branchId: number, productId: number): Promise<Producto_SucursalEntity | null> => {
-    return await productBranchRepository.findOne({
-        where: {
-            id_sucursal: branchId,
-            id_producto: productId
-        }
+const findById = async (branchId: number, productId: number): Promise<IProductoSucursalDocument | null> => {
+    return await ProductoSucursalModel.findOne({
+        id_sucursal: branchId,
+        id_producto: productId
     })
+    .populate('producto')
+    .populate('sucursal');
 }
 
-const registerProductBranch = async (productBranch: IProducto_Sucursal) => {
-    const newProductBranch = productBranchRepository.create(productBranch)
-    const savedProductBranch = await productBranchRepository.save(newProductBranch)
-    return new Producto_Sucursal(savedProductBranch)
+const registerProductBranch = async (productBranch: IProducto_Sucursal): Promise<IProductoSucursalDocument> => {
+    const newProductBranch = new ProductoSucursalModel(productBranch);
+    return await newProductBranch.save(); 
 }
 
 export const ProductBranchRepository = {
-    findAll, findById, registerProductBranch
-}
+    findAll,
+    findById,
+    registerProductBranch
+};
+
+

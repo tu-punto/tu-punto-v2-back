@@ -1,56 +1,40 @@
-import { In } from "typeorm";
-import AppDataSource from "../config/dataSource";
-import { ProductoEntity } from "../entities/implements/ProductoEntity";
-import { VentaEntity } from "../entities/implements/VentaEntity";
+import { VentaModel } from "../entities/implements/VentaSchema";
+import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { IVenta } from "../entities/IVenta";
-import { Venta } from "../models/Venta";
+import { IVentaDocument } from "../entities/documents/IVentaDocument";
+import mongoose from "mongoose";
 
-const saleRepository = AppDataSource.getRepository(VentaEntity);
-const productRepository = AppDataSource.getRepository(ProductoEntity);
 
-const findAll = async (): Promise<Venta[]> => {
-  return await saleRepository.find();
+const findAll = async (): Promise<IVentaDocument[]> => {
+  return await VentaModel.find().populate(['producto', 'pedido', 'vendedor']);
 };
 
-const registerSale = async (sale: IVenta): Promise<Venta> => {
-  const newSale = saleRepository.create(sale);
-  const savedSale = await saleRepository.save(newSale);
-  return new Venta(savedSale);
+
+const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
+  const newSale = new VentaModel(sale);
+  const saved = await newSale.save();
+  return saved;
 };
+
+
 const findById = async (saleId: number) => {
-  return await saleRepository.findOne({
-    where: {
-      id_venta: saleId,
-    },
-  });
+  return await VentaModel.findOne({ id_venta: saleId }).populate(['producto', 'pedido', 'vendedor']);
 };
 
 const updateSale = async (sale: IVenta) => {
-  const updatedSale = await saleRepository.save(sale);
-  return updatedSale;
+  return await VentaModel.findOneAndUpdate({ id_venta: sale.id_venta }, sale, { new: true });
 };
 
-const findByPedidoId = async (pedidoId: number): Promise<VentaEntity[]> => {
-  const sales = await saleRepository.find({
-    where: { pedido: { id_pedido: pedidoId } },
-    relations: ["producto"],
-  });
-  return sales;
+const findByPedidoId = async (pedidoId: number) => {
+  return await VentaModel.find({ id_pedido: pedidoId }).populate(['producto']);
 };
 
-const findByProductId = async (productId: number): Promise<VentaEntity[]> => {
-  const sales = await saleRepository.find({
-    where: {id_producto: productId},
-    relations: ["producto", "pedido", "vendedor"],
-  });
-  return sales;
+const findByProductId = async (productId: number) => {
+  return await VentaModel.find({ id_producto: productId }).populate(['producto', 'pedido', 'vendedor']);
 };
-const findBySellerId = async (sellerId: number): Promise<VentaEntity[]> => {
-  const sales = await saleRepository.find({
-    where: { vendedor: { id_vendedor: sellerId } },
-    relations: ["producto", "pedido"],
-  });
-  return sales;
+
+const findBySellerId = async (sellerId: number) => {
+  return await VentaModel.find({ id_vendedor: sellerId }).populate(['producto', 'pedido']);
 };
 
 const updateProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
@@ -58,89 +42,87 @@ const updateProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
 
   for (const sale of sales) {
     for (const prod of prods) {
-      if (prod.id_venta === sale.id_venta) {
-        if (sale.producto && sale.producto.id_producto === prod.id_producto) {
-          // Actualiza el producto con nuevos datos
-          const updatedProduct = { ...sale, ...prod };
-          updatedSales.push(await productRepository.save(updatedProduct));
-        }
+      if (prod.id_venta === sale.id_venta && sale.producto?.id_producto === prod.id_producto) {
+        const updated = await ProductoModel.findOneAndUpdate(
+          { _id: sale.producto._id },
+          { ...prod },
+          { new: true }
+        );
+        updatedSales.push(updated);
       }
     }
   }
-  const newSaleData = await saleRepository.save(updatedSales);
-  return newSaleData;
+
+  return updatedSales;
 };
 
 const updateSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
-  const ids = salesData.map(sale => sale.id_venta);
-  const salesToUpdate = await saleRepository.findBy({ id_venta: In(ids) });
-  salesToUpdate.forEach(sale => {
-    const newData = salesData.find(s => s.id_venta === sale.id_venta);
-    if (newData) {
-      sale.cantidad = newData.cantidad;
-      sale.precio_unitario = newData.precio_unitario;
-    }
-  });
+  const updated: any[] = [];
 
-  return await saleRepository.save(salesToUpdate);
+  for (const sale of salesData) {
+    const updatedSale = await VentaModel.findOneAndUpdate(
+      { id_venta: sale.id_venta },
+      {
+        cantidad: sale.cantidad,
+        precio_unitario: sale.precio_unitario,
+      },
+      { new: true }
+    );
+    updated.push(updatedSale);
+  }
+
+  return updated;
 };
 
 const deleteSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
-  const ids = salesData.map(sale => sale.id_venta);
-  await saleRepository.delete({ id_venta: In(ids) });
+  const ids = salesData.map(s => s.id_venta);
+  await VentaModel.deleteMany({ id_venta: { $in: ids } });
   return ids;
 };
 
 const deleteProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
   const deletedProducts: any[] = [];
-  const productsToDelete = new Set(
-    prods.map((prod) => `${prod.id_venta}-${prod.id_producto}`)
-  );
+  const keys = new Set(prods.map(p => `${p.id_venta}-${p.id_producto}`));
 
   for (const sale of sales) {
     const key = `${sale.id_venta}-${sale.producto.id_producto}`;
-    if (productsToDelete.has(key)) {
-      await saleRepository.delete({
-        id_producto: sale.producto.id_producto,
-        id_venta: sale.id_venta,
-      });
-      deletedProducts.push({
+    if (keys.has(key)) {
+      await VentaModel.deleteOne({
         id_venta: sale.id_venta,
         id_producto: sale.producto.id_producto,
       });
+      deletedProducts.push({ id_venta: sale.id_venta, id_producto: sale.producto.id_producto });
     }
   }
+
   return deletedProducts;
 };
-const deleteSalesByIds = async (saleIds:number[]): Promise<any> => {
-    await saleRepository.delete({ id_venta: In(saleIds) });
+
+const deleteSalesByIds = async (saleIds: number[]): Promise<any> => {
+  await VentaModel.deleteMany({ id_venta: { $in: saleIds } });
 };
 
 const getDataPaymentProof = async (sellerId: number) => {
-  const data = await saleRepository.find({
-    where: {
-      deposito_realizado: false,
-      id_vendedor: sellerId
-    },
-    relations: [
-      "producto", "pedido"
-    ]
-  })
-  return data
-} 
+  return await VentaModel.find({
+    deposito_realizado: false,
+    id_vendedor: sellerId
+  }).populate(['producto', 'pedido']);
+};
+
 
 export const SaleRepository = {
-    findAll,
-    registerSale,
-    findByPedidoId,
-    findByProductId,
-    updateSalesOfProducts,
-    updateProducts,
-    deleteProducts,
-    findBySellerId,
-    findById,
-    updateSale,
-    deleteSalesByIds,
-    getDataPaymentProof,
-    deleteSalesOfProducts
-}
+  findAll,
+  registerSale,
+  findByPedidoId,
+  findByProductId,
+  updateSalesOfProducts,
+  updateProducts,
+  deleteProducts,
+  findBySellerId,
+  findById,
+  updateSale,
+  deleteSalesByIds,
+  getDataPaymentProof,
+  deleteSalesOfProducts
+};
+

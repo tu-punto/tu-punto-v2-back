@@ -1,4 +1,4 @@
-import { IIngreso } from "../entities/IIngreso";
+/* import { IIngreso } from "../entities/IIngreso";
 import { IProducto } from "../entities/IProducto";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 import { ISucursal } from "../entities/ISucursal";
@@ -21,4 +21,4 @@ export class Producto_Sucursal{
           this.producto= iProducto_Sucursal.producto;
           this.sucursal= iProducto_Sucursal.sucursal;
      }
-}
+} */

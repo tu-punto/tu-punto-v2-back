@@ -34,7 +34,7 @@ export const getBoxCloseByIdController = async (
 ) => {
   const { id } = req.params;
   try {
-    const boxClose = await BoxCloseService.getBoxCloseById(parseInt(id));
+    const boxClose = await BoxCloseService.getBoxCloseById(id);
     res.json(boxClose);
   } catch (error) {
     console.error(error);

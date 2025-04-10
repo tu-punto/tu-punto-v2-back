@@ -1,8 +1,9 @@
-import { IProducto } from "./IProducto";
+import { Types } from 'mongoose';
+import { IProducto } from './IProducto';
 
-export interface ICategoria{
-    id_categoria: number;
-    categoria: string;
+export interface ICategoria {
+ 
+  categoria: string;
 
-    producto?: IProducto[];
+  producto?: Types.ObjectId[] | IProducto[]; 
 }
