@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { ICaracteristicas } from './ICaracteristicas';
 
 export interface IProducto {
   _id?: Types.ObjectId;
@@ -8,9 +9,9 @@ export interface IProducto {
   imagen: string;
   id_categoria: number;
   id_vendedor: number;
-
+  groupId: number;
   vendedor: Types.ObjectId;     
-  features: Types.ObjectId[];
+  features: ICaracteristicas[];
   categoria: Types.ObjectId;
   venta: Types.ObjectId[];             
   producto_sucursal?: Types.ObjectId[];

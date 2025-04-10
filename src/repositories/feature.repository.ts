@@ -17,7 +17,7 @@ const registerFeature = async (feature: ICaracteristicas): Promise<ICaracteristi
   return await newFeature.save();
 };
 
-const getFeaturesByProductId = async (productId: Types.ObjectId): Promise<ICaracteristicasDocument[]> => {
+const getFeaturesByProductId = async (productId: any): Promise<ICaracteristicasDocument[]> => {
   return await CaracteristicasModel.find({ product: productId }).exec();
 };
 

@@ -28,7 +28,7 @@ const registerSucursal = async (sucursal: ISucursal) => {
 };
 
 const updateSucursal = async (
-  sucursal: ISucursal,
+  sucursal: any,
   newData: Partial<ISucursal>
 ) => {
   const updated = await SucursalModel.findOneAndUpdate(

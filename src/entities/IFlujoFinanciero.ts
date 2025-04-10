@@ -1,4 +1,6 @@
 import { Types } from 'mongoose';
+import { ITrabajador } from './ITrabajador';
+import { IVendedor } from './IVendedor';
 
 export interface IFlujoFinanciero {
   tipo: string;
@@ -8,6 +10,6 @@ export interface IFlujoFinanciero {
   fecha: Date;
   esDeuda: boolean;
 
-  vendedor: Types.ObjectId; 
-  trabajador: Types.ObjectId; 
+  vendedor: Types.ObjectId | IVendedor; 
+  trabajador: Types.ObjectId | ITrabajador;
 }

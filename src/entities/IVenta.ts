@@ -13,7 +13,7 @@ export interface IVenta {
     utilidad: number;
     deposito_realizado: boolean;
 
-    producto: Types.ObjectId;
-    pedido: Types.ObjectId;
-    vendedor: Types.ObjectId;
+    producto: IProducto;
+    pedido: IPedido;
+    vendedor: IVendedor;
 }

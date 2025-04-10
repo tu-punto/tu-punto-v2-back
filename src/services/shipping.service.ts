@@ -1,6 +1,7 @@
-import { PedidoEntity } from "../entities/implements/PedidoSchema";
-import { VentaEntity } from "../entities/implements/VentaSchema";
-import { Venta } from "../models/Venta";
+import { IPedidoDocument } from "../entities/documents/IPedidoDocument";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
+import { VentaModel } from "../entities/implements/VentaSchema";
+import { Types } from 'mongoose';
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
 
@@ -23,10 +24,17 @@ const registerSaleToShipping = async (
   saleWithoutShippingId: any
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
-  if (!shipping)
+
+  if (!shipping) {
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
-  const sale = new Venta({ ...saleWithoutShippingId });
-  sale.pedido = shipping;
+  }
+
+  const sale = new VentaModel({
+    ...saleWithoutShippingId,
+    pedido: new Types.ObjectId(shipping._id), // Asegura que sea ObjectId
+    id_pedido: shippingId // Esto es si usas id_pedido además del ref
+  });
+
   return await SaleRepository.registerSale(sale);
 };
 
@@ -39,14 +47,20 @@ const updateShipping = async (newData: any, shippingId: number) => {
 
 const getShippingsBySellerService = async (sellerId: number) => {
   const salesBySeller = await SaleRepository.findBySellerId(sellerId);
-  const uniqueShippings: PedidoEntity[] = [];
-  const checkedShippings: { [key: number]: boolean } = {};
-  salesBySeller.forEach((sale: VentaEntity) => {
-    if (!checkedShippings[sale.id_pedido]) {
-      checkedShippings[sale.id_pedido] = true;
-      uniqueShippings.push(sale.pedido);
+
+  const uniqueShippings: IPedidoDocument[] = []; 
+  const checkedShippings: { [key: string]: boolean } = {}; 
+
+  for (const sale of salesBySeller) {
+    const pedidoPopulado = await sale.populate('pedido'); 
+    const pedidoId = pedidoPopulado.pedido?.id_pedido?.toString();
+
+    if (pedidoId && !checkedShippings[pedidoId]) {
+      checkedShippings[pedidoId] = true;
+      uniqueShippings.push(pedidoPopulado.pedido as IPedidoDocument);
     }
-  });
+  }
+
   return uniqueShippings;
 };
 

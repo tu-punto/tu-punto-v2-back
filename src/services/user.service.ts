@@ -6,6 +6,6 @@ const registerUserService = async (user: IUser) => {
 };
 
 const findByEmailService = async (email: string) => {
-  return await UserRepository.findByEmailRepository(email);
+  return await UserRepository.getUserByEmail(email);
 };
 export const UserService = { registerUserService, findByEmailService };

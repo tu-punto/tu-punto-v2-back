@@ -1,4 +1,4 @@
-import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
+/* import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { IPedido } from "../entities/IPedido";
 import { ISucursal } from "../entities/ISucursal";
 import { ITrabajador } from "../entities/ITrabajador";
@@ -31,3 +31,4 @@ export class Trabajador {
     this.sucursal = iTrabajador.sucursal;
   }
 }
+ */

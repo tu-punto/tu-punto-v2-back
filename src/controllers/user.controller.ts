@@ -47,7 +47,7 @@ export const loginUserController = async (req: Request, res: Response) => {
       res.status(401).json({ error: "Incorrect password" });
       return;
     }
-    const token = generateToken(user.id_user, user.role);
+    const token = generateToken(parseInt(user._id.toString()), user.role);
     console.log({
       maxAge: 900000,
       httpOnly: true,

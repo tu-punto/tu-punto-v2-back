@@ -1,4 +1,4 @@
-import { IProducto } from './../entities/IProducto';
+/* import { IProducto } from './../entities/IProducto';
 import { ICategoria } from "../entities/ICategoria";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 import { IVendedor } from "../entities/IVendedor";
@@ -40,4 +40,4 @@ export class Producto{
         this.group = iProducto.group
         this.ingreso = iProducto.ingreso;
     }
-}
+} */

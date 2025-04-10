@@ -1,6 +1,6 @@
 import { ICategoria } from "../entities/ICategoria";
 import { CategoriaModel } from "../entities/implements/CategoriaSchema";
-import { Categoria } from "../models/Categoria";
+
 import { ICategoriaDocument } from "../entities/documents/ICategoriaDocument";
 const findAll = async (): Promise<ICategoriaDocument[]> => {
     const categories = await CategoriaModel.find();

@@ -1,4 +1,5 @@
 import { Schema, model, Types } from 'mongoose';
+import { IPedidoDocument } from '../documents/IPedidoDocument';
 
 const PedidoSchema = new Schema({
   cliente: {
@@ -80,4 +81,4 @@ const PedidoSchema = new Schema({
   timestamps: false
 });
 
-export const PedidoModel = model('Pedido', PedidoSchema);
+export const PedidoModel = model<IPedidoDocument>('Pedido', PedidoSchema);

@@ -1,4 +1,4 @@
-import { IPedido } from "../entities/IPedido";
+/* import { IPedido } from "../entities/IPedido";
 import { IProducto } from "../entities/IProducto";
 import { IVendedor } from "../entities/IVendedor";
 import { IVenta } from "../entities/IVenta";
@@ -29,4 +29,4 @@ export class Venta {
         this.pedido = iVenta.pedido;
         this.vendedor = iVenta.vendedor
     }
-}
+} */

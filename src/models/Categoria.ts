@@ -1,8 +1,8 @@
-import { ICategoria } from "../entities/ICategoria";
+/* import { ICategoria } from "../entities/ICategoria";
 import { IProducto } from "../entities/IProducto";
 
 export class Categoria{
-    id_categoria: number;
+    id_categoria: string;
     categoria: string;
 
     producto?: IProducto[];
@@ -22,4 +22,4 @@ export class Categoria{
         }
       }
       
-}
+} */

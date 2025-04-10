@@ -14,7 +14,7 @@ const getProductsByShippingId = async (pedidoId: number) => {
     if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
     // Obtiene los productos junto con la cantidad
     const products = sales.map(sale => ({
-        key: sale.producto.id_producto,
+        key: sale.producto._id,
         producto: sale.producto.nombre_producto,
         precio_unitario: sale.precio_unitario,
         cantidad: sale.cantidad,
@@ -22,7 +22,7 @@ const getProductsByShippingId = async (pedidoId: number) => {
         id_venta: sale.id_venta,
         id_vendedor: sale.producto.id_vendedor,
         id_pedido: pedidoId,
-        id_producto: sale.producto.id_producto
+        id_producto: sale.producto._id
     }));
 
 
@@ -38,7 +38,7 @@ const getProductDetailsByProductId = async (productId: number) => {
         const formattedDate = format(new Date(sale.pedido.fecha_pedido), 'dd/MM/yyyy:HH:mm:ss');
 
         return {
-            key: `${sale.producto.id_producto}-${formattedDate}`,
+            key: `${sale.producto._id}-${formattedDate}`,
             producto: sale.producto.nombre_producto,
             precio_unitario: sale.precio_unitario,
             cantidad: sale.cantidad,
@@ -46,7 +46,7 @@ const getProductDetailsByProductId = async (productId: number) => {
             id_venta: sale.id_venta,
             id_vendedor: sale.producto.id_vendedor,
             id_pedido: sale.id_pedido,
-            id_producto: sale.producto.id_producto,
+            id_producto: sale.producto._id,
             deposito_realizado: sale.deposito_realizado,
             cliente: sale.pedido.cliente,
             fecha_pedido: sale.pedido.fecha_pedido,
@@ -63,7 +63,7 @@ const getProductsBySellerId = async (sellerId: number) => {
         return []
     //throw new Error("No existen ventas con ese ID de vendedor");
     const products = sales.map(sale => ({
-        key: sale.producto.id_producto,
+        key: sale.producto._id,
         producto: sale.producto.nombre_producto,
         precio_unitario: sale.precio_unitario,
         cantidad: sale.cantidad,
@@ -71,7 +71,7 @@ const getProductsBySellerId = async (sellerId: number) => {
         id_venta: sale.id_venta,
         id_vendedor: sellerId,
         id_pedido: sale.id_pedido,
-        id_producto: sale.producto.id_producto,
+        id_producto: sale.producto._id,
         deposito_realizado: sale.deposito_realizado,
         cliente: sale.pedido.cliente,
         fecha_pedido: sale.pedido.fecha_pedido

@@ -1,4 +1,4 @@
-import { ITrabajador } from "../entities/ITrabajador";
+/* import { ITrabajador } from "../entities/ITrabajador";
 import { IUser } from "../entities/IUser";
 import { IVendedor } from "../entities/IVendedor";
 
@@ -20,3 +20,4 @@ export class User implements IUser {
     this.trabajador = iUser.trabajador;
   }
 }
+ */

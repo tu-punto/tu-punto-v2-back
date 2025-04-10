@@ -1,4 +1,4 @@
-import { IGroup } from "../entities/IGroup"
+/* import { IGroup } from "../entities/IGroup"
 import { IProducto } from "../entities/IProducto"
 
 
@@ -12,4 +12,4 @@ export class Group {
         this.name = iGroup.name
         this.products = iGroup.products
     }
-}
+} */

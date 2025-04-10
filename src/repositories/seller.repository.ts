@@ -15,13 +15,13 @@ const registerSeller = async (seller: IVendedor): Promise<IVendedor> => {
 };
 
 const updateSeller = async (
-  sellerId: string,
+  sellerId: any,
   updateData: Partial<IVendedor>
 ): Promise<IVendedor | null> => {
   return await VendedorModel.findByIdAndUpdate(sellerId, updateData, { new: true });
 };
 
-const findById = async (sellerId: string): Promise<IVendedor | null> => {
+const findById = async (sellerId: any): Promise<IVendedor | null> => {
   return await VendedorModel.findById(sellerId);
 };
 
