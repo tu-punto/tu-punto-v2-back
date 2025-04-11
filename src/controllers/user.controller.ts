@@ -34,34 +34,34 @@ export const registerUserController = async (req: Request, res: Response) => {
 };
 
 export const loginUserController = async (req: Request, res: Response) => {
-  const data = req.body;
+  const { email, password, sucursalId } = req.body;
+
   try {
-    const user = await UserService.findByEmailService(data.email);
+    const user = await UserService.findByEmailService(email);
+
     if (!user) {
-      res.status(401).json({ error: "User with such email does not exist" });
-      return;
+      return res.status(401).json({ error: "User with such email does not exist" });
     }
 
-    const isMatch = await comparePassword(data.password, user.password);
+    const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
-      res.status(401).json({ error: "Incorrect password" });
-      return;
+      return res.status(401).json({ error: "Incorrect password" });
     }
-    const token = generateToken(parseInt(user._id.toString()), user.role);
-    console.log({
-      maxAge: 900000,
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: isSecure ? "none" : "lax",
-      path: "/",  
-    })
+
+    
+    if (!user.sucursal || user.sucursal.toString() !== sucursalId) {
+      return res.status(403).json({ error: "Access denied for this branch" });
+    }
+
+    const token = generateToken(parseInt(user._id.toString()), user.role, sucursalId);
+
     res
       .cookie("token", token, {
         maxAge: 900000,
         httpOnly: true,
         secure: isSecure,
         sameSite: isSecure ? "none" : "lax",
-        path: "/",  
+        path: "/",
       })
       .json({ ...user, password: "" });
   } catch (error) {
@@ -69,6 +69,7 @@ export const loginUserController = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
 
 export const getUserInfoController = async (req: Request, res: Response) => {
   const { token } = req.cookies;
