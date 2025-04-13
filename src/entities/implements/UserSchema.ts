@@ -14,6 +14,11 @@ const UserSchema = new Schema<IUserDocument>({
     type: String,
     required: true
   },
+  sucursal: {
+    type: Schema.Types.ObjectId,
+    ref: "Sucursal",
+    required: true
+  },  
   vendedor: {
     type: Schema.Types.ObjectId,
     ref: 'Vendedor',
