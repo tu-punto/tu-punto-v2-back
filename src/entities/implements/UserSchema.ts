@@ -17,7 +17,7 @@ const UserSchema = new Schema<IUserDocument>({
   sucursal: {
     type: Schema.Types.ObjectId,
     ref: "Sucursal",
-    required: true
+    required: false
   },  
   vendedor: {
     type: Schema.Types.ObjectId,
