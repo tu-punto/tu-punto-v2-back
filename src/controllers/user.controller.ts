@@ -48,11 +48,6 @@ export const loginUserController = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Incorrect password" });
     }
 
-    
-    if (!user.sucursal || user.sucursal.toString() !== sucursalId) {
-      return res.status(403).json({ error: "Access denied for this branch" });
-    }
-
     const token = generateToken(parseInt(user._id.toString()), user.role, sucursalId);
 
     res
@@ -60,7 +55,7 @@ export const loginUserController = async (req: Request, res: Response) => {
         maxAge: 900000,
         httpOnly: true,
         secure: isSecure,
-        sameSite: isSecure ? "none" : "lax",
+        sameSite: isSecure ? "strict" : "lax",
         path: "/",
       })
       .json({ ...user, password: "" });
