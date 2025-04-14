@@ -29,8 +29,8 @@ connectToMongoDB().then(async() => {
   app.use(express.urlencoded({ extended: false }));
   app.use(routes);
 
-  app.listen(port, () => {
-    console.log(`[server]: Server is running at http://localhost:${port}`);
+  app.listen(Number(port), '0.0.0.0', () => {
+    console.log(`Server running on port ${port}`);
   });
 });
 
