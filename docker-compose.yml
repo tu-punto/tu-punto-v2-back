@@ -1,7 +1,6 @@
-version: "3.8"
-
 services:
-  app:
+  tu_punto_backend:
+    container_name: tu_punto_backend
     build:
       context: .
       dockerfile: Dockerfile
