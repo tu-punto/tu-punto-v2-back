@@ -14,7 +14,8 @@ const registerUserRepo = async (user: IUser): Promise<IUserDocument> => {
 };
 
 const getUserByEmail = async (email: string): Promise<IUserDocument | null> => {
-  const user = await UserModel.findOne({ email: email });  
+  const user = await UserModel.findOne({ email: email }); 
+  console.log("Encontrado:", user); 
   return user;
 };
 
