@@ -12,13 +12,16 @@ const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
 const isSecure = process.env.NODE_ENV === "production";
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
+  console.log("User:",user)
   try {
     const checkEmail = await UserService.findByEmailService(user.email);
     if (checkEmail) {
       res.status(500).json({ error: "Email is already taken" });
       return;
     }
+    console.log("Email not taken");
     const encryptPassword = await hashPassword(user.password);
+    console.log("Encriptado");
     const newUser = await UserService.registerUserService({
       ...user,
       password: encryptPassword,
@@ -27,6 +30,7 @@ export const registerUserController = async (req: Request, res: Response) => {
       status: true,
       user: { ...newUser, password: "" },
     });
+    console.log("Usuario registrado");
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
