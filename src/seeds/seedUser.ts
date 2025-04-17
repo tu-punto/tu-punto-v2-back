@@ -9,7 +9,7 @@ export const seedUser = async () => {
   const nuevoUsuario = new UserModel({
     email: 'admin@admin.com',
     password: '123456', 
-    role: 'ADMIN',
+    role: 'admin',
     vendedor: null,
     trabajador: null
   });

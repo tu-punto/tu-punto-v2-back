@@ -29,22 +29,32 @@ export const VendedorSchema = new Schema({
     type: String,
     required: true
   },
-  alquiler: {
-    type: Number,
-    default: 0
-  },
-  exhibicion: {
-    type: Number,
-    default: 0
-  },
-  delivery: {
-    type: Number,
-    default: 0
-  },
-  adelanto_servicio: {
-    type: Number,
-    default: 0
-  },
+
+
+  pago_sucursales: [{
+    id_sucursal: {
+      type: Types.ObjectId, 
+      ref: 'Sucursal',      
+      required: true
+    },
+    alquiler: {
+      type: Number,
+      default: 0
+    },
+    exhibicion: {
+      type: Number,
+      default: 0
+    },
+    delivery: {
+      type: Number,
+      default: 0
+    },
+    entrega_simple: {
+      type: Number,
+      default: 0
+    }
+  }],
+
   comision_porcentual: {
     type: Number,
     default: 0

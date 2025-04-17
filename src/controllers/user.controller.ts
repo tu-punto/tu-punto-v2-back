@@ -56,7 +56,7 @@ export const loginUserController = async (req: Request, res: Response) => {
 
     res
       .cookie("token", token, {
-        maxAge: 900000,
+        maxAge: 24 * 60 * 60 * 1000, // 1 día
         httpOnly: true,
         secure: isSecure,
         sameSite: isSecure ? "strict" : "lax",
