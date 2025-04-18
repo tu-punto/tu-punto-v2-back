@@ -12,6 +12,7 @@ const getAllFinanceFluxes = async () => {
 };
 
 const registerFinanceFlux = async (financeFlux: IFlujoFinanciero) => {
+  console.log("Llegué a registerservice",financeFlux);
   const newFinanceFlux = await FinanceFluxRepository.registerFinanceFlux(
     financeFlux
   );
