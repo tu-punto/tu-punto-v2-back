@@ -18,10 +18,15 @@ export interface IVendedor {
     carnet: number;
     direccion: string;
     mail: string;
-    alquiler: number;
-    exhibicion: number;
-    delivery: number;
-    adelanto_servicio: number;
+    
+    pago_sucursales: {
+      id_sucursal: string;
+      alquiler: number;
+      exhibicion: number;
+      delivery: number;
+      entrega_simple: number;
+    }[];
+
     comision_porcentual: number;
     comision_fija: number;
     fecha: Date;
@@ -40,3 +45,4 @@ export interface IVendedor {
     flujoFinanciero?: Types.ObjectId[];
     ingreso?: Types.ObjectId[];
 }
+
