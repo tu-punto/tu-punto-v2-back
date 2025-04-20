@@ -7,8 +7,8 @@ const ProductoSchema = new Schema({
   precio: { type: Number, required: true },
   fecha_de_ingreso: { type: Date, default: Date.now },
   imagen: { type: String, default: "" },
-  id_categoria: { type: Number, required: true }, // o usar ref si es otro modelo
-  id_vendedor: { type: Number, required: true },
+  id_categoria: { type: Schema.Types.ObjectId, required: true }, // o usar ref si es otro modelo
+  id_vendedor: { type: Schema.Types.ObjectId, required: true },
 
   vendedor: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendedor' },
   features: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Caracteristicas' }],
