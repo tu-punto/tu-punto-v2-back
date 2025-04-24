@@ -10,4 +10,6 @@ sellerRouter.put('/update/:id', SellerController.updateSeller)
 
 sellerRouter.get('/:id', SellerController.getSeller)
 
+sellerRouter.put("/renew/:id", SellerController.updateSeller);
+
 export default sellerRouter;

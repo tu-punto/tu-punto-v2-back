@@ -1,56 +1,51 @@
-import { SellerRepository } from "./../repositories/seller.repository";
-import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
+import { Types } from "mongoose";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
+import { SellerRepository } from "../repositories/seller.repository";
+import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { WorkerRepository } from "../repositories/worker.repository";
 import { FinanceFluxInteractor } from "../interactors/financeFlux.interactor";
 import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
 
-const getAllFinanceFluxes = async () => {
-  const financeFluxes = await FinanceFluxRepository.findAll();
-  return financeFluxes;
+const assertFlux = (flux: IFlujoFinanciero | null) => {
+  if (!flux) throw new Error("Flux not found");
 };
 
-const registerFinanceFlux = async (financeFlux: IFlujoFinanciero) => {
-  console.log("Llegué a registerservice",financeFlux);
-  const newFinanceFlux = await FinanceFluxRepository.registerFinanceFlux(
-    financeFlux
-  );
-  return newFinanceFlux;
+const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
+
+const registerFinanceFlux = async (flux: IFlujoFinanciero) =>
+  await FinanceFluxRepository.registerFinanceFlux(flux);
+
+
+const payDebt = async (fluxId: string) => {
+  const _id = new Types.ObjectId(fluxId);
+  const flux = await FinanceFluxRepository.findById(_id);
+  assertFlux(flux);
+  if (!flux!.esDeuda) throw new Error("Este flujo no es una deuda");
+
+  await FinanceFluxRepository.updateById(fluxId, { esDeuda: false });
+
+  await SellerRepository.incrementDebt(flux!.vendedor!.toString(), -flux!.monto);
 };
+
 
 const getWorkerById = async (workerId: any) => {
-  const financeFlux = await FinanceFluxRepository.findWorkerById(workerId);
-  if (!financeFlux)
-    throw new Error("Doesn't exist such worker with that id fk from FinanceFlux");
+  const flux = await FinanceFluxRepository.findWorkerById(workerId);
+  assertFlux(flux);
 
-  const worker = financeFlux.trabajador as ITrabajador; 
+  const worker = flux!.trabajador as ITrabajador;
+  if (!worker) throw new Error("No worker found");
 
-  if (!worker) {
-    throw new Error("No worker found with the given id");
-  }
-
-  return {
-    id_trabajador: worker.id_trabajador,
-    nombre: worker.nombre,
-  };
+  return { id_trabajador: worker.id_trabajador, nombre: worker.nombre };
 };
 
-
-
 const getSellerById = async (sellerId: any) => {
-  const financeFlux = await FinanceFluxRepository.findSellerById(sellerId);
-  if (!financeFlux)
-    throw new Error(
-      "Doesn't exist such seller with that id fk from FinanceFlux"
-    );
+  const flux = await FinanceFluxRepository.findSellerById(sellerId);
+  assertFlux(flux);
 
-   const sellerData = financeFlux.vendedor as IVendedor;
-
-  const seller = await SellerRepository.findById(sellerData.id_vendedor);
-  if (!seller) {
-    throw new Error("No seller found with the given id");
-  }
+  const sData = flux!.vendedor as IVendedor;
+  const seller = await SellerRepository.findById(sData.id_vendedor);
+  if (!seller) throw new Error("No seller found");
 
   return {
     id_vendedor: seller.id_vendedor,
@@ -60,27 +55,19 @@ const getSellerById = async (sellerId: any) => {
   };
 };
 
-const getSellerInfoById = async (sellerId: any) => {
-  const financeFlux = await FinanceFluxRepository.findSellerInfoById(sellerId);
-  if (!financeFlux)
-    throw new Error(
-      "Doesn't exist such seller with that id fk from FinanceFlux"
-    );
-  return financeFlux;
-};
+const getSellerInfoById = async (id: any) =>
+  await FinanceFluxRepository.findSellerInfoById(id);
 
 const getStatsService = async () => {
   const stats = await FinanceFluxInteractor.getStatsInteractor();
-  if (!stats)
-    throw new Error(
-      "Failed to get stats on FinanceFluxService.getStatsService"
-    );
+  if (!stats) throw new Error("Failed to get stats");
   return stats;
 };
 
 export const FinanceFluxService = {
   getAllFinanceFluxes,
   registerFinanceFlux,
+  payDebt,
   getWorkerById,
   getSellerById,
   getSellerInfoById,

@@ -10,6 +10,6 @@ export interface IFlujoFinanciero {
   fecha: Date;
   esDeuda: boolean;
 
-  vendedor: Types.ObjectId | IVendedor; 
-  trabajador: Types.ObjectId | ITrabajador;
+  vendedor?: Types.ObjectId | IVendedor; 
+  trabajador?: Types.ObjectId | ITrabajador;
 }

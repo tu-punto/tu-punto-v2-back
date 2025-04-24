@@ -7,6 +7,8 @@ financeFluxRouter.get("/", fluxController.getFinanceFluxes);
 
 financeFluxRouter.post("/register", fluxController.registerFinanceFlux);
 
+financeFluxRouter.patch("/:id/pay", fluxController.payDebt);
+
 financeFluxRouter.get("/worker/:id", fluxController.getWorker);
 
 financeFluxRouter.get("/seller/:id", fluxController.getSeller);

@@ -6,7 +6,11 @@ import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 const VendedorModel = mongoose.model<IVendedorDocument>("Vendedor", VendedorSchema);
 
 const findAll = async (): Promise<IVendedor[]> => {
-  return await VendedorModel.find();
+  return await VendedorModel.find().lean<IVendedor[]>().exec();
+};
+
+const findById = async (sellerId: any): Promise<IVendedor | null> => {
+  return await VendedorModel.findById(sellerId).lean<IVendedor>().exec();
 };
 
 const registerSeller = async (seller: IVendedor): Promise<IVendedor> => {
@@ -21,8 +25,8 @@ const updateSeller = async (
   return await VendedorModel.findByIdAndUpdate(sellerId, updateData, { new: true });
 };
 
-const findById = async (sellerId: any): Promise<IVendedor | null> => {
-  return await VendedorModel.findById(sellerId);
+export const incrementDebt = async (id: string, delta: number) => {
+  return await VendedorModel.findByIdAndUpdate(id, { $inc: { deuda: delta } }, { new: true })
 };
 
 export const SellerRepository = {
@@ -30,6 +34,7 @@ export const SellerRepository = {
   registerSeller,
   updateSeller,
   findById,
+  incrementDebt,
 };
 
 
