@@ -4,7 +4,7 @@ import { IProducto } from '../entities/IProducto';
 import { IVentaDocument } from '../entities/documents/IVentaDocument';
 import { IProducto_Sucursal } from '../entities/IProducto_Sucursal';
 import { IProductoDocument } from '../entities/documents/IProductoDocument';
-
+import { Types } from 'mongoose';
 const findAll = async (): Promise<IProductoDocument[]> => {
   return await ProductoModel.find()
     .populate('features')
@@ -67,6 +67,11 @@ const updateStock = async (stock: IProducto_Sucursal, newData: any): Promise<IPr
       throw new Error("Producto no encontrado");
     }
   }
+  const getAllStockByProductId = async (idProduct: string): Promise<IProducto_Sucursal[]> => {
+    return await ProductoSucursalModel.find({
+      id_producto: new Types.ObjectId(idProduct)
+    }).exec();
+  }
   
 
 export const ProductRepository = {
@@ -77,5 +82,6 @@ export const ProductRepository = {
   getProductsBySales,
   getStockProduct,
   updateStock,
-  updateProduct
+  updateProduct,
+  getAllStockByProductId
 };

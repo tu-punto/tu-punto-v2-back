@@ -6,6 +6,7 @@ const getAllCategories = async () => {
 };
 
 const registerCategory = async (category: any) => {
+    console.log("Register category",category)
     return await CategoryRepository.registerCategory(category);
 };
 

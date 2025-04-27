@@ -171,10 +171,22 @@ const updateStock = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error' , error})        
     }
 }
+const getAllStockByProductId = async (req: Request, res: Response) => {
+    const { idProduct } = req.params;
+    try {
+        const stocks = await ProductService.getAllStockByProductId(idProduct);
+        res.json(stocks);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
+    }
+}
+
 
 export const ProductController = {
     registerProductVariants,
     registerProduct,
     getProductStock,
-    updateStock
+    updateStock,
+    getAllStockByProductId
 }
