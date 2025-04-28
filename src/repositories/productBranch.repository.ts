@@ -22,11 +22,20 @@ const registerProductBranch = async (productBranch: IProducto_Sucursal): Promise
     console.log("Llegue aqui",newProductBranch);
     return await newProductBranch.save(); 
 }
+const updateCantidadById = async (id: string, nuevaCantidad: number): Promise<IProductoSucursalDocument | null> => {
+    return await ProductoSucursalModel.findByIdAndUpdate(
+        id,
+        { cantidad_por_sucursal: nuevaCantidad },
+        { new: true } 
+    );
+};
+
 
 export const ProductBranchRepository = {
     findAll,
     findById,
-    registerProductBranch
+    registerProductBranch,
+    updateCantidadById
 };
 
 

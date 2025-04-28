@@ -26,4 +26,6 @@ productRouter.put('/updateStock', ProductController.updateStock)
 
 productRouter.get("/stock/:idProduct", ProductController.getAllStockByProductId);
 
+productRouter.put('/producto-sucursal/:id', ProductController.updateProductBranchStock);
+
 export default productRouter;
