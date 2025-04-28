@@ -16,10 +16,24 @@ const findWorkerById = async (workerId: Types.ObjectId): Promise<IFlujoFinancier
   return await FlujoFinancieroModel.findOne({
     trabajador: workerId
   })
-    .populate('trabajador') 
+    .populate('trabajador')
     .exec();
 };
 
+const findById = async (
+  id: Types.ObjectId
+): Promise<IFlujoFinancieroDocument | null> => {
+  return await FlujoFinancieroModel.findById(id).exec();
+}
+
+const updateById = async (
+  id: string,
+  payload: Partial<IFlujoFinanciero>
+): Promise<IFlujoFinancieroDocument | null> => {
+  return await FlujoFinancieroModel.findByIdAndUpdate(id, payload, {
+    new: true,
+  }).exec();
+}
 
 const findSellerById = async (sellerId: Types.ObjectId): Promise<IFlujoFinancieroDocument | null> => {
   return await FlujoFinancieroModel.findOne({
@@ -39,5 +53,7 @@ export const FinanceFluxRepository = {
   registerFinanceFlux,
   findWorkerById,
   findSellerById,
-  findSellerInfoById
+  findSellerInfoById,
+  findById,
+  updateById
 };

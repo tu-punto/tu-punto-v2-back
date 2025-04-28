@@ -1,69 +1,72 @@
 import { Request, Response } from "express";
 import { FinanceFluxService } from "../services/financeFlux.service";
 
-export const getFinanceFluxes = async (req: Request, res: Response) => {
+export const getFinanceFluxes = async (_: Request, res: Response) => {
   try {
-    const financeFluxes = await FinanceFluxService.getAllFinanceFluxes();
-    res.json(financeFluxes);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json(error);
+    const fluxRecords = await FinanceFluxService.getAllFinanceFluxes();
+    res.json(fluxRecords);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo flujos", err });
   }
 };
 
 export const registerFinanceFlux = async (req: Request, res: Response) => {
-  const financeFlux = req.body;
   try {
-    const newFinanceFlux = await FinanceFluxService.registerFinanceFlux(
-      financeFlux
+    const fluxPayload = req.body;
+    const createdFlux = await FinanceFluxService.registerFinanceFlux(
+      fluxPayload
     );
-    res.json({
-      status: true,
-      newFinanceFlux,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ msg: "Internal Server Error", error });
+    res.json({ ok: true, createdFlux });
+  } catch (err) {
+    res.status(500).json({ msg: "Error registrando flujo", err });
   }
 };
+
+export const payDebt = async (req: Request, res: Response) => {
+  try {
+    const fluxIdParam = req.params.id;
+    await FinanceFluxService.payDebt(fluxIdParam);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+};
+
 export const getWorker = async (req: Request, res: Response) => {
-  const id: number = parseInt(req.params.id);
   try {
-    const worker = await FinanceFluxService.getWorkerById(id);
-    res.json(worker);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al obtener un trabajador" });
+    const workerId = parseInt(req.params.id);
+    const workerInfo = await FinanceFluxService.getWorkerById(workerId);
+    res.json(workerInfo);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo trabajador", err });
   }
 };
+
 export const getSeller = async (req: Request, res: Response) => {
-  const id: number = parseInt(req.params.id);
   try {
-    const seller = await FinanceFluxService.getSellerById(id);
-    res.json(seller);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al obtener un vendedor" });
+    const sellerId = parseInt(req.params.id);
+    const sellerInfo = await FinanceFluxService.getSellerById(sellerId);
+    res.json(sellerInfo);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo vendedor", err });
   }
 };
 
 export const getSellerInfo = async (req: Request, res: Response) => {
-  const id: number = parseInt(req.params.id);
   try {
-    const seller = await FinanceFluxService.getSellerInfoById(id);
-    res.json(seller);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al obtener un vendedor" });
+    const sellerId = parseInt(req.params.id);
+    const fluxHistory = await FinanceFluxService.getSellerInfoById(sellerId);
+    res.json(fluxHistory);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo info vendedor", err });
   }
 };
 
-export const getStatsController = async (req: Request, res: Response) => {
+export const getStatsController = async (_: Request, res: Response) => {
   try {
     const stats = await FinanceFluxService.getStatsService();
     res.json(stats);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error al calcular estadísticas" });
+  } catch (err) {
+    res.status(500).json({ msg: "Error calculando estadísticas", err });
   }
 };

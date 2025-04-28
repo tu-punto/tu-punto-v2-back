@@ -37,6 +37,10 @@ export const VendedorSchema = new Schema({
       ref: 'Sucursal',      
       required: true
     },
+    sucursalName: {
+      type: String,
+      default: 0
+    },
     alquiler: {
       type: Number,
       default: 0

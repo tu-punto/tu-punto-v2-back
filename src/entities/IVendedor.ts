@@ -21,6 +21,7 @@ export interface IVendedor {
     
     pago_sucursales: {
       id_sucursal: string;
+      sucursalName: string;
       alquiler: number;
       exhibicion: number;
       delivery: number;

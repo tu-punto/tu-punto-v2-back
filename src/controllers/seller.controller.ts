@@ -1,45 +1,52 @@
 import { Request, Response } from "express";
 import { SellerService } from "../services/seller.service";
 
-export const getSellers = async (req: Request, res: Response) => {
-  const sellers = await SellerService.getAllSellers();
-  res.json(sellers);
+export const getSellers = async (_: Request, res: Response) => {
+  try {
+    const sellerList = await SellerService.getAllSellers();
+    res.json(sellerList);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo vendedores", err });
+  }
 };
 
 export const getSeller = async (req: Request, res: Response) => {
   try {
-    const sellerId = req.params.id;
-    const seller = await SellerService.getSeller(sellerId);
-    if (seller) {
-      res.json(seller);
-    } else {
-      res.status(404).json({ msg: `Seller not found with such id ${sellerId}` });      
+    const sellerIdParam = req.params.id;
+    const seller = await SellerService.getSeller(sellerIdParam);
+
+    if (!seller) {
+      return res
+        .status(404)
+        .json({ msg: `No existe vendedor con id ${sellerIdParam}` });
     }
-  } catch (error) {
-    res.status(500).json({ msg: "Error getting seller", error });
+    res.json(seller);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo vendedor", err });
   }
 };
 
 export const registerSeller = async (req: Request, res: Response) => {
-  const seller = req.body;
   try {
-    const newSeller = await SellerService.registerSeller(seller);
-    res.json({
-      status: true,
-      newSeller,
-    });
-  } catch (error) {
-    res.status(500).json({ msg: "Internal server error", error });
+    const sellerPayload = req.body;
+    const createdSeller = await SellerService.registerSeller(sellerPayload);
+    res.json({ ok: true, createdSeller });
+  } catch (err) {
+    res.status(500).json({ msg: "Error registrando vendedor", err });
   }
 };
 
 export const updateSeller = async (req: Request, res: Response) => {
-  const sellerId = parseInt(req.params.id);
-  const { newData } = req.body;
   try {
-    const updatedSeller = await SellerService.updateSeller(sellerId, newData);
-    res.json({ status: true, updatedSeller });
-  } catch (error) {
-    res.status(500).json({ msg: "Internal server error", error });
+    const sellerId = req.params.id;
+    const updatePayload = req.body;
+
+    const updatedSeller = await SellerService.updateSeller(
+      sellerId,
+      updatePayload.newData
+    );
+    res.json({ ok: true, updatedSeller });
+  } catch (err) {
+    res.status(500).json({ msg: "Error actualizando vendedor", err });
   }
 };
