@@ -7,8 +7,8 @@ export interface IProducto {
   precio: number;
   fecha_de_ingreso: Date;
   imagen: string;
-  id_categoria: number;
-  id_vendedor: number;
+  id_categoria: Types.ObjectId;
+  id_vendedor: Types.ObjectId;
   groupId: number;
   vendedor: Types.ObjectId;     
   features: ICaracteristicas[];

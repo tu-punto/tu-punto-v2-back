@@ -8,7 +8,7 @@ const findAll = async (): Promise<IProductoSucursalDocument[]> => {
         .populate('sucursal');
 }
 
-const findById = async (branchId: number, productId: number): Promise<IProductoSucursalDocument | null> => {
+const findById = async (branchId: any, productId: any): Promise<IProductoSucursalDocument | null> => {
     return await ProductoSucursalModel.findOne({
         id_sucursal: branchId,
         id_producto: productId
@@ -19,6 +19,7 @@ const findById = async (branchId: number, productId: number): Promise<IProductoS
 
 const registerProductBranch = async (productBranch: IProducto_Sucursal): Promise<IProductoSucursalDocument> => {
     const newProductBranch = new ProductoSucursalModel(productBranch);
+    console.log("Llegue aqui",newProductBranch);
     return await newProductBranch.save(); 
 }
 

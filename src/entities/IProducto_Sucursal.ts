@@ -4,8 +4,8 @@ import { ISucursal } from "./ISucursal";
 
 export interface IProducto_Sucursal {
   _id?: Types.ObjectId;
-  id_producto: number;
-  id_sucursal: number;
+  id_producto: any;
+  id_sucursal: any;
   cantidad_por_sucursal: number;
   numero_caja: number;
 

@@ -49,7 +49,8 @@ export const addFeatureToProduct = async (req: Request, res: Response) => {
     try {
 
         const saveFeatures = [] as any[]
-
+        console.log("productId:",productId);
+        console.log("Features:",features);
         for (let feature of features) {
             const featureProduct = await ProductService.addFeatureToProduct(productId, feature)
             saveFeatures.push(featureProduct)
@@ -130,7 +131,8 @@ export const addStockToBranch = async (req: Request, res: Response) => {
 
 
     const savedStocks = []
-
+    console.log("Branch:",branch);
+    console.log("Products:",products);
     try {
         for (let product of products) {
             const newStock = await ProductBranchService.registerProductBranch({ id_sucursal: branch, ...product })
