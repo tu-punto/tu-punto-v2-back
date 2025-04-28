@@ -171,10 +171,46 @@ const updateStock = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error' , error})        
     }
 }
+const getAllStockByProductId = async (req: Request, res: Response) => {
+    const { idProduct } = req.params;
+    try {
+        const stocks = await ProductService.getAllStockByProductId(idProduct);
+        res.json(stocks);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
+    }
+}
+const updateProductBranchStock = async (req: Request, res: Response) => {
+    const { id } = req.params; 
+    const { nuevaCantidad } = req.body; 
+    console.log("Llegó: ", id,nuevaCantidad);
+
+    try {
+        const updatedProductBranch = await ProductBranchService.updateCantidadPorSucursal(id, nuevaCantidad);
+        console.log("Updated: ", updatedProductBranch);
+        if (!updatedProductBranch) {
+            return res.status(404).json({ msg: 'Producto sucursal no encontrado' });
+        }
+
+        res.json({
+            status: true,
+            msg: 'Cantidad actualizada correctamente',
+            updatedProductBranch
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Error actualizando la cantidad del producto sucursal', error });
+    }
+}
+
+
 
 export const ProductController = {
     registerProductVariants,
     registerProduct,
     getProductStock,
-    updateStock
+    updateStock,
+    getAllStockByProductId,
+    updateProductBranchStock
 }

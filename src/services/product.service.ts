@@ -83,6 +83,10 @@ const updateStock = async (newStock: any[]) => {
     }
     return updatedStock
 }
+const getAllStockByProductId = async (productId: string) => {
+    return await ProductRepository.getAllStockByProductId(productId);
+}
+
 
 export const ProductService ={
     getAllProducts,
@@ -92,5 +96,6 @@ export const ProductService ={
     addFeatureToProduct,
     getProductById,
     getProductStock,
-    updateStock
+    updateStock,
+    getAllStockByProductId
 }
