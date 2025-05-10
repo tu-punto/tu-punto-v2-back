@@ -36,6 +36,7 @@ export interface IVendedor {
     deuda: number;
     emite_factura: boolean;
 
+    saldo_pendiente: number;
     user: Types.ObjectId;
     comprobante_entrada?: Types.ObjectId[];
     comprobante_pago?: Types.ObjectId[];

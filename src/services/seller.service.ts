@@ -41,20 +41,25 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
   return nuevo;
 };
 
-const updateSeller = async (sellerId: string, data: any & { esDeuda?: boolean }) => {
-  const vendedor = await SellerRepository.findById(sellerId);
-  if (!vendedor) throw new Error(`Seller with id ${sellerId} doesn't exist`);
+const updateSeller = async (id: string, data: any) => {
+  return await SellerRepository.updateSeller(id, data.newData);
+};
 
-  let deudaFinal = vendedor.deuda ?? 0;
+const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
+  console.log('no recibe nada',data);
+  const vendedor = await SellerRepository.findById(id);
+  if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
+
+  let nuevaDeuda = vendedor.deuda ?? 0;
   let montoNuevo = 0;
 
   if (data.pago_sucursales) {
     montoNuevo = calcSellerDebt(data);
-    deudaFinal = data.esDeuda ? deudaFinal + montoNuevo : deudaFinal;
-    data.deuda = deudaFinal;
+    nuevaDeuda = data.esDeuda ? nuevaDeuda + montoNuevo : nuevaDeuda;
+    data.deuda = nuevaDeuda;
   }
 
-  const actualizado = await SellerRepository.updateSeller(sellerId, data);
+  const actualizado = await SellerRepository.updateSeller(id, data);
 
   if (montoNuevo > 0 && actualizado) {
     await saveFlux({
@@ -64,11 +69,20 @@ const updateSeller = async (sellerId: string, data: any & { esDeuda?: boolean })
       monto: montoNuevo,
       fecha: new Date(),
       esDeuda: data.esDeuda ?? true,
-      vendedor: new Types.ObjectId(actualizado!.id_vendedor),
+      vendedor: new Types.ObjectId(actualizado.id_vendedor),
     });
   }
-
   return actualizado;
+};
+
+const paySellerDebt = async (id: string, payAll: boolean) => {
+  const seller = await SellerRepository.findById(id);
+  if (!seller) return null;
+
+  const update: Partial<typeof seller> = { saldo_pendiente: 0 };
+  if (payAll) update.deuda = 0;
+
+  return await SellerRepository.updateSeller(id, update);
 };
 
 export const SellerService = {
@@ -76,4 +90,6 @@ export const SellerService = {
   getSeller,
   registerSeller,
   updateSeller,
+  renewSeller,
+  paySellerDebt,
 };
