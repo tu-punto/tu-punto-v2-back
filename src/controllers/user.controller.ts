@@ -46,7 +46,6 @@ export const loginUserController = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(401).json({ error: "User with such email does not exist" });
     }
-
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: "Incorrect password" });

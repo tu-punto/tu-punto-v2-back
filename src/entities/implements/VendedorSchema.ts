@@ -3,7 +3,7 @@ import { Schema, model, Types } from 'mongoose';
 export const VendedorSchema = new Schema({
   marca: {
     type: String,
-    required: true
+    required: false
   },
   nombre: {
     type: String,
@@ -23,18 +23,26 @@ export const VendedorSchema = new Schema({
   },
   direccion: {
     type: String,
-    required: true
+    required: false
   },
   mail: {
     type: String,
     required: true
   },
 
+  saldo_pendiente: {
+    type: Number,
+    default: 0,
+  },
+  deuda: {
+    type: Number,
+    default: 0
+  },
 
   pago_sucursales: [{
     id_sucursal: {
-      type: Types.ObjectId, 
-      ref: 'Sucursal',      
+      type: Types.ObjectId,
+      ref: 'Sucursal',
       required: true
     },
     sucursalName: {
@@ -79,10 +87,7 @@ export const VendedorSchema = new Schema({
     type: Number,
     required: false
   },
-  deuda: {
-    type: Number,
-    default: 0
-  },
+  
   emite_factura: {
     type: Boolean,
     default: false

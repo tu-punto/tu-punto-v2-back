@@ -22,6 +22,7 @@ const updateSeller = async (
   sellerId: any,
   updateData: Partial<IVendedor>
 ): Promise<IVendedor | null> => {
+  console.log('no llega aca',updateData);
   return await VendedorModel.findByIdAndUpdate(sellerId, updateData, { new: true });
 };
 
