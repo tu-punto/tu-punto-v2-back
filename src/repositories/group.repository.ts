@@ -35,7 +35,7 @@ const getProductsInGroup = async (group: IGroup): Promise<any[]> => {
     });
   };
 
-const registerGroup = async (group: IGroup): Promise<IGroupDocument> => {
+const registerGroup = async (group: any): Promise<IGroupDocument> => {
   const newGroup = new GroupModel(group);
   return await newGroup.save();
 };

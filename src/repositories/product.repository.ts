@@ -8,24 +8,28 @@ import { Types } from 'mongoose';
 const findAll = async (): Promise<IProductoDocument[]> => {
   return await ProductoModel.find()
     .populate('features')
-    .populate('producto_sucursal')
     .populate('categoria')
     .populate('group')
     .exec();
 }
 
-const findById = async (productoId: number): Promise<IProductoDocument | null> => {
-  return await ProductoModel.findOne({ id_producto: productoId }).exec();
+const findById = async (productoId: string): Promise<IProductoDocument | null> => {
+  return await ProductoModel.findById(productoId).exec();
 }
 
-const findBySellerId = async (sellerId: number): Promise<IProductoDocument[]> => {
-  return await ProductoModel.find({ id_vendedor: sellerId })
-    .populate('ingreso')
-    .exec();
+const findBySellerId = async (sellerId: string): Promise<IProductoDocument[]> => {
+  return await ProductoModel.find({ id_vendedor: sellerId }).populate('ingreso').exec();
 }
 
-const registerProduct = async (product: IProducto): Promise<IProductoDocument> => {
-  const newProduct = new ProductoModel(product);
+
+const registerProduct = async (product: any): Promise<IProductoDocument> => {
+  console.log("Repository, product:",product);
+  console.log("Depurar:",JSON.stringify(product, null, 2));
+
+  console.log("Repository, product:",product.sucursales);
+    
+  const newProduct = new ProductoModel(product.product);
+  console.log("Repository, nuevoproduct:",newProduct);
   return await newProduct.save();
 }
 
@@ -33,55 +37,75 @@ const getProductsBySales = async (sales: IVentaDocument[]) => {
   const productIds = sales.map(sale => sale.producto);
   return await ProductoModel.find({ _id: { $in: productIds } }).exec();
 }
+const getStockForSucursal = async (productId: string, sucursalId: string) => {
+  const producto = await ProductoModel.findById(productId);
+  if (!producto) return null;
 
-const getStockProduct = async (idProduct: number, idSucursal: number = 3): Promise<IProducto_Sucursal | null> => {
-  return await ProductoSucursalModel.findOne({
-    id_producto: idProduct,
-    id_sucursal: idSucursal
-  }).exec();
+  return producto.sucursales.find(s => s.id_sucursal.equals(sucursalId)) || null;
+}
+const updateStockInSucursal = async (
+  productId: string,
+  sucursalId: string,
+  varianteNombre: string,
+  nuevoStock: number
+): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
+
+  const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
+  if (!sucursal) throw new Error("Sucursal no encontrada");
+
+  const variante = sucursal.variantes.find(v => v.nombre_variante === varianteNombre);
+  if (!variante) throw new Error("Variante no encontrada");
+
+  variante.stock = nuevoStock;
+  return await producto.save();
 }
 
-const updateStock = async (stock: IProducto_Sucursal, newData: any): Promise<IProducto_Sucursal> => {
-    
-    const existingStock = await ProductoSucursalModel.findOne({ _id: stock._id });
-  
-    if (existingStock) {
-      
-      Object.assign(existingStock, newData);
-      await existingStock.save();
-      return existingStock;
-    } else {
-      throw new Error("Stock no encontrado");
-    }
-  }
   
 
-  const updateProduct = async (product: IProducto, newData: any): Promise<IProductoDocument> => {
-    const existingProduct = await ProductoModel.findOne({ _id: product._id });
-  
-    if (existingProduct) {
-      Object.assign(existingProduct, newData);
-      await existingProduct.save();
-      return existingProduct;
-    } else {
-      throw new Error("Producto no encontrado");
-    }
+  const updateProduct = async (productId: string, newData: Partial<IProducto>): Promise<IProductoDocument | null> => {
+    return await ProductoModel.findByIdAndUpdate(productId, newData, { new: true }).exec();
   }
-  const getAllStockByProductId = async (idProduct: string): Promise<IProducto_Sucursal[]> => {
-    return await ProductoSucursalModel.find({
-      id_producto: new Types.ObjectId(idProduct)
-    }).exec();
-  }
-  
+  const getAllStockByProductId = async (productId: string) => {
+    return await ProductoModel.findById(productId).select('stockPorSucursal'); // o lo que corresponda
+  };
+  const addVariantToSucursal = async (
+  productId: string,
+  sucursalId: string,
+  variant: { nombre_variante: string; precio: number; stock: number }
+): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
 
-export const ProductRepository = {
-  findAll,
-  findById,
-  findBySellerId,
-  registerProduct,
-  getProductsBySales,
-  getStockProduct,
-  updateStock,
-  updateProduct,
-  getAllStockByProductId
+  const sucursal = producto.sucursales.find(s =>
+    s.id_sucursal.equals(new Types.ObjectId(sucursalId))
+  );
+
+  if (!sucursal) throw new Error("Sucursal no encontrada");
+
+  const existe = sucursal.variantes.some(
+    v => v.nombre_variante === variant.nombre_variante
+  );
+
+  if (existe) throw new Error("Ya existe una variante con ese nombre en esta sucursal");
+
+  sucursal.variantes.push(variant);
+  return await producto.save();
 };
+
+  
+
+  export const ProductRepository = {
+    findAll,
+    findById,
+    findBySellerId,
+    registerProduct,
+    getProductsBySales,
+    updateProduct,
+    getStockForSucursal,      
+    updateStockInSucursal,
+    getAllStockByProductId,
+    addVariantToSucursal    
+  };
+  

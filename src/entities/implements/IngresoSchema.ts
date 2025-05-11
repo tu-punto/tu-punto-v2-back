@@ -14,6 +14,10 @@ const IngresoSchema = new Schema({
     type: Number,
     required: true
   },
+  nombre_variante: {
+    type: String,
+    required: true
+  },
   producto: {
     type: Types.ObjectId,
     ref: 'Producto',

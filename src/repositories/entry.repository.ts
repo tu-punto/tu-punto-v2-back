@@ -5,14 +5,13 @@ import { Types } from 'mongoose';
 import { IIngresoDocument } from '../entities/documents/IIngresoDocument';
 
 export const findBySellerId = async (sellerId: Types.ObjectId): Promise<IIngreso[]> => {
-  return await IngresoModel.find({ id_vendedor: sellerId }).populate('id_producto');
+  return await IngresoModel.find({ vendedor: sellerId }).populate('producto');
 };
 
 export const findByProductId = async (productId: Types.ObjectId): Promise<any[]> => {
-  const entries = await IngresoModel.find({ id_producto: productId })
-    .populate('id_producto', 'id_producto nombre_producto')
-    .populate('id_vendedor', 'id_vendedor marca nombre apellido');
-
+  const entries = await IngresoModel.find({ producto: productId })
+    .populate('producto', 'id_producto nombre_producto')
+    .populate('vendedor', 'id_vendedor marca nombre apellido');
   return entries.map(entry => {
     const formattedDate = format(new Date(entry.fecha_ingreso), 'dd/MM/yyyy HH:mm:ss');
     return {

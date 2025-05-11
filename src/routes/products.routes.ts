@@ -1,31 +1,34 @@
 import { Router } from "express";
-import { addFeatureToProduct, addStockToBranch, getAllProductsEntryAmountBySellerId, getFeatures, getProduct, getProductById, getProductCategory, ProductController } from "../controllers/product.controller";
+import { ProductController } from "../controllers/product.controller";
 
 const productRouter = Router();
-productRouter.get('/', getProduct)
 
-productRouter.post('/register', ProductController.registerProductVariants)
+productRouter.get('/', ProductController.getProduct);
 
-productRouter.post('/addFeatures', addFeatureToProduct)
+productRouter.post('/register', ProductController.registerProductVariants);
 
-productRouter.post('/addStock', addStockToBranch)
+productRouter.post('/registerVariant', ProductController.registerProduct);
 
-productRouter.get('/features/:id', getFeatures)
+productRouter.post('/addFeatures', ProductController.addFeatureToProduct);
 
-productRouter.get('/category/:id', getProductCategory)
+productRouter.post('/addStock', ProductController.addStockToBranch);
 
-productRouter.get('/:id', getProductById)
+productRouter.get('/features/:id', ProductController.getFeatures);
 
-productRouter.get('/seller/:id', getAllProductsEntryAmountBySellerId)
+productRouter.get('/category/:id', ProductController.getProductCategory);
 
-productRouter.post('/registerVariant', ProductController.registerProduct)
+productRouter.get('/seller/:id', ProductController.getAllProductsEntryAmountBySellerId);
 
-productRouter.get("/:idProduct/sucursal/:idSucursal", ProductController.getProductStock)
+productRouter.get('/:idProduct/sucursal/:idSucursal', ProductController.getProductStock);
 
-productRouter.put('/updateStock', ProductController.updateStock)
+//productRouter.put('/updateStock', ProductController.updateStock);
 
-productRouter.get("/stock/:idProduct", ProductController.getAllStockByProductId);
+productRouter.get('/stock/:idProduct', ProductController.getAllStockByProductId);
 
 productRouter.put('/producto-sucursal/:id', ProductController.updateProductBranchStock);
+
+productRouter.get('/:id', ProductController.getProductById);
+
+productRouter.post('/add-variant', ProductController.addVariantToSucursal);
 
 export default productRouter;

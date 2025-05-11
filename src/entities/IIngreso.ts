@@ -1,14 +1,11 @@
-
 import { Types } from 'mongoose';
-export interface IIngreso{
-    fecha_ingreso: Date;
-    estado: string;
-    cantidad_ingreso: number;
-    id_producto: number;
-    id_sucursal: number;
-    id_vendedor: number;
 
-    producto: Types.ObjectId;
-    vendedor: Types.ObjectId;
-    sucursal: Types.ObjectId;
+export interface IIngreso {
+  fecha_ingreso: Date;
+  estado: string;
+  cantidad_ingreso: number;
+  nombre_variante: string;
+  producto: Types.ObjectId;
+  sucursal: Types.ObjectId;
+  vendedor: Types.ObjectId;
 }
