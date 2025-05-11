@@ -1,11 +1,10 @@
-import e, { Request, Response } from "express";
+import { Request, Response } from "express";
 import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
-import { IGroup } from "../entities/IGroup";
-import { GroupRepository } from "../repositories/group.repository";
-import { GroupModel } from "../entities/implements/GroupSchema";
 import { IProducto } from "../entities/IProducto";
 import { ProductBranchService } from "../services/productBranch.service";
+import { GroupRepository } from "../repositories/group.repository";
+
 export const getProduct = async (req: Request, res: Response) => {
     try {
         const products = await ProductService.getAllProducts();
@@ -17,15 +16,16 @@ export const getProduct = async (req: Request, res: Response) => {
 }
 
 const registerProduct = async (req: Request, res: Response) => {
-    const {product, stock} = req.body;
+    const { product } = req.body;
+    console.log("Controller, product:",product);
     try {
         const newProduct = await ProductService.registerProduct(product);
-        const newStock = await ProductBranchService.registerProductBranch({id_producto: newProduct._id,...stock})
-        res.json({
-            status: true,
+        res.status(201).json({
+            success: true,
+            message: "Producto registrado correctamente",
             newProduct,
-            newStock
         });
+
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -33,144 +33,132 @@ const registerProduct = async (req: Request, res: Response) => {
 }
 
 export const getFeatures = async (req: Request, res: Response) => {
-    const id: number = parseInt(req.params.id)
+    const id: string = req.params.id;
     try {
-        const features = await ProductService.getFeaturesById(id)
-        res.json(features)
+        const features = await ProductService.getFeaturesById(id);
+        res.json(features);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
-
     }
 }
 
 export const addFeatureToProduct = async (req: Request, res: Response) => {
-    const { productId, features } = req.body
+    const { productId, features } = req.body;
     try {
-
-        const saveFeatures = [] as any[]
-        console.log("productId:",productId);
-        console.log("Features:",features);
+        const saveFeatures = [];
         for (let feature of features) {
-            const featureProduct = await ProductService.addFeatureToProduct(productId, feature)
-            saveFeatures.push(featureProduct)
+            const featureProduct = await ProductService.addFeatureToProduct(productId, feature);
+            saveFeatures.push(featureProduct);
         }
-        res.json(saveFeatures)
+        res.json(saveFeatures);
     } catch (error) {
         console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
-
     }
 }
 
 export const getProductCategory = async (req: Request, res: Response) => {
-    const { id } = req.params
+    const { id } = req.params;
     try {
-        const product = await ProductService.getProductById(parseInt(id))
-        const category = await CategoryService.getCategoryById(product.id_categoria)
-        res.json(category)
+        const product = await ProductService.getProductById(id);
+        const category = await CategoryService.getCategoryById(product.id_categoria);
+        res.json(category);
     } catch (error) {
         console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
-
     }
 }
 
 export const getProductById = async (req: Request, res: Response) => {
-    const { id } = req.params
+    const { id } = req.params;
     try {
-        const product = await ProductService.getProductById(parseInt(id))
-        res.json(product)
+        const product = await ProductService.getProductById(id);
+        res.json(product);
     } catch (error) {
-        console.error(error)
+        console.error(error);
         res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
 
 export const getAllProductsEntryAmountBySellerId = async (req: Request, res: Response) => {
-    const { id } = req.params
+    const { id } = req.params;
     try {
-        const stock = await ProductService.getAllProductsEntryAmountBySellerId(parseInt(id))
-        res.json(stock)
+        const stock = await ProductService.getAllProductsEntryAmountBySellerId(id);
+        res.json(stock);
     } catch (error) {
-        console.error(error)
+        console.error(error);
         res.status(500).json({ msg: 'Error getting entry amount by a seller Id', error });
-
     }
 }
 
 const registerProductVariants = async (req: Request, res: Response) => {
-    const group = { name: req.body.group } as any
-    const { variants, id_sucursal } = req.body
+    const group = { name: req.body.group };
+    const { variants, id_sucursal } = req.body;
 
-    const savedGroup = await GroupRepository.registerGroup(group)
+    try {
+        const savedGroup = await GroupRepository.registerGroup(group);
+        const products = [];
 
-    const products = [] as any[]
+        for (let variant of variants) {
+            const product: IProducto = { ...variant, group: savedGroup };
+            const newProduct = await ProductService.registerProduct(product);
+            const { cantidad_por_sucursal } = variant;
 
-    for (let variant of variants) {
-        const product = { ...variant, group: savedGroup } as IProducto
-        const newProduct = await ProductService.registerProduct(product)
-        const {cantidad_por_sucursal} = variant
-        
-        const newStock = await ProductBranchService.registerProductBranch({
-            id_producto: newProduct._id,
-            id_sucursal,
-            cantidad_por_sucursal})
-        products.push({newProduct, newStock})
+            const newStock = await ProductBranchService.registerProductBranch({
+                id_producto: newProduct._id,
+                id_sucursal,
+                cantidad_por_sucursal
+            });
+            products.push({ newProduct, newStock });
+        }
 
+        res.json({ msg: "Successful", products });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
     }
-
-    res.json({
-        msg: "Succesfull",
-        products
-    })
 }
 
 export const addStockToBranch = async (req: Request, res: Response) => {
-    const { branch, products } = req.body
+    const { branch, products } = req.body;
+    const savedStocks = [];
 
-
-    const savedStocks = []
-    console.log("Branch:",branch);
-    console.log("Products:",products);
     try {
         for (let product of products) {
-            const newStock = await ProductBranchService.registerProductBranch({ id_sucursal: branch, ...product })
-            savedStocks.push(newStock)
+            const newStock = await ProductBranchService.registerProductBranch({ id_sucursal: branch, ...product });
+            savedStocks.push(newStock);
         }
-        res.json({
-            status: true,
-            savedStocks
-        })
+        res.json({ status: true, savedStocks });
     } catch (error) {
-        res.status(500).json({ msg: 'Internal Server Error' })
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error' });
     }
 }
 
 const getProductStock = async (req: Request, res: Response) => {
-    const idProduct = parseInt(req.params.idProduct)
-    const idSucursal = parseInt(req.params.idSucursal)
+    const { idProduct, idSucursal } = req.params;
     try {
-        const inventory = await ProductService.getProductStock(idProduct, idSucursal)   
-        res.json({
-            inventory
-        })     
+        const inventory = await ProductService.getProductStock(idProduct, idSucursal);
+        res.json({ inventory });
     } catch (error) {
-        console.error(error)
-        res.status(500).json({ msg: 'Internal Server Error' , error})
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
-
+/*
 const updateStock = async (req: Request, res: Response) => {
-    const {newStock} = req.body
+    const { newStock } = req.body;
     try {
-        const updatedStock = await ProductService.updateStock(newStock)
-        res.json({updatedStock})
+        const updatedStock = await ProductService.updateStock(newStock);
+        res.json({ updatedStock });
     } catch (error) {
-        console.error(error)
-        res.status(500).json({ msg: 'Internal Server Error' , error})        
+        console.error(error);
+        res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
+    */
+
 const getAllStockByProductId = async (req: Request, res: Response) => {
     const { idProduct } = req.params;
     try {
@@ -181,14 +169,13 @@ const getAllStockByProductId = async (req: Request, res: Response) => {
         res.status(500).json({ msg: 'Internal Server Error', error });
     }
 }
+
 const updateProductBranchStock = async (req: Request, res: Response) => {
-    const { id } = req.params; 
-    const { nuevaCantidad } = req.body; 
-    console.log("Llegó: ", id,nuevaCantidad);
+    const { id } = req.params;
+    const { nuevaCantidad } = req.body;
 
     try {
         const updatedProductBranch = await ProductBranchService.updateCantidadPorSucursal(id, nuevaCantidad);
-        console.log("Updated: ", updatedProductBranch);
         if (!updatedProductBranch) {
             return res.status(404).json({ msg: 'Producto sucursal no encontrado' });
         }
@@ -202,15 +189,37 @@ const updateProductBranchStock = async (req: Request, res: Response) => {
         console.error(error);
         res.status(500).json({ msg: 'Error actualizando la cantidad del producto sucursal', error });
     }
-}
+};
+export const addVariantToSucursal = async (req: Request, res: Response) => {
+  const { productId, sucursalId, variant } = req.body;
 
+  try {
+    const updatedProduct = await ProductService.addVariantToSucursal(productId, sucursalId, variant);
+    res.json({
+      status: true,
+      msg: 'Variante agregada correctamente',
+      updatedProduct
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ status: false, msg: 'Error agregando variante', error });
+  }
+};
 
 
 export const ProductController = {
-    registerProductVariants,
+    getProduct,
     registerProduct,
+    getFeatures,
+    addFeatureToProduct,
+    getProductCategory,
+    getProductById,
+    getAllProductsEntryAmountBySellerId,
+    registerProductVariants,
+    addStockToBranch,
     getProductStock,
-    updateStock,
+    //updateStock,
     getAllStockByProductId,
-    updateProductBranchStock
+    updateProductBranchStock,
+    addVariantToSucursal
 }
