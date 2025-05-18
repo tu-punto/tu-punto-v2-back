@@ -9,5 +9,6 @@ sellerRouter.put('/update/:id', SellerController.updateSeller);
 sellerRouter.get('/:id', SellerController.getSeller);
 sellerRouter.put("/renew/:id", SellerController.renewSeller);
 sellerRouter.post("/:id/pay", SellerController.paySellerDebt);
+sellerRouter.get('/:id/debts', SellerController.getSellerDebts);
 
 export default sellerRouter;

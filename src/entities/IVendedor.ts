@@ -10,7 +10,7 @@ import { IUser } from "./IUser";
 import { IVenta } from "./IVenta";
 
 export interface IVendedor {
-    id_vendedor: number;
+    id_vendedor: string;
     marca: string;
     nombre: string;
     apellido: string;
