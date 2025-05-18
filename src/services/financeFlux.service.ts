@@ -64,6 +64,15 @@ const getStatsService = async () => {
   return stats;
 };
 
+const updateFinanceFlux = async (fluxId: string, updates: Partial<IFlujoFinanciero>) => {
+  const _id = new Types.ObjectId(fluxId);
+  const existingFlux = await FinanceFluxRepository.findById(_id);
+  if (!existingFlux) throw new Error("Flujo no encontrado");
+
+  return await FinanceFluxRepository.updateById(fluxId, updates);
+};
+
+
 export const FinanceFluxService = {
   getAllFinanceFluxes,
   registerFinanceFlux,
@@ -72,4 +81,5 @@ export const FinanceFluxService = {
   getSellerById,
   getSellerInfoById,
   getStatsService,
+  updateFinanceFlux
 };
