@@ -42,6 +42,19 @@ export const getWorker = async (req: Request, res: Response) => {
   }
 };
 
+
+export const updateFinanceFlux = async (req: Request, res: Response) => {
+  try {
+    const fluxId = req.params.id;
+    const updates = req.body;
+
+    const updatedFlux = await FinanceFluxService.updateFinanceFlux(fluxId, updates);
+    res.json({ ok: true, updatedFlux });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+};
+
 export const getSeller = async (req: Request, res: Response) => {
   try {
     const sellerId = parseInt(req.params.id);

@@ -11,6 +11,8 @@ financeFluxRouter.patch("/:id/pay", fluxController.payDebt);
 
 financeFluxRouter.get("/worker/:id", fluxController.getWorker);
 
+financeFluxRouter.put("/:id", fluxController.updateFinanceFlux);
+
 financeFluxRouter.get("/seller/:id", fluxController.getSeller);
 
 financeFluxRouter.get("/sellerInf/:id", fluxController.getSellerInfo);
