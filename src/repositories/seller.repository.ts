@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
+import { Types } from 'mongoose';
 import { VendedorSchema } from "../entities/implements/VendedorSchema";
 import { IVendedor } from "../entities/IVendedor";
 import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
+import { FlujoFinancieroModel } from '../entities/implements/FlujoFinancieroSchema';
+
 
 const VendedorModel = mongoose.model<IVendedorDocument>("Vendedor", VendedorSchema);
 
@@ -13,7 +16,7 @@ const findById = async (sellerId: any): Promise<IVendedor | null> => {
   return await VendedorModel.findById(sellerId).lean<IVendedor>().exec();
 };
 
-const registerSeller = async (seller: IVendedor): Promise<IVendedor> => {
+const registerSeller = async (seller: IVendedor) => {
   const newSeller = new VendedorModel(seller);
   return await newSeller.save();
 };
@@ -21,13 +24,21 @@ const registerSeller = async (seller: IVendedor): Promise<IVendedor> => {
 const updateSeller = async (
   sellerId: any,
   updateData: Partial<IVendedor>
-): Promise<IVendedor | null> => {
-  console.log('no llega aca',updateData);
+) => {
   return await VendedorModel.findByIdAndUpdate(sellerId, updateData, { new: true });
 };
 
 export const incrementDebt = async (id: string, delta: number) => {
   return await VendedorModel.findByIdAndUpdate(id, { $inc: { deuda: delta } }, { new: true })
+};
+
+const findDebtsBySeller = async (sellerId: string) => {
+  return await FlujoFinancieroModel.find({
+    id_vendedor: new Types.ObjectId(sellerId),
+  })
+    .select('monto concepto')
+    .lean()
+    .exec();
 };
 
 export const SellerRepository = {
@@ -36,6 +47,7 @@ export const SellerRepository = {
   updateSeller,
   findById,
   incrementDebt,
+  findDebtsBySeller
 };
 
 

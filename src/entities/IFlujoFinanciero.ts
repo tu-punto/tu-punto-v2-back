@@ -11,5 +11,6 @@ export interface IFlujoFinanciero {
   esDeuda: boolean;
 
   vendedor?: Types.ObjectId | IVendedor; 
+  id_vendedor?: Types.ObjectId;
   trabajador?: Types.ObjectId | ITrabajador;
 }

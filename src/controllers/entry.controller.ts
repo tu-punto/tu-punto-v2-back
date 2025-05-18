@@ -4,7 +4,7 @@ import * as EntryService from '../services/entry.service'
 export const getProductsEntryAmount = async (req: Request, res: Response) => {
   const { id } = req.params
   try {
-    const stock = await EntryService.getProductsEntryAmount(parseInt(id))
+    const stock = await EntryService.getProductsEntryAmount(id)
     res.json(stock)
   } catch (error) {
     console.error(error)
@@ -16,7 +16,7 @@ export const getProductsEntryAmount = async (req: Request, res: Response) => {
 export const getProductEntryDetails = async (req: Request, res: Response) => {
   const { id } = req.params
   try {
-    const stock = await EntryService.getProductEntryDetails(parseInt(id))
+    const stock = await EntryService.getProductEntryDetails(id)
     res.json(stock)
   } catch (error) {
     console.error(error)

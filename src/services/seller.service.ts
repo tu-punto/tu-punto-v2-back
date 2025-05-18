@@ -35,7 +35,7 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
     monto: montoTotal,
     fecha: new Date(),
     esDeuda: seller.esDeuda,
-    vendedor: new Types.ObjectId(nuevo.id_vendedor),
+    id_vendedor: new Types.ObjectId(nuevo._id),
   });
 
   return nuevo;
@@ -46,7 +46,6 @@ const updateSeller = async (id: string, data: any) => {
 };
 
 const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
-  console.log('no recibe nada',data);
   const vendedor = await SellerRepository.findById(id);
   if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
 
@@ -69,7 +68,7 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
       monto: montoNuevo,
       fecha: new Date(),
       esDeuda: data.esDeuda ?? true,
-      vendedor: new Types.ObjectId(actualizado.id_vendedor),
+      id_vendedor: actualizado._id,
     });
   }
   return actualizado;
@@ -85,6 +84,11 @@ const paySellerDebt = async (id: string, payAll: boolean) => {
   return await SellerRepository.updateSeller(id, update);
 };
 
+const getSellerDebts = async (sellerId: string) => {
+  const sellerDebts = await SellerRepository.findDebtsBySeller(sellerId);
+  return sellerDebts;
+};
+
 export const SellerService = {
   getAllSellers,
   getSeller,
@@ -92,4 +96,5 @@ export const SellerService = {
   updateSeller,
   renewSeller,
   paySellerDebt,
+  getSellerDebts,
 };

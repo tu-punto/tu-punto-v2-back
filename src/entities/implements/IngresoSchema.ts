@@ -1,7 +1,7 @@
 import { Schema, model, Types } from 'mongoose';
 import { IIngresoDocument } from '../documents/IIngresoDocument';
 
-const IngresoSchema = new Schema({
+export const IngresoSchema = new Schema({
   fecha_ingreso: {
     type: Date,
     default: Date.now

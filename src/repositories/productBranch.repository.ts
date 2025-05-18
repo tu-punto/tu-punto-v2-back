@@ -19,7 +19,6 @@ const findById = async (branchId: any, productId: any): Promise<IProductoSucursa
 
 const registerProductBranch = async (productBranch: IProducto_Sucursal): Promise<IProductoSucursalDocument> => {
     const newProductBranch = new ProductoSucursalModel(productBranch);
-    console.log("Llegue aqui",newProductBranch);
     return await newProductBranch.save(); 
 }
 const updateCantidadById = async (id: string, nuevaCantidad: number): Promise<IProductoSucursalDocument | null> => {

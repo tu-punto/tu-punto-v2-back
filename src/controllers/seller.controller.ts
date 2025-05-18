@@ -71,3 +71,13 @@ export const paySellerDebt = async (req: Request, res: Response) => {
     res.status(500).json({ msg: 'Error pagando deuda', err });
   }
 };
+
+export const getSellerDebts = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const debts = await SellerService.getSellerDebts(id);
+    res.json(debts);
+  } catch (err) {
+    res.status(500).json({ msg: 'Error obteniendo deudas del vendedor', err });
+  }
+};
