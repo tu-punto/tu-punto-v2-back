@@ -39,8 +39,10 @@ export const deleteEntriesByIds = async (entriesIds: any[]) => {
             const variante = sucursalDoc.variantes.find(v => v.nombre_variante === nombre_variante);
             if (!variante) throw new Error("Variante no encontrada");
 
-            const nuevoStock = variante.stock - cantidad_ingreso;
-            await ProductRepository.updateStockInSucursal(
+           // const nuevoStock = variante.stock - cantidad_ingreso;
+           const nuevoStock =  cantidad_ingreso;
+
+           await ProductRepository.updateStockInSucursal(
                 producto.toString(),
                 sucursal.toString(),
                 nombre_variante,
@@ -82,7 +84,8 @@ export const updateEntries = async (entries: any[]) => {
             if (!variante) throw new Error("Variante no encontrada");
 
             const diferencia = newAmount - oldAmount;
-            const nuevoStock = variante.stock + diferencia;
+            // const nuevoStock = variante.stock - diferencia;
+            const nuevoStock =  diferencia;
 
             await ProductRepository.updateStockInSucursal(
                 producto.toString(),

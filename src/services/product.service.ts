@@ -108,6 +108,41 @@ const addVariantToSucursal = async (
 ) => {
   return await ProductRepository.addVariantToSucursal(productId, sucursalId, variant);
 };
+const updatePrice = async (updates: {
+  productId: string;
+  sucursalId: string;
+  varianteNombre: string;
+  precio: number;
+}[]) => {
+  const updatedList = [];
+
+  for (let { productId, sucursalId, varianteNombre, precio } of updates) {
+    const updatedProduct = await ProductRepository.updatePriceInSucursal(
+      productId,
+      sucursalId,
+      varianteNombre,
+      precio
+    );
+    updatedList.push(updatedProduct);
+  }
+
+  return updatedList;
+};
+const updateSubvariantStock = async (params: {
+  productId: string;
+  sucursalId: string;
+  varianteNombre: string;
+  subvarianteNombre: string;
+  stock: number;
+}) => {
+  return await ProductRepository.updateStockOfSubvariant(
+    params.productId,
+    params.sucursalId,
+    params.varianteNombre,
+    params.subvarianteNombre,
+    params.stock
+  );
+};
 
   
 
@@ -121,5 +156,7 @@ export const ProductService = {
   getProductStock,
   //updateStock,
   getAllStockByProductId,
-  addVariantToSucursal
+  addVariantToSucursal,
+  updatePrice,
+  updateSubvariantStock
 };

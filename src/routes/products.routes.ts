@@ -31,4 +31,8 @@ productRouter.get('/:id', ProductController.getProductById);
 
 productRouter.post('/add-variant', ProductController.addVariantToSucursal);
 
+productRouter.put('/update-price', ProductController.updatePrice);
+
+productRouter.put('/update-subvariant-stock', ProductController.updateSubvariantStock);
+
 export default productRouter;

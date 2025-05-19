@@ -205,6 +205,31 @@ export const addVariantToSucursal = async (req: Request, res: Response) => {
     res.status(500).json({ status: false, msg: 'Error agregando variante', error });
   }
 };
+export const updatePrice = async (req: Request, res: Response) => {
+    const { priceUpdates } = req.body;
+    console.log("Controller, priceUpdates:", priceUpdates);
+
+    try {
+        const updated = await ProductService.updatePrice(priceUpdates);
+        res.json({ success: true, message: 'Precio actualizado correctamente', updated });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Error actualizando el precio', error });
+    }
+};
+export const updateSubvariantStock = async (req: Request, res: Response) => {
+  const { productId, sucursalId, varianteNombre, subvarianteNombre, stock } = req.body;
+  try {
+    const updated = await ProductService.updateSubvariantStock({ productId, sucursalId, varianteNombre, subvarianteNombre, stock });
+    res.json({ success: true, updated });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error actualizando stock de subvariante', error });
+  }
+};
+
+
+
 
 
 export const ProductController = {
@@ -221,5 +246,7 @@ export const ProductController = {
     //updateStock,
     getAllStockByProductId,
     updateProductBranchStock,
-    addVariantToSucursal
+    addVariantToSucursal,
+    updatePrice,
+    updateSubvariantStock
 }

@@ -26,9 +26,9 @@ const registerProduct = async (product: any): Promise<IProductoDocument> => {
   console.log("Repository, product:",product);
   console.log("Depurar:",JSON.stringify(product, null, 2));
 
-  console.log("Repository, product:",product.sucursales);
+  console.log("Repository, product:",product);
     
-  const newProduct = new ProductoModel(product.product);
+  const newProduct = new ProductoModel(product);
   console.log("Repository, nuevoproduct:",newProduct);
   return await newProduct.save();
 }
@@ -73,7 +73,12 @@ const updateStockInSucursal = async (
   const addVariantToSucursal = async (
   productId: string,
   sucursalId: string,
-  variant: { nombre_variante: string; precio: number; stock: number }
+  variant: {
+    nombre_variante: string;
+    precio?: number;
+    stock?: number;
+    subvariantes?: { nombre_subvariante: string; precio: number; stock: number }[];
+  }
 ): Promise<IProductoDocument | null> => {
   const producto = await ProductoModel.findById(productId);
   if (!producto) throw new Error("Producto no encontrado");
@@ -81,20 +86,59 @@ const updateStockInSucursal = async (
   const sucursal = producto.sucursales.find(s =>
     s.id_sucursal.equals(new Types.ObjectId(sucursalId))
   );
-
   if (!sucursal) throw new Error("Sucursal no encontrada");
 
   const existe = sucursal.variantes.some(
     v => v.nombre_variante === variant.nombre_variante
   );
-
   if (existe) throw new Error("Ya existe una variante con ese nombre en esta sucursal");
 
   sucursal.variantes.push(variant);
   return await producto.save();
 };
 
-  
+
+const updatePriceInSucursal = async (
+  productId: string,
+  sucursalId: string,
+  varianteNombre: string,
+  nuevoPrecio: number
+): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
+
+  const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
+  if (!sucursal) throw new Error("Sucursal no encontrada");
+
+  const variante = sucursal.variantes.find(v => v.nombre_variante === varianteNombre);
+  if (!variante) throw new Error("Variante no encontrada");
+
+  variante.precio = nuevoPrecio;
+  return await producto.save();
+};
+const updateStockOfSubvariant = async (
+  productId: string,
+  sucursalId: string,
+  varianteNombre: string,
+  subvarianteNombre: string,
+  nuevoStock: number
+): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
+
+  const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
+  if (!sucursal) throw new Error("Sucursal no encontrada");
+
+  const variante = sucursal.variantes.find(v => v.nombre_variante === varianteNombre);
+  if (!variante) throw new Error("Variante no encontrada");
+
+  const subvariante = variante.subvariantes?.find(sv => sv.nombre_subvariante === subvarianteNombre);
+  if (!subvariante) throw new Error("Subvariante no encontrada");
+
+  subvariante.stock = nuevoStock;
+  return await producto.save();
+};
+
 
   export const ProductRepository = {
     findAll,
@@ -106,6 +150,8 @@ const updateStockInSucursal = async (
     getStockForSucursal,      
     updateStockInSucursal,
     getAllStockByProductId,
-    addVariantToSucursal    
+    addVariantToSucursal,
+    updatePriceInSucursal,
+    updateStockOfSubvariant    
   };
   
