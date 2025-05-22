@@ -3,7 +3,6 @@ import { ISucursal } from "../entities/ISucursal";
 
 const getAllSucursals = async () => {
   const sucursales = await SucursalModel.find().populate([
-    'producto_sucursal',
     'pedido',
     'trabajador',
     'ingreso',
@@ -14,7 +13,6 @@ const getAllSucursals = async () => {
 
 const getSucursalByID = async (id: number) => {
   return await SucursalModel.findOne({ id_sucursal: id }).populate([
-    'producto_sucursal',
     'pedido',
     'trabajador',
     'ingreso',

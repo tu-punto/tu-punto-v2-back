@@ -28,7 +28,7 @@ export const deleteEntriesByIds = async (entriesIds: any[]) => {
 
     if (deletedEntries) {
         for (const entry of entries) {
-            const { producto, cantidad_ingreso, sucursal, nombre_variante } = entry;
+            const { producto, cantidad_ingreso, sucursal, combinacion } = entry;
 
             const productoDoc = await ProductRepository.findById(producto.toString());
             if (!productoDoc) throw new Error("Producto no encontrado");
@@ -36,23 +36,19 @@ export const deleteEntriesByIds = async (entriesIds: any[]) => {
             const sucursalDoc = productoDoc.sucursales.find(s => s.id_sucursal.equals(sucursal));
             if (!sucursalDoc) throw new Error("Sucursal no encontrada");
 
-            const variante = sucursalDoc.variantes.find(v => v.nombre_variante === nombre_variante);
-            if (!variante) throw new Error("Variante no encontrada");
-
-           // const nuevoStock = variante.stock - cantidad_ingreso;
-           const nuevoStock =  cantidad_ingreso;
-
-           await ProductRepository.updateStockInSucursal(
-                producto.toString(),
-                sucursal.toString(),
-                nombre_variante,
-                nuevoStock
+            const combinacionObj = sucursalDoc.combinaciones.find(c =>
+                JSON.stringify(c.variantes) === JSON.stringify(combinacion)
             );
+            if (!combinacionObj) throw new Error("Combinación no encontrada");
+
+            combinacionObj.stock = Math.max(0, combinacionObj.stock - cantidad_ingreso);
+            await productoDoc.save();
         }
     } else {
-        throw new Error("It was not possible to reduce stock from deleted entries products");
+        throw new Error("No fue posible reducir el stock de los productos eliminados");
     }
 };
+
 
 export const deleteProductEntries = async (entryData: any[]) => {
     return await EntryRepository.deleteProductEntries(entryData);
@@ -65,14 +61,14 @@ export const updateEntries = async (entries: any[]) => {
         const entryId = new Types.ObjectId(entry.id_ingreso);
 
         const existingEntry = await EntryRepository.findById(entryId);
-        if (!existingEntry) throw new Error(`Entry with id ${entry.id_ingreso} doesn't exist`);
+        if (!existingEntry) throw new Error(`Entrada con id ${entry.id_ingreso} no existe`);
 
         const oldAmount = existingEntry.cantidad_ingreso;
 
         const updatedEntry = await EntryRepository.updateEntryById(entry, entryId);
         if (updatedEntry) {
             const newAmount = updatedEntry.cantidad_ingreso;
-            const { producto, sucursal, nombre_variante } = existingEntry;
+            const { producto, sucursal, combinacion } = existingEntry;
 
             const productoDoc = await ProductRepository.findById(producto.toString());
             if (!productoDoc) throw new Error("Producto no encontrado");
@@ -80,28 +76,24 @@ export const updateEntries = async (entries: any[]) => {
             const sucursalDoc = productoDoc.sucursales.find(s => s.id_sucursal.equals(sucursal));
             if (!sucursalDoc) throw new Error("Sucursal no encontrada");
 
-            const variante = sucursalDoc.variantes.find(v => v.nombre_variante === nombre_variante);
-            if (!variante) throw new Error("Variante no encontrada");
+            const combinacionObj = sucursalDoc.combinaciones.find(c =>
+                JSON.stringify(c.variantes) === JSON.stringify(combinacion)
+            );
+            if (!combinacionObj) throw new Error("Combinación no encontrada");
 
             const diferencia = newAmount - oldAmount;
-            // const nuevoStock = variante.stock - diferencia;
-            const nuevoStock =  diferencia;
-
-            await ProductRepository.updateStockInSucursal(
-                producto.toString(),
-                sucursal.toString(),
-                nombre_variante,
-                nuevoStock
-            );
+            combinacionObj.stock += diferencia;
+            await productoDoc.save();
 
             updatedEntries.push(updatedEntry);
         } else {
-            throw new Error(`Failed to update entry with id ${entry.id_ingreso}`);
+            throw new Error(`No se pudo actualizar la entrada con id ${entry.id_ingreso}`);
         }
     }
 
     return updatedEntries;
 };
+
 
 export const updateProductEntries = async (entryData: any[]) => {
     return await EntryRepository.updateProductEntries(entryData);
