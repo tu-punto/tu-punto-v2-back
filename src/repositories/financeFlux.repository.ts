@@ -4,7 +4,10 @@ import { IFlujoFinanciero } from '../entities/IFlujoFinanciero';
 import { IFlujoFinancieroDocument } from '../entities/documents/IFlujoFinancieroDocument';
 
 const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
-  return await FlujoFinancieroModel.find().exec();
+  return await FlujoFinancieroModel.find()
+    .populate('id_vendedor', 'nombre apellido') // <-- solo estos campos
+    .populate('id_trabajador', 'nombre')        // <-- solo este campo
+    .exec();
 };
 
 const registerFinanceFlux = async (financeFlux: IFlujoFinanciero): Promise<IFlujoFinancieroDocument> => {
