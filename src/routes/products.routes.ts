@@ -16,6 +16,7 @@ productRouter.get("/:id", ProductController.getProductById);
 productRouter.post("/register", ProductController.registerProductVariants);
 productRouter.post("/registerVariant", ProductController.registerProduct);
 productRouter.post("/addFeatures", ProductController.addFeatureToProduct);
+productRouter.post("/add-variant", ProductController.addVariantToProduct);
 
 // PUT
 productRouter.put("/update-price", ProductController.updatePrice);

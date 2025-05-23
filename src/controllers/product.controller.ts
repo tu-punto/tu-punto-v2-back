@@ -130,21 +130,32 @@ export const updatePrice = async (req: Request, res: Response) => {
 };
 
 export const updateSubvariantStock = async (req: Request, res: Response) => {
-  const { productId, sucursalId, varianteNombre, subvarianteNombre, stock } = req.body;
-  try {
-    const result = await ProductService.updateSubvariantStock({
+  console.log("Updating subvariant stock");
+  const { productId, sucursalId, variantes, stock } = req.body;  try {
+    const result = await ProductService.updateStockByVariantCombination({
       productId,
       sucursalId,
-      varianteNombre,
-      subvarianteNombre,
+      variantes,
       stock
-    });
+  });
+
     res.json({ success: true, result });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Error al actualizar stock", error });
   }
 };
+export const addVariantToProduct = async (req: Request, res: Response) => {
+  try {
+    const { productId, sucursalId, combinaciones } = req.body;
+    const result = await ProductService.addVariantToProduct(productId, sucursalId, combinaciones);
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error("Error al agregar variante:", error);
+    res.status(500).json({ success: false, message: "Error al agregar variante", error });
+  }
+};
+
 
 export const ProductController = {
   getProduct,
@@ -158,5 +169,6 @@ export const ProductController = {
   getProductStock,
   getAllStockByProductId,
   updatePrice,
-  updateSubvariantStock
+  updateSubvariantStock,
+  addVariantToProduct
 };

@@ -22,8 +22,9 @@ const findById = async (saleId: number) => {
 };
 
 const updateSale = async (sale: IVenta) => {
-  return await VentaModel.findOneAndUpdate({ id_venta: sale.id_venta }, sale, { new: true });
+  return await VentaModel.findByIdAndUpdate(sale._id, sale, { new: true });
 };
+
 
 const findByPedidoId = async (pedidoId: number) => {
   return await VentaModel.find({ id_pedido: pedidoId }).populate(['producto']);

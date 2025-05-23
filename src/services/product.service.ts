@@ -78,7 +78,7 @@ const updatePrice = async (
   updates: {
     productId: string;
     sucursalId: string;
-    varianteNombre: string;
+    variantes: Record<string, string>;
     precio: number;
   }[]
 ) => {
@@ -87,13 +87,14 @@ const updatePrice = async (
     const updated = await ProductRepository.updatePriceInSucursal(
       u.productId,
       u.sucursalId,
-      u.varianteNombre,
+      u.variantes,
       u.precio
     );
     result.push(updated);
   }
   return result;
 };
+
 
 const updateSubvariantStock = async (params: {
   productId: string;
@@ -110,6 +111,31 @@ const updateSubvariantStock = async (params: {
     params.stock
   );
 };
+const updateStockByVariantCombination = async ({
+  productId,
+  sucursalId,
+  variantes,
+  stock
+}: {
+  productId: string,
+  sucursalId: string,
+  variantes: Record<string, string>,
+  stock: number
+}) => {
+  return await ProductRepository.updateStockByVariantCombination(productId, sucursalId, variantes, stock);
+};
+const addVariantToProduct = async (
+  productId: string,
+  sucursalId: string,
+  combinaciones: {
+    variantes: Record<string, string>,
+    precio: number,
+    stock: number
+  }[]
+) => {
+  return await ProductRepository.addVariantToProduct(productId, sucursalId, combinaciones);
+};
+
 
 export const ProductService = {
   getAllProducts,
@@ -122,5 +148,7 @@ export const ProductService = {
   getAllStockByProductId,
   updateStockInSucursal,
   updatePrice,
-  updateSubvariantStock
+  updateSubvariantStock,
+  updateStockByVariantCombination,
+  addVariantToProduct
 };

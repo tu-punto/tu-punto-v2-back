@@ -14,7 +14,7 @@ export const getShipping = async (req: Request, res: Response) => {
 export const getShippingByIds = async (req: Request, res: Response) => {
   const { ids } = req.params;
   try {
-    const idsArray = ids.split(",").map((id) => parseInt(id.trim()));
+    const idsArray = ids.split(",").map((id) => (id.trim()));
     const shippings = await ShippingService.getShippingByIds(idsArray);
     res.json(shippings);
   } catch (error) {
@@ -56,7 +56,7 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
 };
 
 const updateShipping = async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
+  const id = (req.params.id);
   const { newData } = req.body;
   try {
     const shippingUpdated = await ShippingService.updateShipping(newData, id);

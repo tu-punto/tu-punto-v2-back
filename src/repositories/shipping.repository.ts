@@ -7,11 +7,11 @@ const findAll = async (): Promise<IPedidoDocument[]> => {
   return pedidos;
 };
 
-const findById = async (shippingId: number): Promise<IPedidoDocument | null> => {
-  return await PedidoModel.findOne({ id_pedido: shippingId }).populate(['venta', 'sucursal', 'trabajador']);
+const findById = async (shippingId: string): Promise<IPedidoDocument | null> => {
+  return await PedidoModel.findById(shippingId).populate(['venta', 'sucursal', 'trabajador']);
 };
 
-const findByIds = async (shippingIds: number[]): Promise<IPedidoDocument[]> => {
+const findByIds = async (shippingIds: string[]): Promise<IPedidoDocument[]> => {
   const pedidos = await PedidoModel.find({ id_pedido: { $in: shippingIds } }).populate(['venta', 'sucursal', 'trabajador']);
   return pedidos;
 };
