@@ -5,7 +5,6 @@ import { IVendedor } from "../entities/IVendedor";
 import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 import { FlujoFinancieroModel } from '../entities/implements/FlujoFinancieroSchema';
 
-
 const VendedorModel = mongoose.model<IVendedorDocument>("Vendedor", VendedorSchema);
 
 const findAll = async (): Promise<IVendedor[]> => {
@@ -36,7 +35,7 @@ const findDebtsBySeller = async (sellerId: string) => {
   return await FlujoFinancieroModel.find({
     id_vendedor: new Types.ObjectId(sellerId),
   })
-    .select('monto concepto')
+    .select('monto concepto fecha')
     .lean()
     .exec();
 };
