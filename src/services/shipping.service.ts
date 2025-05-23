@@ -9,7 +9,7 @@ const getAllShippings = async () => {
   return await ShippingRepository.findAll();
 };
 
-const getShippingByIds = async (shippingIds: number[]) => {
+const getShippingByIds = async (shippingIds: string[]) => {
   const shippings = await ShippingRepository.findByIds(shippingIds);
   if (!shippings.length)
     throw new Error(`No shippings found for the provided IDs`);
@@ -20,7 +20,7 @@ const registerShipping = async (shipping: any) => {
 };
 
 const registerSaleToShipping = async (
-  shippingId: number,
+  shippingId: string,
   saleWithoutShippingId: any
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
@@ -29,16 +29,37 @@ const registerSaleToShipping = async (
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
   }
 
-  const sale = new VentaModel({
-    ...saleWithoutShippingId,
-    pedido: new Types.ObjectId(shipping._id), // Asegura que sea ObjectId
-    id_pedido: shippingId // Esto es si usas id_pedido además del ref
+  console.log("Venta a registrar:", {
+    shippingId,
+    saleWithoutShippingId
   });
 
-  return await SaleRepository.registerSale(sale);
-};
+  // Crear nueva venta
+  const sale = new VentaModel({
+    ...saleWithoutShippingId,
+    pedido: new Types.ObjectId(shipping._id),
+    id_pedido: shipping._id,
+  });
 
-const updateShipping = async (newData: any, shippingId: number) => {
+  const nuevaVenta = await SaleRepository.registerSale(sale);
+
+  // Verificar si ya está en el array venta[]
+  const yaExiste = shipping.venta?.some((ventaId: Types.ObjectId) =>
+    ventaId.equals(nuevaVenta._id)
+  );
+
+  if (!yaExiste) {
+    await PedidoModel.findByIdAndUpdate(shipping._id, {
+      $push: { venta: nuevaVenta._id }
+    });
+    console.log(`Venta ${nuevaVenta._id} añadida a pedido ${shipping._id}`);
+  } else {
+    console.warn(`Venta ${nuevaVenta._id} ya está en el pedido ${shipping._id}`);
+  }
+
+  return nuevaVenta;
+};
+const updateShipping = async (newData: any, shippingId: string) => {
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);

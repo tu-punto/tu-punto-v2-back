@@ -17,7 +17,7 @@ const getAllSellers = async () => {
 }
 
 const getSeller = async (sellerId: string) => {
-  const seller = await SellerRepository.findById(parseInt(sellerId));
+  const seller = await SellerRepository.findById((sellerId));
   return { ...seller, pago_mensual: calcPagoMensual(seller!) };
 }
 
