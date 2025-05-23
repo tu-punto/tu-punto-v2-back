@@ -17,7 +17,6 @@ export const SucursalSchema = new Schema({
     type: Number,
     required: true
   },
-  //producto_sucursal: [{type: Types.ObjectId, ref: 'Producto_Sucursal'}],
   pedido: [{
     type: Types.ObjectId,
     ref: 'Pedido'

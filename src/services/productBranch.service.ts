@@ -1,4 +1,5 @@
-import { ProductBranchRepository } from "../repositories/productBranch.repository"
+
+/*import { ProductBranchRepository } from "../repositories/productBranch.repository"
 
 const getAllProductBranches = async () => {
     return await ProductBranchRepository.findAll()
@@ -17,3 +18,4 @@ export const ProductBranchService = {
     registerProductBranch,
     updateCantidadPorSucursal
 }
+*/
