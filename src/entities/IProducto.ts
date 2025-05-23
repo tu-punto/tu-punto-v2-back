@@ -1,22 +1,15 @@
 import { Types } from 'mongoose';
 import { ICaracteristicas } from './ICaracteristicas';
 
-export interface ISubvariante {
-  nombre_subvariante: string;
+export interface ICombinacion {
+  variantes: Record<string, string>; // ejemplo: { "Color": "Rojo", "Talla": "L" }
   precio: number;
   stock: number;
 }
 
-export interface IVariante {
-  nombre_variante: string;
-  precio?: number;
-  stock?: number;
-  subvariantes?: ISubvariante[];
-}
-
 export interface ISucursalProducto {
   id_sucursal: Types.ObjectId;
-  variantes: IVariante[];
+  combinaciones: ICombinacion[];
 }
 
 export interface IProducto {
@@ -35,3 +28,4 @@ export interface IProducto {
   group: Types.ObjectId;
   sucursales: ISucursalProducto[];
 }
+

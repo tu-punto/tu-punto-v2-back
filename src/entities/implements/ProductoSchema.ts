@@ -1,25 +1,21 @@
 import mongoose, { Schema, model } from "mongoose";
 import { IProductoDocument } from "../documents/IProductoDocument";
 
-// Sub-subdocumento: subvariante
-const SubvarianteSchema = new Schema({
-  nombre_subvariante: { type: String, required: true },
+// Subdocumento: combinación
+const CombinacionSchema = new Schema({
+  variantes: {
+    type: Map,
+    of: String, // ejemplo: { "Color": "Negro", "Talla": "M" }
+    required: true
+  },
   precio: { type: Number, required: true },
   stock: { type: Number, required: true }
-}, { _id: false });
-
-// Subdocumento: variante
-const VarianteSchema = new Schema({
-  nombre_variante: { type: String, required: true },
-  precio: { type: Number },
-  stock: { type: Number },
-  subvariantes: [SubvarianteSchema]
 }, { _id: false });
 
 // Subdocumento: sucursal
 const SucursalProductoSchema = new Schema({
   id_sucursal: { type: Schema.Types.ObjectId, ref: 'Sucursal', required: true },
-  variantes: [VarianteSchema]
+  combinaciones: [CombinacionSchema]
 }, { _id: false });
 
 // Modelo principal
@@ -36,7 +32,7 @@ const ProductoSchema = new Schema({
   ingreso: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ingreso' }],
   group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' },
   groupId: { type: Number },
-  sucursales: [SucursalProductoSchema]
+  sucursales: [SucursalProductoSchema] // ACTUALIZADO
 }, { timestamps: true });
 
 export const ProductoModel = model<IProductoDocument>("Producto", ProductoSchema);

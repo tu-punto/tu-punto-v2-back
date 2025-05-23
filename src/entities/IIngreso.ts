@@ -8,4 +8,5 @@ export interface IIngreso {
   producto: Types.ObjectId;
   sucursal: Types.ObjectId;
   vendedor: Types.ObjectId;
+  combinacion: Record<string, string>; 
 }

@@ -1,3 +1,4 @@
+/*
 import { ProductoSucursalModel } from "../entities/implements/ProductoSucursalSchema";
 import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 import { IProductoSucursalDocument } from "../entities/documents/IProductoSucursal";
@@ -36,5 +37,5 @@ export const ProductBranchRepository = {
     registerProductBranch,
     updateCantidadById
 };
-
+*/
 

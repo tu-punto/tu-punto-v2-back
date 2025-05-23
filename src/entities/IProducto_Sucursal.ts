@@ -1,3 +1,4 @@
+/*
 import { Types } from 'mongoose';
 import { IProducto } from "./IProducto";
 import { ISucursal } from "./ISucursal";
@@ -12,3 +13,4 @@ export interface IProducto_Sucursal {
   producto: Types.ObjectId; 
   sucursal: Types.ObjectId; 
 }
+*/
