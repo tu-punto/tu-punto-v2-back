@@ -1,6 +1,5 @@
 /* import { IProducto } from './../entities/IProducto';
 import { ICategoria } from "../entities/ICategoria";
-import { IProducto_Sucursal } from "../entities/IProducto_Sucursal";
 import { IVendedor } from "../entities/IVendedor";
 import { IVenta } from "../entities/IVenta";
 import { ICaracteristicas } from '../entities/ICaracteristicas';
@@ -20,7 +19,7 @@ export class Producto{
     features: ICaracteristicas[]
     categoria: ICategoria;
     venta: IVenta[];
-    producto_sucursal?: IProducto_Sucursal[];
+
     ingreso?: IIngreso[];
     group: IGroup
 
@@ -36,7 +35,6 @@ export class Producto{
         this.features = iProducto.features
         this.categoria= iProducto.categoria;
         this.venta= iProducto.venta;
-        this.producto_sucursal= iProducto.producto_sucursal; 
         this.group = iProducto.group
         this.ingreso = iProducto.ingreso;
     }

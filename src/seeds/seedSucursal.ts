@@ -12,7 +12,6 @@ export const seedSucursal = async () => {
     direccion: 'Prado 123',
     ciudad: 'La Paz',
     telefono: 12345678,
-    //producto_sucursal: [],
     pedido: [],
     trabajador: [],
     ingreso: [],
