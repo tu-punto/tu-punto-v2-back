@@ -4,6 +4,7 @@ import { VentaModel } from "../entities/implements/VentaSchema";
 import { Types } from 'mongoose';
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
+import { VendedorModel } from '../entities/implements/VendedorSchema'; // asegúrate de importar el modelo
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -36,27 +37,31 @@ const registerSaleToShipping = async (
 
   // Crear nueva venta
   const sale = new VentaModel({
-    ...saleWithoutShippingId,
-    pedido: new Types.ObjectId(shipping._id),
-    id_pedido: shipping._id,
+  ...saleWithoutShippingId,
+  pedido: new Types.ObjectId(shipping._id),
+  id_pedido: shipping._id,
+});
+
+const nuevaVenta = await SaleRepository.registerSale(sale);
+
+// Verificar si ya está en el array venta del pedido
+const yaExiste = shipping.venta?.some((ventaId: Types.ObjectId) =>
+  ventaId.equals(nuevaVenta._id)
+);
+
+if (!yaExiste) {
+  await PedidoModel.findByIdAndUpdate(shipping._id, {
+    $push: { venta: nuevaVenta._id }
   });
+  console.log(`Venta ${nuevaVenta._id} añadida a pedido ${shipping._id}`);
+}
 
-  const nuevaVenta = await SaleRepository.registerSale(sale);
-
-  // Verificar si ya está en el array venta[]
-  const yaExiste = shipping.venta?.some((ventaId: Types.ObjectId) =>
-    ventaId.equals(nuevaVenta._id)
-  );
-
-  if (!yaExiste) {
-    await PedidoModel.findByIdAndUpdate(shipping._id, {
-      $push: { venta: nuevaVenta._id }
-    });
-    console.log(`Venta ${nuevaVenta._id} añadida a pedido ${shipping._id}`);
-  } else {
-    console.warn(`Venta ${nuevaVenta._id} ya está en el pedido ${shipping._id}`);
-  }
-
+//  Añadir venta al vendedor
+await VendedorModel.findByIdAndUpdate(
+  nuevaVenta.id_vendedor,
+  { $push: { venta: nuevaVenta._id } }
+);
+console.log(`Venta ${nuevaVenta._id} añadida a vendedor ${nuevaVenta.id_vendedor}`);
   return nuevaVenta;
 };
 const updateShipping = async (newData: any, shippingId: string) => {
