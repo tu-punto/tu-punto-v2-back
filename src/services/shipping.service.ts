@@ -30,20 +30,21 @@ const registerSaleToShipping = async (
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
   }
 
-  console.log("Venta a registrar:", {
+  /*console.log("Venta a registrar:", {
     shippingId,
     saleWithoutShippingId
-  });
+  });*/
 
   // Crear nueva venta
   const sale = new VentaModel({
   ...saleWithoutShippingId,
   pedido: new Types.ObjectId(shipping._id),
   id_pedido: shipping._id,
+  producto: saleWithoutShippingId.id_producto,
 });
-
+//console.log("Nueva venta creada:",sale);
 const nuevaVenta = await SaleRepository.registerSale(sale);
-
+//console.log("Venta registrada:", nuevaVenta);
 // Verificar si ya está en el array venta del pedido
 const yaExiste = shipping.venta?.some((ventaId: Types.ObjectId) =>
   ventaId.equals(nuevaVenta._id)
@@ -53,15 +54,15 @@ if (!yaExiste) {
   await PedidoModel.findByIdAndUpdate(shipping._id, {
     $push: { venta: nuevaVenta._id }
   });
-  console.log(`Venta ${nuevaVenta._id} añadida a pedido ${shipping._id}`);
+  //console.log(`Venta ${nuevaVenta._id} añadida a pedido ${shipping._id}`);
 }
 
 //  Añadir venta al vendedor
 await VendedorModel.findByIdAndUpdate(
-  nuevaVenta.id_vendedor,
+  nuevaVenta.vendedor,
   { $push: { venta: nuevaVenta._id } }
 );
-console.log(`Venta ${nuevaVenta._id} añadida a vendedor ${nuevaVenta.id_vendedor}`);
+//console.log(`Venta ${nuevaVenta._id} añadida a vendedor ${nuevaVenta.vendedor}`);
   return nuevaVenta;
 };
 const updateShipping = async (newData: any, shippingId: string) => {

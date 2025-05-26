@@ -142,18 +142,18 @@ const updateStockByVariantCombination = async (
   const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
   if (!sucursal) throw new Error("Sucursal no encontrada");
 
-  console.log("🔍 Buscando combinación para variantes:", variantes);
-  console.log("📦 Combinaciones disponibles:", sucursal.combinaciones.map((c, i) => ({ index: i + 1, variantes: c.variantes })));
+  //console.log("🔍 Buscando combinación para variantes:", variantes);
+  //console.log("📦 Combinaciones disponibles:", sucursal.combinaciones.map((c, i) => ({ index: i + 1, variantes: c.variantes })));
   const combinacion = sucursal.combinaciones.find((c, index) => {
   const variantesPlanas = Object.fromEntries(c.variantes instanceof Map ? c.variantes : Object.entries(c.variantes || {}));
   const combKeys = Object.keys(variantesPlanas);
   const inputKeys = Object.keys(variantes);
 
-  console.log(`\n🧪 Combinación #${index + 1}:`, variantesPlanas);
-  console.log(`📥 Entrada esperada:`, variantes);
+  //console.log(`\n🧪 Combinación #${index + 1}:`, variantesPlanas);
+  //console.log(`📥 Entrada esperada:`, variantes);
 
   if (combKeys.length !== inputKeys.length) {
-    console.log(`❌ Diferente número de claves: combinacion (${combKeys.length}) vs entrada (${inputKeys.length})`);
+    //console.log(`❌ Diferente número de claves: combinacion (${combKeys.length}) vs entrada (${inputKeys.length})`);
     return false;
   }
 
@@ -162,11 +162,11 @@ const updateStockByVariantCombination = async (
     const inputVal = variantes[key]?.toLowerCase?.();
     const igual = combVal === inputVal;
 
-    console.log(`🔍 Comparando '${key}': ${combVal} vs ${inputVal} => ${igual ? '✅' : '❌'}`);
+    //console.log(`🔍 Comparando '${key}': ${combVal} vs ${inputVal} => ${igual ? '✅' : '❌'}`);
     return igual;
   });
 
-  if (match) console.log(`✅ ¡MATCH encontrado con combinación #${index + 1}!`);
+  if (match) console.log(`¡MATCH encontrado con combinación #${index + 1}!`);
 
   return match;
 });
@@ -175,7 +175,7 @@ const updateStockByVariantCombination = async (
     throw new Error("No se encontró la combinación");
   }
 
-  console.log(`🛠️ Actualizando stock a: ${nuevoStock}`);
+  console.log(`Actualizando stock a: ${nuevoStock}`);
   combinacion.stock = nuevoStock;
 
   return await producto.save();

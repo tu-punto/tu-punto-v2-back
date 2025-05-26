@@ -2,6 +2,7 @@ import { ProductRepository } from "../repositories/product.repository";
 import { FeatureRepository } from "../repositories/feature.repository";
 import { ICaracteristicas } from "../entities/ICaracteristicas";
 import { IProducto } from "../entities/IProducto";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
 
 interface Feature {
   feature: string;
@@ -13,7 +14,16 @@ const getAllProducts = async () => {
 };
 
 const registerProduct = async (product: IProducto): Promise<any> => {
-  return await ProductRepository.registerProduct(product);
+  const nuevoProducto = await ProductRepository.registerProduct(product);
+
+  if (nuevoProducto.id_vendedor) {
+    await VendedorModel.findByIdAndUpdate(
+      nuevoProducto.id_vendedor,
+      { $push: { producto: nuevoProducto._id } }
+    );
+  }
+
+  return nuevoProducto;
 };
 
 const getFeaturesById = async (productId: string) => {
