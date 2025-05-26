@@ -47,7 +47,7 @@ export const getProductDetailsByProductId = async (req: Request, res: Response) 
   }
 };
 export const getProductsBySellerId = async (req: Request, res: Response) => {
-  const sellerId: number = parseInt(req.params.id);
+  const sellerId = req.params.id;
   try {
     const products = await SaleService.getProductsBySellerId(sellerId);
     res.json(products);

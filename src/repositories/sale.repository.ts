@@ -2,7 +2,6 @@ import { VentaModel } from "../entities/implements/VentaSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { IVenta } from "../entities/IVenta";
 import { IVentaDocument } from "../entities/documents/IVentaDocument";
-import mongoose from "mongoose";
 
 
 const findAll = async (): Promise<IVentaDocument[]> => {
@@ -34,7 +33,7 @@ const findByProductId = async (productId: number) => {
   return await VentaModel.find({ id_producto: productId }).populate(['producto', 'pedido', 'vendedor']);
 };
 
-const findBySellerId = async (sellerId: number) => {
+const findBySellerId = async (sellerId: string) => {
   return await VentaModel.find({ id_vendedor: sellerId }).populate(['producto', 'pedido']);
 };
 

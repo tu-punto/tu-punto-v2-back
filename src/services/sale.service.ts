@@ -56,9 +56,10 @@ const getProductDetailsByProductId = async (productId: number) => {
 
     return products;
 };
-const getProductsBySellerId = async (sellerId: number) => {
+const getProductsBySellerId = async (sellerId: string) => {
     const sales = await SaleRepository.findBySellerId(sellerId);
 
+    console.log(sales)
     if (sales.length === 0)
         return []
     //throw new Error("No existen ventas con ese ID de vendedor");
@@ -80,6 +81,8 @@ const getProductsBySellerId = async (sellerId: number) => {
 
     return products;
 }
+
+
 const updateProducts = async (shippingId: number, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
     if (!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);

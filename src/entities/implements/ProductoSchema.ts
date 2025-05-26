@@ -33,6 +33,6 @@ const ProductoSchema = new Schema({
   group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' },
   groupId: { type: Number },
   sucursales: [SucursalProductoSchema] // ACTUALIZADO
-}, { timestamps: true });
+}, { timestamps: true, collection: 'Producto' });
 
 export const ProductoModel = model<IProductoDocument>("Producto", ProductoSchema);

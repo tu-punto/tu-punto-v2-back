@@ -71,7 +71,7 @@ export const getShippingsBySellerController = async (
   req: Request,
   res: Response
 ) => {
-  const id = parseInt(req.params.id);
+  const id = req.params.id;
   try {
     const shippingsBySeller = await ShippingService.getShippingsBySellerService(
       id

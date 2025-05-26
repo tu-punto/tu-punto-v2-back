@@ -71,7 +71,7 @@ const updateShipping = async (newData: any, shippingId: string) => {
   return await ShippingRepository.updateShipping(newData, shipping);
 };
 
-const getShippingsBySellerService = async (sellerId: number) => {
+const getShippingsBySellerService = async (sellerId: string) => {
   const salesBySeller = await SaleRepository.findBySellerId(sellerId);
 
   const uniqueShippings: IPedidoDocument[] = []; 
