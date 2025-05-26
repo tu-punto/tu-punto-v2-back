@@ -17,7 +17,7 @@ const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
 
 
 const findById = async (saleId: number) => {
-  return await VentaModel.findOne({ id_venta: saleId }).populate(['producto', 'pedido', 'vendedor']);
+  return await VentaModel.findOne({ _id: saleId }).populate(['producto', 'pedido', 'vendedor']);
 };
 
 const updateSale = async (sale: IVenta) => {
@@ -26,15 +26,15 @@ const updateSale = async (sale: IVenta) => {
 
 
 const findByPedidoId = async (pedidoId: number) => {
-  return await VentaModel.find({ id_pedido: pedidoId }).populate(['producto']);
+  return await VentaModel.find({ pedido: pedidoId }).populate(['producto']);
 };
 
 const findByProductId = async (productId: number) => {
-  return await VentaModel.find({ id_producto: productId }).populate(['producto', 'pedido', 'vendedor']);
+  return await VentaModel.find({ producto: productId }).populate(['producto', 'pedido', 'vendedor']);
 };
 
 const findBySellerId = async (sellerId: string) => {
-  return await VentaModel.find({ id_vendedor: sellerId }).populate(['producto', 'pedido']);
+  return await VentaModel.find({ vendedor: sellerId }).populate(['producto', 'pedido']);
 };
 
 const updateProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
@@ -42,7 +42,7 @@ const updateProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
 
   for (const sale of sales) {
     for (const prod of prods) {
-      if (prod.id_venta === sale.id_venta && sale.producto?.id_producto === prod.id_producto) {
+      if (prod._id === sale._id && sale.producto?._id === prod._id) {
         const updated = await ProductoModel.findOneAndUpdate(
           { _id: sale.producto._id },
           { ...prod },
@@ -61,7 +61,7 @@ const updateSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
 
   for (const sale of salesData) {
     const updatedSale = await VentaModel.findOneAndUpdate(
-      { id_venta: sale.id_venta },
+      { _id: sale._id },
       {
         cantidad: sale.cantidad,
         precio_unitario: sale.precio_unitario,
@@ -75,23 +75,23 @@ const updateSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
 };
 
 const deleteSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
-  const ids = salesData.map(s => s.id_venta);
-  await VentaModel.deleteMany({ id_venta: { $in: ids } });
+  const ids = salesData.map(s => s._id);
+  await VentaModel.deleteMany({ _id: { $in: ids } });
   return ids;
 };
 
 const deleteProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
   const deletedProducts: any[] = [];
-  const keys = new Set(prods.map(p => `${p.id_venta}-${p.id_producto}`));
+  const keys = new Set(prods.map(p => `${p._id}-${p._id}`));
 
   for (const sale of sales) {
-    const key = `${sale.id_venta}-${sale.producto.id_producto}`;
+    const key = `${sale._id}-${sale.producto._id}`;
     if (keys.has(key)) {
       await VentaModel.deleteOne({
-        id_venta: sale.id_venta,
-        id_producto: sale.producto.id_producto,
+        _id: sale._id,
+        producto: sale.producto._id,
       });
-      deletedProducts.push({ id_venta: sale.id_venta, id_producto: sale.producto.id_producto });
+      deletedProducts.push({ _id: sale._id, id_producto: sale.producto._id });
     }
   }
 
@@ -99,13 +99,13 @@ const deleteProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
 };
 
 const deleteSalesByIds = async (saleIds: number[]): Promise<any> => {
-  await VentaModel.deleteMany({ id_venta: { $in: saleIds } });
+  await VentaModel.deleteMany({ _id: { $in: saleIds } });
 };
 
 const getDataPaymentProof = async (sellerId: number) => {
   return await VentaModel.find({
     deposito_realizado: false,
-    id_vendedor: sellerId
+    vendedor: sellerId
   }).populate(['producto', 'pedido']);
 };
 

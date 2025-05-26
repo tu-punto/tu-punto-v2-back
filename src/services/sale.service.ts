@@ -59,7 +59,6 @@ const getProductDetailsByProductId = async (productId: number) => {
 const getProductsBySellerId = async (sellerId: string) => {
     const sales = await SaleRepository.findBySellerId(sellerId);
 
-    console.log(sales)
     if (sales.length === 0)
         return []
     //throw new Error("No existen ventas con ese ID de vendedor");
