@@ -40,7 +40,9 @@ const registerSaleToShipping = async (
   ...saleWithoutShippingId,
   pedido: new Types.ObjectId(shipping._id),
   id_pedido: shipping._id,
-  producto: saleWithoutShippingId.id_producto,
+  producto: new Types.ObjectId(saleWithoutShippingId.id_producto),
+vendedor: new Types.ObjectId(saleWithoutShippingId.id_vendedor),
+
 });
 //console.log("Nueva venta creada:",sale);
 const nuevaVenta = await SaleRepository.registerSale(sale);
@@ -80,7 +82,7 @@ const getShippingsBySellerService = async (sellerId: string) => {
 
   for (const sale of salesBySeller) {
     const pedidoPopulado = await sale.populate('pedido'); 
-    const pedidoId = pedidoPopulado.pedido?.id_pedido?.toString();
+    const pedidoId = pedidoPopulado.pedido?._id?.toString();
 
     if (pedidoId && !checkedShippings[pedidoId]) {
       checkedShippings[pedidoId] = true;

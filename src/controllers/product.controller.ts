@@ -130,7 +130,7 @@ export const updatePrice = async (req: Request, res: Response) => {
 };
 
 export const updateSubvariantStock = async (req: Request, res: Response) => {
-  console.log("Updating subvariant stock");
+  //console.log("Updating subvariant stock");
   const { productId, sucursalId, variantes, stock } = req.body;  try {
     const result = await ProductService.updateStockByVariantCombination({
       productId,

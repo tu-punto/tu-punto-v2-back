@@ -7,8 +7,8 @@ const PedidoSchema = new Schema({
     required: true
   },
   telefono_cliente: {
-    type: Number,
-    default: 0
+    type: String,
+    required:false
   },
   tipo_de_pago: {
     type: String,
@@ -49,6 +49,11 @@ const PedidoSchema = new Schema({
   adelanto_cliente: {
     type: Number,
     default: 0
+  },
+  esta_pagado: {
+  type: String,
+  enum: ['si', 'no', 'adelanto'],
+  default: 'no'
   },
   pagado_al_vendedor: {
     type: Boolean,
