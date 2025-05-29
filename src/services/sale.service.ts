@@ -150,6 +150,22 @@ const getDataPaymentProof = async (sellerId: number) => {
     return { products, payments }
 }
 
+const updateSaleById = async (id: string, fields: any) => {
+    const venta = await SaleRepository.findById(id);
+    if (!venta) return null;
+
+    const updated = await SaleRepository.updateSale({ _id: id, ...fields });
+    return updated;
+};
+
+const deleteSaleById = async (id: string) => {
+    const venta = await SaleRepository.findById(id);
+    if (!venta) return null;
+
+    await SaleRepository.deleteSaleById(id);
+    return true;
+};
+
 export const SaleService = {
     getAllSales,
     registerSale,
@@ -162,5 +178,7 @@ export const SaleService = {
     deleteSalesByIds,
     getDataPaymentProof,
     updateSalesOfProducts,
-    deleteSalesOfProducts
+    deleteSalesOfProducts,
+    updateSaleById,
+    deleteSaleById,
 }

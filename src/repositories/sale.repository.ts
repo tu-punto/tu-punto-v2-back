@@ -16,7 +16,7 @@ const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
 };
 
 
-const findById = async (saleId: number) => {
+const findById = async (saleId: string) => {
   return await VentaModel.findOne({ _id: saleId }).populate(['producto', 'pedido', 'vendedor']);
 };
 
@@ -109,6 +109,9 @@ const getDataPaymentProof = async (sellerId: number) => {
   }).populate(['producto', 'pedido']);
 };
 
+const deleteSaleById = async (id: string) => {
+  await VentaModel.deleteOne({ _id: id });
+};
 
 export const SaleRepository = {
   findAll,
@@ -123,6 +126,7 @@ export const SaleRepository = {
   updateSale,
   deleteSalesByIds,
   getDataPaymentProof,
-  deleteSalesOfProducts
+  deleteSalesOfProducts,
+  deleteSaleById
 };
 

@@ -159,3 +159,42 @@ export const getDataPaymentProof = async (req: Request, res: Response) => {
     
   }
 }
+
+export const updateSaleById = async (req: Request, res: Response) => {
+  const id = req.params.id;
+  const fieldsToUpdate = req.body;
+
+  try {
+    const updatedSale = await SaleService.updateSaleById(id, fieldsToUpdate);
+    if (!updatedSale) {
+      return res.status(404).json({ msg: 'Venta no encontrada' });
+    }
+
+    res.status(200).json({
+      success: true,
+      updatedSale,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error actualizando venta', error });
+  }
+};
+
+export const deleteSaleById = async (req: Request, res: Response) => {
+  const id = req.params.id;
+
+  try {
+    const deleted = await SaleService.deleteSaleById(id);
+    if (!deleted) {
+      return res.status(404).json({ msg: 'Venta no encontrada o ya eliminada' });
+    }
+
+    res.status(200).json({
+      success: true,
+      deletedSale: id,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error eliminando venta', error });
+  }
+};

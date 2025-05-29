@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { deleteSalesOfProducts, deleteProducts, getProductsByShippingId, getProductDetailsByProductId, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales, getDataPaymentProof, updateSalesOfProducts } from "../controllers/sale.controller";
+import { deleteSalesOfProducts, deleteProducts, getProductsByShippingId, getProductDetailsByProductId, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales, getDataPaymentProof, updateSalesOfProducts, updateSaleById, deleteSaleById } from "../controllers/sale.controller";
 
 const saleRouter = Router();
 
@@ -26,5 +26,9 @@ saleRouter.delete('/', deleteSales)
 saleRouter.delete('/products/', deleteSalesOfProducts)
 
 saleRouter.get('/payment/:id', getDataPaymentProof )
+
+saleRouter.put('/:id', updateSaleById);
+
+saleRouter.delete('/:id', deleteSaleById);
 
 export default saleRouter;
