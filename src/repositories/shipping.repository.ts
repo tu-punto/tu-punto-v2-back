@@ -12,7 +12,7 @@ const findById = async (shippingId: string): Promise<IPedidoDocument | null> => 
 };
 
 const findByIds = async (shippingIds: string[]): Promise<IPedidoDocument[]> => {
-  const pedidos = await PedidoModel.find({ id_pedido: { $in: shippingIds } }).populate(['venta', 'sucursal', 'trabajador']);
+const pedidos = await PedidoModel.find({ _id: { $in: shippingIds } })
   return pedidos;
 };
 
@@ -24,7 +24,7 @@ const registerShipping = async (shipping: IPedido): Promise<IPedidoDocument> => 
 
 const updateShipping = async (newData: Partial<IPedido>, shipping: IPedido): Promise<IPedidoDocument | null> => {
   const updated = await PedidoModel.findOneAndUpdate(
-    { id_pedido: shipping.id_pedido },
+    { _id: shipping._id },
     { ...shipping, ...newData },
     { new: true }
   );
