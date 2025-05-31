@@ -22,14 +22,14 @@ const registerShipping = async (shipping: IPedido): Promise<IPedidoDocument> => 
   return saved;
 };
 
-const updateShipping = async (newData: Partial<IPedido>, shipping: IPedido): Promise<IPedidoDocument | null> => {
-  const updated = await PedidoModel.findOneAndUpdate(
-    { _id: shipping._id },
-    { ...shipping, ...newData },
+const updateShipping = async (newData: Partial<IPedido>, shippingId: string): Promise<IPedidoDocument | null> => {
+  return await PedidoModel.findByIdAndUpdate(
+    shippingId,
+    { $set: newData },
     { new: true }
   );
-  return updated;
 };
+
 
 export const ShippingRepository = {
   findAll,

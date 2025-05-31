@@ -38,32 +38,52 @@ export const registerShipping = async (req: Request, res: Response) => {
 
 export const registerSaleToShipping = async (req: Request, res: Response) => {
   const { shippingId, sales } = req.body;
+
   try {
     const savedSales = [];
 
+    const productosTemporales: any[] = [];
+
     for (let sale of sales) {
-      const saleShipping = await ShippingService.registerSaleToShipping(
-        shippingId,
-        sale
-      );
-      savedSales.push(saleShipping);
+      const esTemporal = !sale.id_producto || sale.id_producto.length !== 24;
+
+      if (esTemporal) {
+        productosTemporales.push({
+          producto: sale.producto,
+          cantidad: sale.cantidad,
+          precio_unitario: sale.precio_unitario,
+          utilidad: sale.utilidad,
+          id_vendedor: sale.id_vendedor,
+        });
+      } else {
+        const saleShipping = await ShippingService.registerSaleToShipping(shippingId, sale);
+        savedSales.push(saleShipping);
+      }
     }
-    res.json(savedSales);
+
+    // Guardamos productos temporales directamente en el pedido
+    if (productosTemporales.length > 0) {
+      await ShippingService.addTemporaryProductsToShipping(shippingId, productosTemporales);
+    }
+
+    res.json({ success: true, ventas: savedSales });
   } catch (error) {
     console.error(error);
     res.status(500).json({ msg: "Shipping Internal Server Error", error });
   }
 };
 
+
 const updateShipping = async (req: Request, res: Response) => {
-  const id = (req.params.id);
-  const { newData } = req.body;
+  const id = req.params.id;
+  const newData = req.body; // 👈 aquí ya no esperes { newData }, sino el objeto directamente
+
   try {
     const shippingUpdated = await ShippingService.updateShipping(newData, id);
-    res.json(shippingUpdated);
+    res.json({ success: true, shippingUpdated });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: "Internal Server Error", error });
+    res.status(500).json({ success: false, msg: "Internal Server Error", error });
   }
 };
 
