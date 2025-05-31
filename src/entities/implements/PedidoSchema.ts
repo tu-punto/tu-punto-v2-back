@@ -12,7 +12,7 @@ const PedidoSchema = new Schema({
   },
   tipo_de_pago: {
     type: String,
-    required: true
+    required: false
   },
   fecha_pedido: {
     type: Date,
@@ -80,7 +80,16 @@ const PedidoSchema = new Schema({
   venta: [{
     type: Types.ObjectId,
     ref: 'Venta'
-  }]
+  }],
+  productos_temporales: [
+  {
+    producto: { type: String, required: true },
+    cantidad: { type: Number, required: true },
+    precio_unitario: { type: Number, required: true },
+    utilidad: { type: Number, default: 0 },
+    id_vendedor: { type: Schema.Types.ObjectId, ref: 'Vendedor', required: true }
+  }
+],
 }, {
   collection: 'Pedido',
   timestamps: false
