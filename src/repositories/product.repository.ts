@@ -3,6 +3,7 @@ import { IVentaDocument } from '../entities/documents/IVentaDocument';
 import { IProducto } from '../entities/IProducto';
 import { IProductoDocument } from '../entities/documents/IProductoDocument';
 import { Types } from 'mongoose';
+import mongoose from 'mongoose';
 
 const findAll = async (): Promise<IProductoDocument[]> => {
   return await ProductoModel.find()
@@ -21,6 +22,10 @@ const findBySellerId = async (sellerId: string): Promise<IProductoDocument[]> =>
 };
 
 const registerProduct = async (product: IProducto): Promise<IProductoDocument> => {
+  if (product._id && !mongoose.isValidObjectId(product._id)) {
+  delete product._id; 
+}
+
   const newProduct = new ProductoModel(product);
   return await newProduct.save();
 };

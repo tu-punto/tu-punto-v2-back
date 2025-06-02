@@ -28,10 +28,10 @@ const registerProduct = async (req: Request, res: Response) => {
 };
 
 export const registerProductVariants = async (req: Request, res: Response) => {
-  const { product } = req.body;
+  console.log("Registering product with variants", req.body);
 
   try {
-    const newProduct = await ProductService.registerProduct(product);
+    const newProduct = await ProductService.registerProduct(req.body); // ✅ usa req.body directamente
     res.json({ success: true, newProduct });
   } catch (error) {
     console.error("Error al registrar variantes:", error);

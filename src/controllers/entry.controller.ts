@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as EntryService from '../services/entry.service'
+import { ProductoModel } from "../entities/implements/ProductoSchema";
 
 export const getProductsEntryAmount = async (req: Request, res: Response) => {
   const { id } = req.params
@@ -87,14 +88,33 @@ export const updateEntriesOfProducts = async (req: Request, res: Response) => {
 
 export const createEntry = async (req: Request, res: Response) => {
   const entryData = req.body;
+
   try {
+    const producto = await ProductoModel.findById(entryData.producto);
+    if (!producto) {
+      return res.status(404).json({ success: false, message: "Producto no encontrado" });
+    }
+    entryData.vendedor = producto.id_vendedor;
+    if (!entryData.fecha_ingreso) {
+      entryData.fecha_ingreso = new Date();
+    }
+
     const entry = await EntryService.createEntry(entryData);
+
+    if (!producto.ingreso) {
+      producto.ingreso = [];
+    }
+    producto.ingreso.push(entry._id);
+    await producto.save();
+
     res.json({
       status: true,
       entry,
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ msg: "Error creating entry", error });
   }
 };
+
