@@ -89,6 +89,13 @@ const getSellerDebts = async (sellerId: string) => {
   return sellerDebts;
 };
 
+const updateSellerSaldo = async (sellerId: any, addSaldo: number) => {
+  const seller = await SellerRepository.findById(sellerId);
+  if (!seller) throw new Error(`Seller with id ${sellerId} not found`);
+  const newSaldo = (seller.saldo_pendiente || 0) + addSaldo;
+  return await SellerRepository.updateSeller(sellerId, { saldo_pendiente: newSaldo });
+};
+
 export const SellerService = {
   getAllSellers,
   getSeller,
@@ -97,4 +104,5 @@ export const SellerService = {
   renewSeller,
   paySellerDebt,
   getSellerDebts,
+  updateSellerSaldo
 };

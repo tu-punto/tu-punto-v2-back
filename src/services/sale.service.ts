@@ -1,5 +1,7 @@
-import { SaleRepository } from "../repositories/sale.repository";
 import { format } from 'date-fns';
+
+import { SaleRepository } from "../repositories/sale.repository";
+import { SellerService } from "./seller.service";
 
 const getAllSales = async () => {
     return await SaleRepository.findAll();
@@ -153,8 +155,9 @@ const getDataPaymentProof = async (sellerId: number) => {
 const updateSaleById = async (id: string, fields: any) => {
     const venta = await SaleRepository.findById(id);
     if (!venta) return null;
-
+    const addPendingSaldo = -(venta.cantidad* venta.precio_unitario) + (fields.cantidad * fields.precio_unitario);
     const updated = await SaleRepository.updateSale({ _id: id, ...fields });
+    await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
     return updated;
 };
 
