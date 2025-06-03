@@ -8,4 +8,13 @@ const registerUserService = async (user: IUser) => {
 const findByEmailService = async (email: string) => {
   return await UserRepository.getUserByEmail(email);
 };
-export const UserService = { registerUserService, findByEmailService };
+const getUserByIdService = async (id: string) => {
+  return await UserRepository.getUserById(id);
+};
+
+export const UserService = {
+  registerUserService,
+  findByEmailService,
+  getUserByIdService, 
+};
+

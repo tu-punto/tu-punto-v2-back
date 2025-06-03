@@ -5,6 +5,7 @@ import { CategoryService } from "../services/category.service";
 import { comparePassword, hashPassword } from "../helpers/auth";
 import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
+import { VendedorModel } from "../entities/implements/VendedorSchema"; 
 
 dotenv.config();
 
@@ -46,41 +47,66 @@ export const loginUserController = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(401).json({ error: "User with such email does not exist" });
     }
+
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: "Incorrect password" });
     }
 
-    const token = generateToken(parseInt(user._id.toString()), user.role, sucursalId);
+    const token = generateToken(user._id.toString(), user.role, sucursalId);
+
+    let id_vendedor = null;
+    if (user.role === "seller") {
+      const vendedor = await VendedorModel.findOne({ mail: user.email });
+      id_vendedor = vendedor?._id || null;
+    }
 
     res
       .cookie("token", token, {
-        maxAge: 24 * 60 * 60 * 1000, // 1 día
+        maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
         secure: isSecure,
         sameSite: isSecure ? "strict" : "lax",
         path: "/",
       })
-      .json({ ...user, password: "" });
+      .json({
+        ...user.toObject?.() || user,
+        password: "",
+        id_vendedor, 
+      });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-
 export const getUserInfoController = async (req: Request, res: Response) => {
   const { token } = req.cookies;
-  console.log(token);
   if (!token) {
-    res.status(500).json({ msg: "Error getting token" });
-    return;
+    return res.status(401).json({ msg: "Token no encontrado" });
   }
+
   try {
-    const user = jwt.verify(token, JWT_SECRET, {});
-    res.json(user);
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const user = await UserService.getUserByIdService(decoded.id);
+
+    if (!user) {
+      return res.status(404).json({ msg: "Usuario no encontrado" });
+    }
+
+    const userObj = user.toObject?.() || user;
+    delete userObj.password;
+
+    if (userObj.role === "seller") {
+      const vendedor = await VendedorModel.findOne({ mail: userObj.email });
+      userObj.id_vendedor = vendedor?._id || null;
+    }
+
+    //console.log("Enviando al frontend:", userObj);
+    res.json({ success: true, data: userObj });
   } catch (error) {
-    res.status(500).json({ msg: "Error getting user" });
+    console.error(error);
+    res.status(500).json({ msg: "Error al obtener usuario" });
   }
 };
 
