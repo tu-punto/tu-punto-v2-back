@@ -66,10 +66,24 @@ const getStatsService = async () => {
 
 const updateFinanceFlux = async (fluxId: string, updates: Partial<IFlujoFinanciero>) => {
   const _id = new Types.ObjectId(fluxId);
+
   const existingFlux = await FinanceFluxRepository.findById(_id);
   if (!existingFlux) throw new Error("Flujo no encontrado");
 
-  return await FinanceFluxRepository.updateById(fluxId, updates);
+  const oldDeuda = existingFlux.esDeuda ? existingFlux.monto : 0;
+
+  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, updates);
+  if (!updatedFlux) throw new Error("Error al actualizar el flujo");
+
+
+  const newDeuda = updatedFlux.esDeuda ? updatedFlux.monto : 0;
+  const diff = newDeuda - oldDeuda;
+
+  if (diff !== 0 && updatedFlux.id_vendedor) {
+    await SellerRepository.incrementDebt(updatedFlux.id_vendedor.toString(), diff);
+  }
+
+  return updatedFlux;
 };
 
 
