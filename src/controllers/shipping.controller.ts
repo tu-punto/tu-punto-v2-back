@@ -73,7 +73,6 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
   }
 };
 
-
 const updateShipping = async (req: Request, res: Response) => {
   const id = req.params.id;
   const newData = req.body; // 👈 aquí ya no esperes { newData }, sino el objeto directamente

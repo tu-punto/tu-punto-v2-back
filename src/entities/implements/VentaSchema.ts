@@ -18,7 +18,6 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: Boolean,
     default: false
   },
-
   producto: {
     type: Schema.Types.ObjectId,
     ref: 'Producto'
@@ -30,7 +29,12 @@ const VentaSchema = new Schema<IVentaDocument>({
   vendedor: {
     type: Schema.Types.ObjectId,
     ref: 'Vendedor'
-  }
+  },
+  quien_paga_delivery: {
+  type: String,
+  enum: ["comprador", "vendedor", "tupunto"],
+  default: "comprador" // o required: true si lo prefieres
+},
 }, {
   collection: 'Venta',
   timestamps: false

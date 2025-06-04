@@ -56,9 +56,14 @@ export const loginUserController = async (req: Request, res: Response) => {
     const token = generateToken(user._id.toString(), user.role, sucursalId);
 
     let id_vendedor = null;
+    let nombre_vendedor = null;
+
     if (user.role === "seller") {
       const vendedor = await VendedorModel.findOne({ mail: user.email });
-      id_vendedor = vendedor?._id || null;
+      if (vendedor) {
+        id_vendedor = vendedor._id;
+        nombre_vendedor = `${vendedor.nombre} ${vendedor.apellido}`;
+      }
     }
 
     res
@@ -72,7 +77,8 @@ export const loginUserController = async (req: Request, res: Response) => {
       .json({
         ...user.toObject?.() || user,
         password: "",
-        id_vendedor, 
+        id_vendedor,
+        nombre_vendedor, 
       });
   } catch (error) {
     console.error(error);
@@ -97,10 +103,14 @@ export const getUserInfoController = async (req: Request, res: Response) => {
     const userObj = user.toObject?.() || user;
     delete userObj.password;
 
-    if (userObj.role === "seller") {
-      const vendedor = await VendedorModel.findOne({ mail: userObj.email });
-      userObj.id_vendedor = vendedor?._id || null;
+  if (userObj.role === "seller") {
+    const vendedor = await VendedorModel.findOne({ mail: userObj.email });
+    if (vendedor) {
+      userObj.id_vendedor = vendedor._id;
+      userObj.nombre_vendedor = `${vendedor.nombre} ${vendedor.apellido}`;
     }
+  }
+
 
     //console.log("Enviando al frontend:", userObj);
     res.json({ success: true, data: userObj });

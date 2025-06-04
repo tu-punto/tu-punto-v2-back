@@ -16,4 +16,5 @@ export interface IVenta {
   producto: IProducto;
   pedido: IPedido;
   vendedor: IVendedor;
+  quien_paga_delivery?: 'comprador' | 'vendedor' | 'tupunto';
 }
