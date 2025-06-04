@@ -33,7 +33,7 @@ const VentaSchema = new Schema<IVentaDocument>({
   quien_paga_delivery: {
   type: String,
   enum: ["comprador", "vendedor", "tupunto"],
-  default: "comprador" // o required: true si lo prefieres
+  default: "comprador"
 },
 }, {
   collection: 'Venta',
