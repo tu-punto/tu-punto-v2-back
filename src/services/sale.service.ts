@@ -64,20 +64,23 @@ const getProductsBySellerId = async (sellerId: string) => {
     if (sales.length === 0)
         return []
     //throw new Error("No existen ventas con ese ID de vendedor");
-    const products = sales.map(sale => ({
-        key: sale.producto._id,
-        producto: sale.producto.nombre_producto,
-        precio_unitario: sale.precio_unitario,
-        cantidad: sale.cantidad,
-        utilidad: sale.utilidad,
-        id_venta: sale._id,
-        id_vendedor: sellerId,
-        id_pedido: sale.id_pedido,
-        id_producto: sale.producto._id,
-        deposito_realizado: sale.deposito_realizado,
-        cliente: sale.pedido.cliente,
-        fecha_pedido: sale.pedido.fecha_pedido
-    }));
+    const products = sales.map((sale) => {
+
+        return {
+            key: sale.producto._id,
+            producto: sale.producto.nombre_producto,
+            precio_unitario: sale.precio_unitario,
+            cantidad: sale.cantidad,
+            utilidad: sale.utilidad,
+            id_venta: sale._id,
+            id_vendedor: sellerId,
+            id_pedido: sale.pedido,
+            id_producto: sale.producto._id,
+            deposito_realizado: sale.deposito_realizado,
+            cliente: sale.pedido.cliente,
+            fecha_pedido: sale.pedido.fecha_pedido
+        }
+    });
 
 
     return products;
@@ -155,7 +158,7 @@ const getDataPaymentProof = async (sellerId: number) => {
 const updateSaleById = async (id: string, fields: any) => {
     const venta = await SaleRepository.findById(id);
     if (!venta) return null;
-    const addPendingSaldo = -(venta.cantidad* venta.precio_unitario) + (fields.cantidad * fields.precio_unitario);
+    const addPendingSaldo = -(venta.cantidad * venta.precio_unitario) + (fields.cantidad * fields.precio_unitario);
     const updated = await SaleRepository.updateSale({ _id: id, ...fields });
     await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
     return updated;
