@@ -4,6 +4,7 @@ import { VendedorSchema } from "../entities/implements/VendedorSchema";
 import { IVendedor } from "../entities/IVendedor";
 import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 import { FlujoFinancieroModel } from '../entities/implements/FlujoFinancieroSchema';
+import { VentaModel } from "../entities/implements/VentaSchema";
 
 const VendedorModel = mongoose.model<IVendedorDocument>("Vendedor", VendedorSchema);
 
@@ -34,10 +35,18 @@ export const incrementDebt = async (id: string, delta: number) => {
 const findDebtsBySeller = async (sellerId: string) => {
   return await FlujoFinancieroModel.find({
     id_vendedor: new Types.ObjectId(sellerId),
+    esDeuda: true
   })
     .select('monto concepto fecha')
     .lean()
     .exec();
+};
+
+const markSalesAsDeposited = async (sellerId: string): Promise<void> => {
+  await VentaModel.updateMany(
+    { vendedor: sellerId, deposito_realizado: false },
+    { $set: { deposito_realizado: true } }
+  );
 };
 
 export const SellerRepository = {
@@ -46,7 +55,8 @@ export const SellerRepository = {
   updateSeller,
   findById,
   incrementDebt,
-  findDebtsBySeller
+  findDebtsBySeller,
+  markSalesAsDeposited
 };
 
 

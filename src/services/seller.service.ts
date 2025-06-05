@@ -81,6 +81,11 @@ const paySellerDebt = async (id: string, payAll: boolean) => {
   const update: Partial<typeof seller> = { saldo_pendiente: 0 };
   if (payAll) update.deuda = 0;
 
+  if (payAll) {
+    await FinanceFluxRepository.markFinanceFluxAsPaid(id);
+  }
+  await SellerRepository.markSalesAsDeposited(id);
+
   return await SellerRepository.updateSeller(id, update);
 };
 
