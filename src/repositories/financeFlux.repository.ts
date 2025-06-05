@@ -51,6 +51,13 @@ const findSellerInfoById = async (sellerId: Types.ObjectId): Promise<IFlujoFinan
   return await FlujoFinancieroModel.find({ vendedor: sellerId }).exec();
 };
 
+const markFinanceFluxAsPaid = async (sellerId: string): Promise<void> => {
+  await FlujoFinancieroModel.updateMany(
+    { id_vendedor: sellerId, esDeuda: true },
+    { $set: { esDeuda: false } }
+  );
+};
+
 export const FinanceFluxRepository = {
   findAll,
   registerFinanceFlux,
@@ -58,5 +65,6 @@ export const FinanceFluxRepository = {
   findSellerById,
   findSellerInfoById,
   findById,
-  updateById
+  updateById,
+  markFinanceFluxAsPaid
 };
