@@ -34,7 +34,12 @@ const VentaSchema = new Schema<IVentaDocument>({
   type: String,
   enum: ["comprador", "vendedor", "tupunto"],
   default: "comprador"
-},
+  },
+  nombre_variante: {
+    type: String,
+    default: "",
+  },
+
 }, {
   collection: 'Venta',
   timestamps: false
