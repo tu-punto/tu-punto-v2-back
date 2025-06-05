@@ -3,16 +3,50 @@ import { IPedido } from "../entities/IPedido";
 import { IPedidoDocument } from "../entities/documents/IPedidoDocument";
 
 const findAll = async (): Promise<IPedidoDocument[]> => {
-  const pedidos = await PedidoModel.find().populate(['venta', 'sucursal', 'trabajador']);
+  const pedidos = await PedidoModel.find().populate([
+    {
+      path: 'venta',
+      populate: {
+        path: 'vendedor',
+        select: 'nombre apellido', 
+      },
+    },
+    'sucursal',
+    'trabajador',
+    'lugar_origen',
+  ]);
   return pedidos;
 };
 
+
 const findById = async (shippingId: string): Promise<IPedidoDocument | null> => {
-  return await PedidoModel.findById(shippingId).populate(['venta', 'sucursal', 'trabajador']);
+  return await PedidoModel.findById(shippingId).populate([
+    {
+      path: 'venta',
+      populate: {
+        path: 'vendedor',
+        select: 'nombre apellido', 
+      },
+    },
+    'sucursal',
+    'trabajador',
+    'lugar_origen',
+  ]);
 };
 
 const findByIds = async (shippingIds: string[]): Promise<IPedidoDocument[]> => {
-const pedidos = await PedidoModel.find({ _id: { $in: shippingIds } })
+  const pedidos = await PedidoModel.find({ _id: { $in: shippingIds } }).populate([
+    {
+      path: 'venta',
+      populate: {
+        path: 'vendedor',
+        select: 'nombre apellido',
+      },
+    },
+    'sucursal',
+    'trabajador',
+    'lugar_origen',
+  ]);
   return pedidos;
 };
 

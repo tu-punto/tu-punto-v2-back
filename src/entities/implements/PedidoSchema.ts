@@ -30,6 +30,12 @@ const PedidoSchema = new Schema({
     type: String,
     default: ""
   },
+  lugar_origen: {
+  type: Schema.Types.ObjectId,
+  ref: 'Sucursal',
+  required: false
+  },
+
   lugar_entrega: {
     type: String,
     required: true

@@ -12,6 +12,7 @@ export interface IPedido {
   hora_entrega_real: Date;
 
   observaciones: string;
+  lugar_origen?: Types.ObjectId; 
   lugar_entrega: string;
 
   costo_delivery: number;
