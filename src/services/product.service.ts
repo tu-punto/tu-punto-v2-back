@@ -121,6 +121,7 @@ const updateSubvariantStock = async (params: {
     params.stock
   );
 };
+
 const updateStockByVariantCombination = async ({
   productId,
   sucursalId,
@@ -146,6 +147,11 @@ const addVariantToProduct = async (
   return await ProductRepository.addVariantToProduct(productId, sucursalId, combinaciones);
 };
 
+const updateProduct = async (productId: string, data: Partial<IProducto>) => {
+  return await ProductRepository.updateProduct(productId, data);
+
+}
+
 
 export const ProductService = {
   getAllProducts,
@@ -160,5 +166,6 @@ export const ProductService = {
   updatePrice,
   updateSubvariantStock,
   updateStockByVariantCombination,
-  addVariantToProduct
+  addVariantToProduct,
+  updateProduct
 };

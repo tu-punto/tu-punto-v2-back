@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 
 import { SaleRepository } from "../repositories/sale.repository";
 import { SellerService } from "./seller.service";
+import { ProductService } from './product.service';
 
 const getAllSales = async () => {
     return await SaleRepository.findAll();
@@ -157,10 +158,36 @@ const getDataPaymentProof = async (sellerId: number) => {
 
 const updateSaleById = async (id: string, fields: any) => {
     const venta = await SaleRepository.findById(id);
+    const { id_sucursal, cantidad, precio_unitario, ...others } = fields;
+
+
     if (!venta) return null;
-    const addPendingSaldo = -(venta.cantidad * venta.precio_unitario) + (fields.cantidad * fields.precio_unitario);
-    const updated = await SaleRepository.updateSale({ _id: id, ...fields });
+
+    //TODO: Actualizar stock de la variante real, esta hardcodeada a que actualice la primera
+    const producto = await ProductService.getProductById(venta.producto._id!.toString());
+    const sucursal = producto.sucursales.find(s => s.id_sucursal.toString() === id_sucursal);
+
+    if (!sucursal) {
+        console.error("Sucursal no encontrada");
+        return null;
+    }
+
+    const oldStock = sucursal.combinaciones[0].stock;
+    const stockAdjustment = venta.cantidad - cantidad;
+    const newStock = oldStock + stockAdjustment;
+    sucursal.combinaciones[0].stock = newStock; 
+
+
+    if (newStock < 0) {
+        throw new Error("No hay suficiente stock disponible para realizar la operación.");
+    }
+
+    const addPendingSaldo = -(venta.cantidad * venta.precio_unitario) + (cantidad * precio_unitario);
+
+    const updated = await SaleRepository.updateSale({ _id: id, cantidad, precio_unitario, ...others });
+    await ProductService.updateProduct(venta.producto._id!.toString(), { sucursales: producto.sucursales })
     await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
+
     return updated;
 };
 
