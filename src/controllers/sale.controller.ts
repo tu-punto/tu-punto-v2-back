@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SaleService } from "../services/sale.service";
+import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
 
 export const getSale = async (req: Request, res: Response) => {
   try {
@@ -25,16 +26,69 @@ export const registerSale = async (req: Request, res: Response) => {
   }
 };
 
+// Ejemplo de lógica en el controller
 export const getProductsByShippingId = async (req: Request, res: Response) => {
-  const id: number = parseInt(req.params.id);
+  const { id } = req.params;
+
   try {
-    const products = await SaleService.getProductsByShippingId(id);
-    res.json(products);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ msg: "Internal Server Error", error });
+    const pedido = await PedidoModel.findById(id)
+      .populate({
+        path: 'venta',
+        populate: {
+          path: 'producto',
+          model: 'Producto'
+        }
+      })
+      .lean();
+
+    if (!pedido) {
+      return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
+    }
+    if (!pedido.lugar_origen) {
+  return res.status(400).json({ success: false, message: 'Pedido sin lugar de origen definido' });
+    } 
+    const lugarOrigenId = pedido.lugar_origen.toString(); 
+
+    const ventasNormales = pedido.venta.map((venta: any) => {
+      const producto = venta.producto;
+      const sucursal = producto.sucursales.find((s: any) => s.id_sucursal.toString() === lugarOrigenId);
+      const combinacion = sucursal?.combinaciones.find((c: any) =>
+        Object.entries(c.variantes).every(([key, value]) => venta.variantes?.[key] === value)
+      );
+
+      const nombreVariante = venta.nombre_variante || Object.values(venta.variantes || {}).join(' / ');
+
+      return {
+        id_venta: venta._id,
+        id_producto: producto._id,
+        producto: `${producto.nombre_producto} - ${nombreVariante}`,
+        precio_unitario: venta.precio_unitario,
+        cantidad: venta.cantidad,
+        utilidad: venta.utilidad,
+        id_vendedor: producto.id_vendedor,
+        variantes: venta.variantes,
+        stockActual: combinacion?.stock ?? 0,
+        esTemporal: false
+      };
+    });
+
+    const productosTemporales = (pedido.productos_temporales || []).map((temp: any, i: number) => ({
+      key: `temp-${i}`,
+      producto: temp.producto,
+      cantidad: temp.cantidad,
+      precio_unitario: temp.precio_unitario,
+      utilidad: temp.utilidad,
+      id_vendedor: temp.id_vendedor,
+      esTemporal: true
+    }));
+
+    return res.json([...ventasNormales, ...productosTemporales]);
+  } catch (err) {
+    console.error("Error al obtener productos del pedido:", err);
+    return res.status(500).json({ success: false, message: 'Error del servidor' });
   }
 };
+
 
 export const getProductDetailsByProductId = async (req: Request, res: Response) => {
   const id: number = parseInt(req.params.id);

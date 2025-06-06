@@ -30,4 +30,14 @@ export interface IPedido {
   sucursal?: Types.ObjectId;
 
   venta: Types.ObjectId[];
+
+  productos_temporales: [
+  {
+    producto: string;
+    cantidad: number;
+    precio_unitario: number;
+    utilidad: number;
+    id_vendedor: Types.ObjectId;
+  }
+]
 }
