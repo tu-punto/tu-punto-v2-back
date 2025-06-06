@@ -110,7 +110,8 @@ const getDataPaymentProof = async (sellerId: number) => {
 };
 
 const deleteSaleById = async (id: string) => {
-  await VentaModel.deleteOne({ _id: id });
+  const res = await VentaModel.deleteOne({ _id: id });
+  return res.deletedCount > 0;
 };
 
 export const SaleRepository = {

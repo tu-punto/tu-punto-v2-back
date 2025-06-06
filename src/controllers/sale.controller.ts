@@ -185,9 +185,9 @@ export const deleteProducts = async (req: Request, res: Response) => {
 }
 
 export const deleteSales = async (req: Request, res: Response) => {
-  const sales  = req.body.sales;
+  const sales = req.body.sales;
   try {
-    const saleIds = sales.map((sale:any) => sale.id_venta);
+    const saleIds = sales.map((sale: any) => sale.id_venta);
 
     if (!saleIds || saleIds.length === 0) {
       return res.status(400).json({ msg: 'No sale IDs provided for deletion.' });
@@ -210,7 +210,7 @@ export const getDataPaymentProof = async (req: Request, res: Response) => {
     const data = await SaleService.getDataPaymentProof(id)
     res.status(200).json(data)
   } catch (error) {
-    
+
   }
 }
 
@@ -236,9 +236,10 @@ export const updateSaleById = async (req: Request, res: Response) => {
 
 export const deleteSaleById = async (req: Request, res: Response) => {
   const id = req.params.id;
+  const id_sucursal = req.body.id_sucursal;
 
   try {
-    const deleted = await SaleService.deleteSaleById(id);
+    const deleted = await SaleService.deleteSaleById(id, id_sucursal);
     if (!deleted) {
       return res.status(404).json({ msg: 'Venta no encontrada o ya eliminada' });
     }
