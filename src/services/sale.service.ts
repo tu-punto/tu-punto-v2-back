@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { SaleRepository } from "../repositories/sale.repository";
 import { SellerService } from "./seller.service";
 import { ProductService } from './product.service';
+import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
 
 const getAllSales = async () => {
     return await SaleRepository.findAll();
@@ -12,11 +13,15 @@ const registerSale = async (sale: any) => {
     return await SaleRepository.registerSale(sale);
 }
 const getProductsByShippingId = async (pedidoId: number) => {
+    // Obtener las ventas asociadas
     const sales = await SaleRepository.findByPedidoId(pedidoId);
 
-    if (sales.length === 0) throw new Error("No existen ventas con ese ID de pedido");
-    // Obtiene los productos junto con la cantidad
-    const products = sales.map(sale => ({
+    // Obtener el pedido completo (para productos temporales)
+    const pedido = await PedidoModel.findById(pedidoId);
+
+    if (!pedido) throw new Error("No existe el pedido");
+
+    const ventas = sales.map(sale => ({
         key: sale.producto._id,
         producto: sale.producto.nombre_producto,
         precio_unitario: sale.precio_unitario,
@@ -28,9 +33,18 @@ const getProductsByShippingId = async (pedidoId: number) => {
         id_producto: sale.producto._id
     }));
 
+    const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
+        key: `temp-${i}`,
+        producto: prod.producto,
+        cantidad: prod.cantidad,
+        precio_unitario: prod.precio_unitario,
+        utilidad: prod.utilidad,
+        id_vendedor: prod.id_vendedor,
+        esTemporal: true,
+    }));
 
-    return products;
-}
+    return [...ventas, ...temporales];
+};
 
 const getProductDetailsByProductId = async (productId: number) => {
     const sales = await SaleRepository.findByProductId(productId);
