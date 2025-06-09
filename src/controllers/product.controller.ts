@@ -156,7 +156,22 @@ export const addVariantToProduct = async (req: Request, res: Response) => {
   }
 };
 
+export const generateIngressPDF = async (req: Request, res: Response) => {
+  try {
+    const pdfBuffer = await ProductService.generateIngressPDF(req.body);
+    
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": "attachment; filename=Comprobante_Ingresos.pdf",
+      "Content-Length": pdfBuffer.length,
+    });
 
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error("❌ Error al generar PDF:", err);
+    res.status(500).json({ success: false, message: "Error al generar PDF" });
+  }
+};
 export const ProductController = {
   getProduct,
   registerProduct,
@@ -170,5 +185,6 @@ export const ProductController = {
   getAllStockByProductId,
   updatePrice,
   updateSubvariantStock,
-  addVariantToProduct
+  addVariantToProduct,
+  generateIngressPDF
 };

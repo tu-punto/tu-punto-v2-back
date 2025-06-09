@@ -3,7 +3,11 @@ import { FeatureRepository } from "../repositories/feature.repository";
 import { ICaracteristicas } from "../entities/ICaracteristicas";
 import { IProducto } from "../entities/IProducto";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
-
+import puppeteer from "puppeteer";
+import ejs from "ejs";
+import path from "path";
+import fs from "fs/promises";
+import { Buffer } from "buffer";
 interface Feature {
   feature: string;
   values: string[];
@@ -151,6 +155,63 @@ const updateProduct = async (productId: string, data: Partial<IProducto>) => {
   return await ProductRepository.updateProduct(productId, data);
 
 }
+const generateIngressPDF = async (data: any): Promise<Buffer> => {
+  const templatePath = path.resolve(__dirname, "../templates/ingress-pdf.ejs");
+  const logoPath = path.resolve(__dirname, "../../public/logo.png");
+
+  const logoBuffer = await fs.readFile(logoPath);
+  const logoBase64 = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+
+  // Transformar los ingresos (stockData)
+  const stockData = (data.ingresos || []).map((item: any) => {
+    const producto = item.product || {};
+    return {
+      nombre_producto: producto.nombre_producto || "-",
+      variantes: Object.entries(producto.variantes || {}).map(([_, v]) => v).join(" / "),
+      stock: producto.stock || "",
+      precio: producto.precio || "",
+      ingresos: item.newStock?.stock || "",
+      categoria: producto.categoria || "Ropa"
+    };
+  });
+
+  // Transformar las variantes nuevas
+  const variantData = (data.variantes || []).flatMap((v: any) =>
+    v.combinaciones.map((c: any) => ({
+      nombre_producto: v.product?.nombre_producto || "-",
+      variantes: Object.entries(c.variantes || {}).map(([k, v]) => `${k}: ${v}`).join(" / "),
+      stock: c.stock,
+      precio: c.precio
+    }))
+  );
+
+  // Transformar los productos nuevos
+  const productData = (data.productos || []).map((p: any) => ({
+    nombre_producto: p.nombre_producto || "-",
+    variantes: p.variantes || "-",
+    stock: p.stock || "",
+    precio: p.precio || ""
+  }));
+
+  const html: string = await ejs.renderFile(templatePath, {
+    sellerName: data.sellerName || "Vendedor no definido",
+    sucursal: data.sucursalNombre || "Sucursal desconocida",
+    logoBase64,
+    date: new Date().toLocaleString(),
+    stockData,
+    variantData,
+    productData
+  }) as string;
+
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: "networkidle0" });
+
+  const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+  await browser.close();
+
+  return Buffer.from(pdfBuffer);
+};
 
 
 export const ProductService = {
@@ -167,5 +228,6 @@ export const ProductService = {
   updateSubvariantStock,
   updateStockByVariantCombination,
   addVariantToProduct,
-  updateProduct
+  updateProduct,
+  generateIngressPDF
 };

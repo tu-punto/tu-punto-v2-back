@@ -72,14 +72,45 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Shipping Internal Server Error", error });
   }
 };
+export const getShippingById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const shipping = await ShippingService.getShippingById(id);
+    if (!shipping) return res.status(404).json({ success: false, msg: "Pedido no encontrado" });
+    res.json(shipping);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Error interno" });
+  }
+};
+
 
 const updateShipping = async (req: Request, res: Response) => {
   const id = req.params.id;
-  const newData = req.body; // 👈 aquí ya no esperes { newData }, sino el objeto directamente
+  const newData = req.body; 
 
   try {
     const shippingUpdated = await ShippingService.updateShipping(newData, id);
     res.json({ success: true, shippingUpdated });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Internal Server Error", error });
+  }
+};
+export const addTemporaryProductsToShipping = async (req: Request, res: Response) => {
+  const id = req.params.id;
+  const { productos_temporales } = req.body;
+
+  if (!Array.isArray(productos_temporales)) {
+    return res.status(400).json({
+      success: false,
+      msg: "productos_temporales debe ser un array válido",
+    });
+  }
+
+  try {
+    await ShippingService.addTemporaryProductsToShipping(id, productos_temporales);
+    res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, msg: "Internal Server Error", error });
@@ -104,4 +135,5 @@ export const getShippingsBySellerController = async (
 
 export const ShippingController = {
   updateShipping,
+  getShippingById
 };

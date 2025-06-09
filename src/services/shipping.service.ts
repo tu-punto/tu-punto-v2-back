@@ -19,6 +19,10 @@ const getShippingByIds = async (shippingIds: string[]) => {
 const registerShipping = async (shipping: any) => {
   return await ShippingRepository.registerShipping(shipping);
 };
+const getShippingById = async (id: string) => {
+  return await ShippingRepository.findById(id);
+};
+
 
 const actualizarSaldoVendedor = async (ventas: {
   id_vendedor: string;
@@ -61,6 +65,7 @@ const registerSaleToShipping = async (shippingId: string, saleWithoutShippingId:
     id_pedido: shipping._id,
     producto: new Types.ObjectId(saleWithoutShippingId.id_producto),
     vendedor: new Types.ObjectId(saleWithoutShippingId.id_vendedor),
+    sucursal: new Types.ObjectId(saleWithoutShippingId.sucursal),
   });
 
   const nuevaVenta = await SaleRepository.registerSale(sale);
@@ -129,10 +134,10 @@ const addTemporaryProductsToShipping = async (
   if (!shipping) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
 
   await PedidoModel.findByIdAndUpdate(shippingId, {
-    $push: {
-      productos_temporales: { $each: productosTemporales },
-    },
-  });
+  $set: {
+    productos_temporales: productosTemporales,
+  },
+});
 };
 
 export const ShippingService = {
@@ -141,6 +146,7 @@ export const ShippingService = {
   registerShipping,
   registerSaleToShipping,
   updateShipping,
+  getShippingById,
   getShippingsBySellerService,
   addTemporaryProductsToShipping,
 };
