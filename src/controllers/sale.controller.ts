@@ -13,15 +13,18 @@ export const getSale = async (req: Request, res: Response) => {
 };
 
 export const registerSale = async (req: Request, res: Response) => {
-  const sale = req.body;
+  const sales = req.body;
+
+  console.log("🛒 Datos recibidos en registerSale:", JSON.stringify(sales, null, 2));
+
   try {
-    const newSale = await SaleService.registerSale(sale);
+    const newSales = await SaleService.registerMultipleSales(sales);
     res.json({
       status: true,
-      newSale,
+      newSales,
     });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Error al registrar ventas:", error);
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
@@ -61,7 +64,7 @@ export const getProductsByShippingId = async (req: Request, res: Response) => {
       return {
         id_venta: venta._id,
         id_producto: producto._id,
-        producto: `${producto.nombre_producto} - ${nombreVariante}`,
+        producto: nombreVariante || producto.nombre_producto,
         precio_unitario: venta.precio_unitario,
         cantidad: venta.cantidad,
         utilidad: venta.utilidad,
@@ -112,8 +115,12 @@ export const getProductsBySellerId = async (req: Request, res: Response) => {
 };
 
 export const updateProducts = async (req: Request, res: Response) => {
-  const shippingId = parseInt(req.params.id);
+  const shippingId = (req.params.id);
   const prods = req.body;
+
+  console.log("🛠️ Actualizando productos para shippingId:", shippingId);
+  console.log("📦 Productos recibidos para update:", JSON.stringify(prods, null, 2));
+
   try {
     const updatedProds = await SaleService.updateProducts(shippingId, prods);
     res.json({
@@ -170,10 +177,11 @@ export const deleteSalesOfProducts = async (req: Request, res: Response) => {
 };
 
 export const deleteProducts = async (req: Request, res: Response) => {
-  const shippingId = parseInt(req.params.id);
-  const prods = req.body;
+  const shippingId = req.params.id;
+  const ventaIds = req.body; // string[]
+
   try {
-    const deleteProduct = await SaleService.deleteProducts(shippingId, prods);
+    const deleteProduct = await SaleService.deleteSalesByIdsAndPullFromPedido(shippingId, ventaIds);
     res.json({
       status: true,
       deleteProduct,
@@ -182,10 +190,12 @@ export const deleteProducts = async (req: Request, res: Response) => {
     console.error(error);
     res.status(500).json({ msg: "Error deleting products", error });
   }
-}
+};
+
 
 export const deleteSales = async (req: Request, res: Response) => {
   const sales = req.body.sales;
+  console.log("🗑️ Datos recibidos para eliminar ventas:", JSON.stringify(sales, null, 2));
   try {
     const saleIds = sales.map((sale: any) => sale.id_venta);
 

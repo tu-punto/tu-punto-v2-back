@@ -2,6 +2,7 @@ import { VentaModel } from "../entities/implements/VentaSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { IVenta } from "../entities/IVenta";
 import { IVentaDocument } from "../entities/documents/IVentaDocument";
+import { Types } from 'mongoose';
 
 
 const findAll = async (): Promise<IVentaDocument[]> => {
@@ -10,6 +11,10 @@ const findAll = async (): Promise<IVentaDocument[]> => {
 
 
 const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
+  if (sale.sucursal && typeof sale.sucursal === 'string') {
+    sale.sucursal = new Types.ObjectId(sale.sucursal);
+  }
+
   const newSale = new VentaModel(sale);
   const saved = await newSale.save();
   return saved;
@@ -25,8 +30,8 @@ const updateSale = async (sale: IVenta) => {
 };
 
 
-const findByPedidoId = async (pedidoId: number) => {
-  return await VentaModel.find({ pedido: pedidoId }).populate(['producto']);
+const findByPedidoId = async (pedidoId: any) => {
+  return await VentaModel.find({ pedido: new Types.ObjectId(pedidoId) }).populate(['producto']);
 };
 
 const findByProductId = async (productId: number) => {
@@ -37,20 +42,22 @@ const findBySellerId = async (sellerId: string) => {
   return await VentaModel.find({ vendedor: sellerId }).populate(['producto', 'pedido']);
 };
 
-const updateProducts = async (sales: any[], prods: any[]): Promise<any[]> => {
+const updateProducts = async (_: any, prods: any[]): Promise<any[]> => {
   const updatedSales: any[] = [];
 
-  for (const sale of sales) {
-    for (const prod of prods) {
-      if (prod._id === sale._id && sale.producto?._id === prod._id) {
-        const updated = await ProductoModel.findOneAndUpdate(
-          { _id: sale.producto._id },
-          { ...prod },
-          { new: true }
-        );
-        updatedSales.push(updated);
-      }
-    }
+  for (const prod of prods) {
+    const updated = await VentaModel.findByIdAndUpdate(
+      prod.id_venta,
+      {
+        $set: {
+          cantidad: prod.cantidad,
+          precio_unitario: prod.precio_unitario,
+          utilidad: prod.utilidad
+        }
+      },
+      { new: true }
+    );
+    if (updated) updatedSales.push(updated);
   }
 
   return updatedSales;

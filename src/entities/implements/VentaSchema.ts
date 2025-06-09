@@ -30,6 +30,12 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: Schema.Types.ObjectId,
     ref: 'Vendedor'
   },
+  sucursal: {
+  type: Schema.Types.ObjectId,
+  ref: 'Sucursal',
+  required: true
+  },
+
   quien_paga_delivery: {
   type: String,
   enum: ["comprador", "vendedor", "tupunto"],

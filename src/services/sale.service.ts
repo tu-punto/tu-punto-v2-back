@@ -1,17 +1,62 @@
 import { format } from 'date-fns';
+import { Types } from 'mongoose';
 
 import { SaleRepository } from "../repositories/sale.repository";
 import { SellerService } from "./seller.service";
 import { ProductService } from './product.service';
 import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
+import { VentaModel } from '../entities/implements/VentaSchema';
 
 const getAllSales = async () => {
     return await SaleRepository.findAll();
 };
 
 const registerSale = async (sale: any) => {
-    return await SaleRepository.registerSale(sale);
-}
+  const salesArray = Array.isArray(sale) ? sale : [sale];
+
+  const transformedSales = salesArray.map(s => ({
+    ...s,
+    producto: new Types.ObjectId(s.id_producto),
+    pedido: new Types.ObjectId(s.id_pedido),
+    vendedor: new Types.ObjectId(s.id_vendedor),
+    quien_paga_delivery: s.quien_paga_delivery || 'comprador',
+    nombre_variante: s.nombre_variante || '',
+  }));
+
+  const savedSales = [];
+  for (const saleData of transformedSales) {
+    const saved = await SaleRepository.registerSale(saleData);
+    savedSales.push(saved);
+
+    // Añadir ID al pedido (como vimos antes)
+    await PedidoModel.findByIdAndUpdate(
+      saleData.pedido,
+      { $addToSet: { venta: saved._id } }
+    );
+  }
+
+    return savedSales;
+};
+const registerMultipleSales = async (sales: any[]) => {
+   console.log("📥 [Service] Registro múltiple - ventas recibidas:", JSON.stringify(sales, null, 2));
+ 
+  const savedSales = [];
+
+  for (const sale of sales) {
+  const savedList = await SaleService.registerSale(sale);
+  for (const saved of savedList) {
+    savedSales.push(saved);
+    await PedidoModel.findByIdAndUpdate(
+      sale.id_pedido,
+      { $addToSet: { venta: saved._id } }
+    );
+  }
+    }
+
+  return savedSales;
+};
+
+
 const getProductsByShippingId = async (pedidoId: number) => {
     // Obtener las ventas asociadas
     const sales = await SaleRepository.findByPedidoId(pedidoId);
@@ -104,7 +149,7 @@ const getProductsBySellerId = async (sellerId: string) => {
 }
 
 
-const updateProducts = async (shippingId: number, prods: any[]) => {
+const updateProducts = async (shippingId: any, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
     if (!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
     return await SaleRepository.updateProducts(sale, prods);
@@ -137,17 +182,34 @@ const updateSalesOfProducts = async (stockData: any[]) => {
     return await SaleRepository.updateSalesOfProducts(stockData);
 };
 
-const deleteProducts = async (shippingId: number, prods: any[]) => {
+const deleteProducts = async (shippingId: any, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
     if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
     return await SaleRepository.deleteProducts(sale, prods);
 }
-const deleteSalesByIds = async (saleIds: number[]) => {
-    if (!saleIds || saleIds.length === 0) {
-        throw new Error("No sale IDs provided for deletion.");
-    }
-    await SaleRepository.deleteSalesByIds(saleIds);
-}
+const deleteSalesByIdsAndPullFromPedido = async (pedidoId: string, ventaIds: string[]) => {
+  await VentaModel.deleteMany({ _id: { $in: ventaIds } });
+
+  await PedidoModel.findByIdAndUpdate(
+    pedidoId,
+    { $pull: { venta: { $in: ventaIds.map(id => new Types.ObjectId(id)) } } }
+  );
+
+  return ventaIds;
+};
+
+const deleteSalesByIds = async (saleIds: string[]): Promise<any> => {
+  const ventas = await VentaModel.find({ _id: { $in: saleIds } });
+
+  for (const venta of ventas) {
+    await PedidoModel.findByIdAndUpdate(
+      venta.pedido,
+      { $pull: { venta: venta._id } }
+    );
+  }
+
+  await VentaModel.deleteMany({ _id: { $in: saleIds } });
+};
 
 const deleteSalesOfProducts = async (stockData: any[]) => {
     return await SaleRepository.deleteSalesOfProducts(stockData);
@@ -272,6 +334,7 @@ const deleteSaleById = async (id: string, id_sucursal: string) => {
 export const SaleService = {
     getAllSales,
     registerSale,
+    registerMultipleSales,
     getProductsByShippingId,
     getProductDetailsByProductId,
     updateProducts,
@@ -284,4 +347,6 @@ export const SaleService = {
     deleteSalesOfProducts,
     updateSaleById,
     deleteSaleById,
+    deleteSalesByIdsAndPullFromPedido,
+
 }

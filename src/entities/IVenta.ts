@@ -16,6 +16,7 @@ export interface IVenta {
   producto: IProducto;
   pedido: IPedido;
   vendedor: IVendedor;
+  sucursal: Types.ObjectId; // Referencia a la sucursal
   quien_paga_delivery?: 'comprador' | 'vendedor' | 'tupunto';
   nombre_variante?: string;
 

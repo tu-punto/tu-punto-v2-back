@@ -17,6 +17,7 @@ productRouter.post("/register", ProductController.registerProductVariants);
 productRouter.post("/registerVariant", ProductController.registerProduct);
 productRouter.post("/addFeatures", ProductController.addFeatureToProduct);
 productRouter.post("/add-variant", ProductController.addVariantToProduct);
+productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF);
 
 // PUT
 productRouter.put("/update-price", ProductController.updatePrice);
