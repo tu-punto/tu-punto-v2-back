@@ -12,48 +12,48 @@ const getAllSales = async () => {
 };
 
 const registerSale = async (sale: any) => {
-  const salesArray = Array.isArray(sale) ? sale : [sale];
+    const salesArray = Array.isArray(sale) ? sale : [sale];
 
-  const transformedSales = salesArray.map(s => ({
-    ...s,
-    producto: new Types.ObjectId(s.id_producto),
-    pedido: new Types.ObjectId(s.id_pedido),
-    vendedor: new Types.ObjectId(s.id_vendedor),
-    quien_paga_delivery: s.quien_paga_delivery || 'comprador',
-    nombre_variante: s.nombre_variante || '',
-  }));
+    const transformedSales = salesArray.map(s => ({
+        ...s,
+        producto: new Types.ObjectId(s.id_producto),
+        pedido: new Types.ObjectId(s.id_pedido),
+        vendedor: new Types.ObjectId(s.id_vendedor),
+        quien_paga_delivery: s.quien_paga_delivery || 'comprador',
+        nombre_variante: s.nombre_variante || '',
+    }));
 
-  const savedSales = [];
-  for (const saleData of transformedSales) {
-    const saved = await SaleRepository.registerSale(saleData);
-    savedSales.push(saved);
+    const savedSales = [];
+    for (const saleData of transformedSales) {
+        const saved = await SaleRepository.registerSale(saleData);
+        savedSales.push(saved);
 
-    // Añadir ID al pedido (como vimos antes)
-    await PedidoModel.findByIdAndUpdate(
-      saleData.pedido,
-      { $addToSet: { venta: saved._id } }
-    );
-  }
+        // Añadir ID al pedido (como vimos antes)
+        await PedidoModel.findByIdAndUpdate(
+            saleData.pedido,
+            { $addToSet: { venta: saved._id } }
+        );
+    }
 
     return savedSales;
 };
 const registerMultipleSales = async (sales: any[]) => {
-   console.log("📥 [Service] Registro múltiple - ventas recibidas:", JSON.stringify(sales, null, 2));
- 
-  const savedSales = [];
+    console.log("📥 [Service] Registro múltiple - ventas recibidas:", JSON.stringify(sales, null, 2));
 
-  for (const sale of sales) {
-  const savedList = await SaleService.registerSale(sale);
-  for (const saved of savedList) {
-    savedSales.push(saved);
-    await PedidoModel.findByIdAndUpdate(
-      sale.id_pedido,
-      { $addToSet: { venta: saved._id } }
-    );
-  }
+    const savedSales = [];
+
+    for (const sale of sales) {
+        const savedList = await SaleService.registerSale(sale);
+        for (const saved of savedList) {
+            savedSales.push(saved);
+            await PedidoModel.findByIdAndUpdate(
+                sale.id_pedido,
+                { $addToSet: { venta: saved._id } }
+            );
+        }
     }
 
-  return savedSales;
+    return savedSales;
 };
 
 
@@ -76,7 +76,8 @@ const getProductsByShippingId = async (pedidoId: number) => {
         id_venta: sale._id,
         id_vendedor: sale.producto.id_vendedor,
         id_pedido: pedidoId,
-        id_producto: sale.producto._id
+        id_producto: sale.producto._id,
+        id_sucursal: sale.sucursal,
     }));
 
     const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
@@ -110,6 +111,7 @@ const getProductDetailsByProductId = async (productId: number) => {
             id_vendedor: sale.producto.id_vendedor,
             id_pedido: sale.id_pedido,
             id_producto: sale.producto._id,
+            id_sucursal: sale.sucursal,
             deposito_realizado: sale.deposito_realizado,
             cliente: sale.pedido.cliente,
             fecha_pedido: sale.pedido.fecha_pedido,
@@ -138,6 +140,7 @@ const getProductsBySellerId = async (sellerId: string) => {
             id_vendedor: sellerId,
             id_pedido: sale.pedido,
             id_producto: sale.producto._id,
+            id_sucursal: sale.sucursal,
             deposito_realizado: sale.deposito_realizado,
             cliente: sale.pedido.cliente,
             fecha_pedido: sale.pedido.fecha_pedido
@@ -188,27 +191,27 @@ const deleteProducts = async (shippingId: any, prods: any[]) => {
     return await SaleRepository.deleteProducts(sale, prods);
 }
 const deleteSalesByIdsAndPullFromPedido = async (pedidoId: string, ventaIds: string[]) => {
-  await VentaModel.deleteMany({ _id: { $in: ventaIds } });
+    await VentaModel.deleteMany({ _id: { $in: ventaIds } });
 
-  await PedidoModel.findByIdAndUpdate(
-    pedidoId,
-    { $pull: { venta: { $in: ventaIds.map(id => new Types.ObjectId(id)) } } }
-  );
+    await PedidoModel.findByIdAndUpdate(
+        pedidoId,
+        { $pull: { venta: { $in: ventaIds.map(id => new Types.ObjectId(id)) } } }
+    );
 
-  return ventaIds;
+    return ventaIds;
 };
 
 const deleteSalesByIds = async (saleIds: string[]): Promise<any> => {
-  const ventas = await VentaModel.find({ _id: { $in: saleIds } });
+    const ventas = await VentaModel.find({ _id: { $in: saleIds } });
 
-  for (const venta of ventas) {
-    await PedidoModel.findByIdAndUpdate(
-      venta.pedido,
-      { $pull: { venta: venta._id } }
-    );
-  }
+    for (const venta of ventas) {
+        await PedidoModel.findByIdAndUpdate(
+            venta.pedido,
+            { $pull: { venta: venta._id } }
+        );
+    }
 
-  await VentaModel.deleteMany({ _id: { $in: saleIds } });
+    await VentaModel.deleteMany({ _id: { $in: saleIds } });
 };
 
 const deleteSalesOfProducts = async (stockData: any[]) => {
