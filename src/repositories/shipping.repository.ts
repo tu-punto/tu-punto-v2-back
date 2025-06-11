@@ -63,6 +63,10 @@ const updateShipping = async (newData: Partial<IPedido>, shippingId: string): Pr
     { new: true }
   );
 };
+const deleteById = async (shippingId: string) => {
+  return await PedidoModel.findByIdAndDelete(shippingId);
+};
+
 
 
 export const ShippingRepository = {
@@ -71,6 +75,7 @@ export const ShippingRepository = {
   findById,
   findByIds,
   updateShipping,
+  deleteById,
 };
 
   

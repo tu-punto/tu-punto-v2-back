@@ -79,35 +79,38 @@ const updatePriceInSucursal = async (
     console.log(`🧪 Combinación #${i + 1}:`, c.variantes);
   });
 
-  const combinacion = sucursal.combinaciones.find(c => {
-    const combKeys = Object.keys(c.variantes || {});
+  let combinacion = sucursal.combinaciones.find(c => {
+    const variantesPlanas = Object.fromEntries(
+      c.variantes instanceof Map ? c.variantes : Object.entries(c.variantes || {})
+    );
+    const combKeys = Object.keys(variantesPlanas);
     const inputKeys = Object.keys(variante);
 
-    if (combKeys.length !== inputKeys.length) {
-      console.log(`❌ Diferente número de claves: combinacion (${combKeys.length}) vs entrada (${inputKeys.length})`);
-      return false;
-    }
+    if (combKeys.length !== inputKeys.length) return false;
 
-    const isMatch = inputKeys.every(key =>
-      c.variantes[key]?.toLowerCase?.() === variante[key]?.toLowerCase?.()
+    return inputKeys.every(key =>
+      (variantesPlanas[key] || "").toLowerCase() === (variante[key] || "").toLowerCase()
     );
-    console.log(`❌ Diferente número de claves: combinacion (${combKeys}) vs entrada (${inputKeys})`);
-
-    if (!isMatch) {
-      console.log(`❌ No coincide: combinacion`, c.variantes, "vs entrada", variante);
-    }
-
-    return isMatch;
   });
-  
+
   if (!combinacion) {
-    console.error("❌ No se encontró la combinación correspondiente.");
-    throw new Error("No se encontró una combinación con esa variante");
+    // Si no existe, la creamos con precio y stock inicial 0
+    combinacion = {
+      variantes: variante,
+      precio: nuevoPrecio,
+      stock: 0
+    };
+    sucursal.combinaciones.push(combinacion);
+    console.log("🆕 Combinación nueva creada:", combinacion);
+  } else {
+    // Si existe, simplemente actualizamos el precio
+    combinacion.precio = nuevoPrecio;
+    console.log("✅ Precio actualizado en combinación existente.");
   }
 
-  combinacion.precio = nuevoPrecio;
   return await producto.save();
 };
+
 
 const updateStockOfSubvariant = async (
   productId: string,

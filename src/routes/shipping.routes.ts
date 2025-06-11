@@ -6,7 +6,8 @@ import {
   ShippingController,
   getShippingByIds,
   getShippingsBySellerController,
-  addTemporaryProductsToShipping
+  addTemporaryProductsToShipping,
+  deleteShippingById
 } from "../controllers/shipping.controller";
 
 const shippingRouter = Router();
@@ -26,5 +27,7 @@ shippingRouter.get("/seller/:id", getShippingsBySellerController);
 shippingRouter.put("/:id/temporales", addTemporaryProductsToShipping);
 
 shippingRouter.get("/by/:id", ShippingController.getShippingById);
+
+shippingRouter.delete("/:id", deleteShippingById);
 
 export default shippingRouter;
