@@ -40,38 +40,14 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
   const { shippingId, sales } = req.body;
 
   try {
-    const savedSales = [];
-
-    const productosTemporales: any[] = [];
-
-    for (let sale of sales) {
-      const esTemporal = !sale.id_producto || sale.id_producto.length !== 24;
-
-      if (esTemporal) {
-        productosTemporales.push({
-          producto: sale.producto,
-          cantidad: sale.cantidad,
-          precio_unitario: sale.precio_unitario,
-          utilidad: sale.utilidad,
-          id_vendedor: sale.id_vendedor,
-        });
-      } else {
-        const saleShipping = await ShippingService.registerSaleToShipping(shippingId, sale);
-        savedSales.push(saleShipping);
-      }
-    }
-
-    // Guardamos productos temporales directamente en el pedido
-    if (productosTemporales.length > 0) {
-      await ShippingService.addTemporaryProductsToShipping(shippingId, productosTemporales);
-    }
-
-    res.json({ success: true, ventas: savedSales });
+    const result = await ShippingService.processSalesForShipping(shippingId, sales);
+    res.json(result);
   } catch (error) {
     console.error(error);
     res.status(500).json({ msg: "Shipping Internal Server Error", error });
   }
 };
+
 export const getShippingById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
