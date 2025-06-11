@@ -132,6 +132,18 @@ export const getShippingsBySellerController = async (
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
+export const deleteShippingById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await ShippingService.deleteShippingById(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("❌ Error al eliminar el pedido:", error);
+    res.status(500).json({ success: false, msg: "No se pudo eliminar el pedido" });
+  }
+};
+
+
 
 export const ShippingController = {
   updateShipping,

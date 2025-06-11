@@ -140,6 +140,29 @@ const addTemporaryProductsToShipping = async (
 });
 };
 
+const deleteShippingById = async (id: string) => {
+  const pedido = await PedidoModel.findById(id);
+  if (!pedido) throw new Error("Pedido no encontrado");
+
+  if (pedido.venta && pedido.venta.length > 0) {
+    const ventas = await VentaModel.find({ _id: { $in: pedido.venta } });
+
+    for (const venta of ventas) {
+      if (venta.vendedor) {
+        await VendedorModel.findByIdAndUpdate(venta.vendedor, {
+          $pull: { venta: venta._id }
+        });
+      }
+
+      await VentaModel.findByIdAndDelete(venta._id);
+    }
+  }
+
+await ShippingRepository.deleteById(id);
+  return { success: true };
+};
+
+
 export const ShippingService = {
   getAllShippings,
   getShippingByIds,
@@ -149,4 +172,5 @@ export const ShippingService = {
   getShippingById,
   getShippingsBySellerService,
   addTemporaryProductsToShipping,
+  deleteShippingById,
 };
