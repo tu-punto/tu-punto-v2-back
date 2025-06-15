@@ -26,7 +26,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   doc.setFontSize(16);
   doc.text(title, titleX, 10);
 
-  // Tabla de ventas (datos reales)
+  // Tabla de ventas 
   const salesTableData = filteredSales.map((sale: any) => {
     const foundSucursal = sucursales.find(
       (sucursal) => sale.id_sucursal.toString() === sucursal._id.toString()
@@ -84,6 +84,10 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   });
 
   // Tabla de adelantos
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("ADELANTOS PAGADOS POR EL VENDEDOR", 10, (doc as any).lastAutoTable.finalY + 10);
+
   const adelantosTableData = pedidos
     .filter((pedido) => pedido.adelanto_cliente > 0)
     .map((pedido) => [
@@ -109,8 +113,12 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   });
 
   // Tabla de deliverys
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("DELIVERYS PAGADOS POR EL VENDEDOR", 10, (doc as any).lastAutoTable.finalY + 10);
+
   const deliverysTableData = pedidos
-    .filter((pedido) => pedido.adelanto_cliente > 0)
+    .filter((pedido) => pedido.costo_delivery > 0)
     .map((pedido) => [
       new Date(pedido.fecha_pedido).toLocaleDateString("es-BO"),
       pedido.costo_delivery,
@@ -134,6 +142,10 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   });
 
   // Tabla de mensualidades
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("MENSUALIDADES DESCONTADAS", 10, (doc as any).lastAutoTable.finalY + 10);
+
   const mensualidadesTableData = filteredDeudas.map((deuda) => [
     new Date(deuda.fecha).toLocaleDateString("es-BO"),
     deuda.concepto,
