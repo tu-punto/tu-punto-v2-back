@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SellerService } from "../services/seller.service";
+import { SellerPdfService } from "../services/sellerPdf.service";
 
 export const getSellers = async (_: Request, res: Response) => {
   try {
@@ -39,7 +40,7 @@ export const registerSeller = async (req: Request, res: Response) => {
 export const updateSeller = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const updated = await SellerService.updateSeller(id, req.body);   // sin flux
+    const updated = await SellerService.updateSeller(id, req.body); // sin flux
     res.json({ ok: true, updated });
   } catch (err) {
     res.status(500).json({ msg: "Error actualizando vendedor", err });
@@ -49,7 +50,7 @@ export const updateSeller = async (req: Request, res: Response) => {
 export const renewSeller = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const renewed = await SellerService.renewSeller(id, req.body);    // con flux
+    const renewed = await SellerService.renewSeller(id, req.body); // con flux
     res.json({ ok: true, renewed });
   } catch (err) {
     res.status(500).json({ msg: "Error renovando vendedor", err });
@@ -57,18 +58,31 @@ export const renewSeller = async (req: Request, res: Response) => {
 };
 
 export const paySellerDebt = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { payAll } = req.body;
+
   try {
-    const { id } = req.params;
-    const { payAll } = req.body;
+    // Actualizar la deuda del vendedor
+    const pdfBuffer = await SellerPdfService.generateSellerPdfBuffer(id);
+    const updatedSeller = await SellerService.paySellerDebt(id, payAll);
 
-    const updated = await SellerService.paySellerDebt(id, payAll);
-
-    if (!updated) {
-      return res.status(404).json({ msg: `No existe vendedor con id ${id}` });
+    if (!updatedSeller) {
+      return res.status(404).json({ msg: "Vendedor no encontrado" });
     }
-    res.json({ ok: true, updated });
-  } catch (err) {
-    res.status(500).json({ msg: 'Error pagando deuda', err });
+
+    // Configurar la respuesta para enviar el PDF
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="seller_${updatedSeller._id}.pdf"`,
+    });
+
+    // Enviar el PDF al cliente
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ msg: "Error al pagar la deuda del vendedor", error });
   }
 };
 
@@ -78,6 +92,6 @@ export const getSellerDebts = async (req: Request, res: Response) => {
     const debts = await SellerService.getSellerDebts(id);
     res.json(debts);
   } catch (err) {
-    res.status(500).json({ msg: 'Error obteniendo deudas del vendedor', err });
+    res.status(500).json({ msg: "Error obteniendo deudas del vendedor", err });
   }
 };

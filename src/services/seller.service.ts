@@ -3,10 +3,10 @@ import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { calcPagoMensual, calcSellerDebt } from "../utils";
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { Types } from "mongoose";
+import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
 
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
-
 
 const getAllSellers = async () => {
   const sellers = await SellerRepository.findAll();
@@ -14,13 +14,12 @@ const getAllSellers = async () => {
     ...seller,
     pago_mensual: calcPagoMensual(seller),
   }));
-}
+};
 
 const getSeller = async (sellerId: string) => {
-  const seller = await SellerRepository.findById((sellerId));
+  const seller = await SellerRepository.findById(sellerId);
   return { ...seller, pago_mensual: calcPagoMensual(seller!) };
-}
-
+};
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
   const montoTotal = calcSellerDebt(seller);
@@ -86,7 +85,14 @@ const paySellerDebt = async (id: string, payAll: boolean) => {
   }
   await SellerRepository.markSalesAsDeposited(id);
 
-  return await SellerRepository.updateSeller(id, update);
+  const updatedSeller = await SellerRepository.updateSeller(id, update);
+  if (!updateSeller) {
+    return
+    throw new Error(`Error al actualizar las deudas del vendedor ${id}`);
+  }
+
+  console.log(`Deuda pagada para el vendedor ${updatedSeller!.nombre}`);
+  return updatedSeller;
 };
 
 const getSellerDebts = async (sellerId: string) => {
@@ -98,7 +104,9 @@ const updateSellerSaldo = async (sellerId: any, addSaldo: number) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) throw new Error(`Seller with id ${sellerId} not found`);
   const newSaldo = (seller.saldo_pendiente || 0) + addSaldo;
-  return await SellerRepository.updateSeller(sellerId, { saldo_pendiente: newSaldo });
+  return await SellerRepository.updateSeller(sellerId, {
+    saldo_pendiente: newSaldo,
+  });
 };
 
 export const SellerService = {
@@ -109,5 +117,5 @@ export const SellerService = {
   renewSeller,
   paySellerDebt,
   getSellerDebts,
-  updateSellerSaldo
+  updateSellerSaldo,
 };
