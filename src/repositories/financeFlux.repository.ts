@@ -48,7 +48,7 @@ const findSellerById = async (sellerId: Types.ObjectId): Promise<IFlujoFinancier
 };
 
 const findSellerInfoById = async (sellerId: Types.ObjectId): Promise<IFlujoFinancieroDocument[]> => {
-  return await FlujoFinancieroModel.find({ vendedor: sellerId }).exec();
+  return await FlujoFinancieroModel.find({ id_vendedor: sellerId }).exec();
 };
 
 const markFinanceFluxAsPaid = async (sellerId: string): Promise<void> => {
