@@ -155,6 +155,8 @@ const getProductsBySellerId = async (sellerId: string) => {
 const updateProducts = async (shippingId: any, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
     if (!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+    //console.log("🔍 Productos que se intentarán actualizar:", JSON.stringify(prods, null, 2));
+
     return await SaleRepository.updateProducts(sale, prods);
 }
 

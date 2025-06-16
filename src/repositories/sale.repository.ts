@@ -46,17 +46,26 @@ const updateProducts = async (_: any, prods: any[]): Promise<any[]> => {
   const updatedSales: any[] = [];
 
   for (const prod of prods) {
+    const fieldsToUpdate: any = {};
+    if ('cantidad' in prod) fieldsToUpdate.cantidad = prod.cantidad;
+    if ('precio_unitario' in prod) fieldsToUpdate.precio_unitario = prod.precio_unitario;
+    if ('utilidad' in prod) fieldsToUpdate.utilidad = prod.utilidad;
+    if ('quien_paga_delivery' in prod) fieldsToUpdate.quien_paga_delivery = prod.quien_paga_delivery;
+    //console.log("📝 Updating venta ID:", prod._id || prod.id_venta);
+    //console.log("🧾 Campos a actualizar:", fieldsToUpdate);
+
     const updated = await VentaModel.findByIdAndUpdate(
-      prod.id_venta,
-      {
-        $set: {
-          cantidad: prod.cantidad,
-          precio_unitario: prod.precio_unitario,
-          utilidad: prod.utilidad
-        }
-      },
+      prod._id || prod.id_venta,
+      { $set: fieldsToUpdate },
       { new: true }
     );
+    if (updated) {
+      //console.log("✅ Venta actualizada:", updated._id);
+    } else {
+      console.warn("⚠️ No se encontró la venta para actualizar:", prod._id || prod.id_venta);
+    }
+
+
     if (updated) updatedSales.push(updated);
   }
 
