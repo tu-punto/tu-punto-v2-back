@@ -333,6 +333,7 @@ const updateSaleById = async (id: string, fields: any) => {
 const deleteSaleById = async (id: string, id_sucursal: string) => {
     const venta = await SaleRepository.findById(id);
     if (!venta) return null;
+    
     const cleanedNombreVariante = venta.nombre_variante?.trim().replace(/[\s/-]+/g, '');
     const cleanedNombreProducto = venta.producto.nombre_producto?.trim().replace(/\s+/g, '').replace(/-+/g, '');
 
@@ -342,6 +343,7 @@ const deleteSaleById = async (id: string, id_sucursal: string) => {
         console.error(`Sucursal with id ${id_sucursal} not found in product ${producto.nombre_producto}`);
         return null;
     }
+
     let indexToUpdate = -1;
     const varianteToUpdate = sucursal.combinaciones.find((combinacion, index) => {
         const variantes: any = combinacion.variantes;
@@ -360,16 +362,34 @@ const deleteSaleById = async (id: string, id_sucursal: string) => {
         return null;
     }
 
-    sucursal.combinaciones[indexToUpdate].stock += venta.cantidad
-    const resProduct = await ProductService.updateProduct(producto._id!.toString(), { sucursales: [...producto.sucursales, sucursal] });
+    sucursal.combinaciones[indexToUpdate].stock += venta.cantidad;
+    let addPendingSaldo = 0;
+    const subtotal = venta.cantidad * venta.precio_unitario;
+
+    if (venta.pedido.pagado_al_vendedor) {
+        addPendingSaldo = -venta.utilidad;
+    } else {
+        addPendingSaldo = subtotal - venta.utilidad;
+    }
+
+    const resProduct = await ProductService.updateProduct(producto._id!.toString(), { 
+        sucursales: [...producto.sucursales, sucursal] 
+    });
+    
     if (!resProduct) {
         console.error(`Error updating product ${producto.nombre_producto} stock after deleting sale ${id}`);
         return null;
     }
 
-    const res = await SaleRepository.deleteSaleById(id);
-    return res
+    const resSaldo = await SellerService.updateSellerSaldo(venta.vendedor, -addPendingSaldo); 
+    if (!resSaldo) {
+        console.error(`Error updating seller saldo for sale ${id}`);
+        return null;
 
+    }
+    const res = await SaleRepository.deleteSaleById(id);
+
+    return res;
 };
 
 export const SaleService = {
