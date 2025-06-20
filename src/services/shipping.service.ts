@@ -211,19 +211,33 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
         pedido?.estado_pedido === "Entregado" ||
         pedido?.estado_pedido === "interno"
       ) {
-        salesToUpdatesaldo.push({
-          id_vendedor: sale.id_vendedor,
-          utilidad: sale.utilidad,
-          id_pedido: shippingId,
-          subtotal: sale.cantidad * sale.precio_unitario,
-        });
+        const subtotal = sale.cantidad * sale.precio_unitario;
+        
+        // Si está pagado al vendedor, solo afecta la utilidad
+        if (pedido.pagado_al_vendedor) {
+          salesToUpdatesaldo.push({
+            id_vendedor: sale.id_vendedor,
+            utilidad: sale.utilidad,
+            id_pedido: shippingId,
+            subtotal: 0, // No afecta el subtotal cuando está pagado
+            pagado_al_vendedor: true
+          });
+        } else {
+          // Si no está pagado, afecta subtotal - utilidad
+          salesToUpdatesaldo.push({
+            id_vendedor: sale.id_vendedor,
+            utilidad: sale.utilidad,
+            id_pedido: shippingId,
+            subtotal: subtotal,
+            pagado_al_vendedor: false
+          });
+        }
       }
     }
   }
 
   await actualizarSaldoVendedor(salesToUpdatesaldo);
 
-  // Guardamos productos temporales directamente en el pedido
   if (productosTemporales.length > 0) {
     await addTemporaryProductsToShipping(shippingId, productosTemporales);
   }
