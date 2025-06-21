@@ -5,6 +5,7 @@ import { Types } from "mongoose";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { SaleService } from "./sale.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -52,9 +53,9 @@ const actualizarSaldoVendedor = async (
     }
 
     if (pedido.pagado_al_vendedor) {
-      saldoPendiente = -utilidad; 
+      saldoPendiente = -utilidad;
     } else {
-      saldoPendiente = subtotal - utilidad; 
+      saldoPendiente = subtotal - utilidad;
     }
 
     if (!pedidosProcesados.has(id_pedido)) {
@@ -125,7 +126,41 @@ const registerSaleToShipping = async (
 };
 
 const updateShipping = async (newData: any, shippingId: string) => {
-  return await ShippingRepository.updateShipping(newData, shippingId);
+  const shipping = await ShippingRepository.findById(shippingId);
+  if (!shipping)
+    throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+
+  if (newData.estado_pedido === "Entregado") {
+    const sales = await SaleService.getSalesByShippingId(shippingId);
+    const salesToUpdateSaldo: any = [];
+    sales.forEach((sale) => {
+      if (newData.pagado_al_vendedor) {
+        salesToUpdateSaldo.push({
+          id_vendedor: sale.id_vendedor.toString(),
+          utilidad: sale.utilidad,
+          id_pedido: shippingId,
+          subtotal: 0,
+          pagado_al_vendedor: true,
+        });
+      } else {
+        const subtotal = sale.cantidad * sale.precio_unitario;
+        salesToUpdateSaldo.push({
+          id_vendedor: sale.id_vendedor.toString(),
+          utilidad: sale.utilidad,
+          id_pedido: shippingId,
+          subtotal: subtotal,
+          pagado_al_vendedor: false,
+        });
+      }
+    });
+
+    if (salesToUpdateSaldo.length > 0) {
+      await actualizarSaldoVendedor(salesToUpdateSaldo);
+    }
+  }
+
+  const resShip = await ShippingRepository.updateShipping(newData, shippingId);
+  return resShip;
 };
 
 const getShippingsBySellerService = async (sellerId: string) => {
@@ -172,7 +207,7 @@ const deleteShippingById = async (id: string) => {
     for (const venta of ventas) {
       if (venta.vendedor) {
         await VendedorModel.findByIdAndUpdate(venta.vendedor, {
-          $pull: { venta: venta._id }
+          $pull: { venta: venta._id },
         });
       }
 
@@ -180,10 +215,9 @@ const deleteShippingById = async (id: string) => {
     }
   }
 
-await ShippingRepository.deleteById(id);
+  await ShippingRepository.deleteById(id);
   return { success: true };
 };
-
 
 const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   const savedSales = [];
@@ -212,7 +246,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
         pedido?.estado_pedido === "interno"
       ) {
         const subtotal = sale.cantidad * sale.precio_unitario;
-        
+
         // Si está pagado al vendedor, solo afecta la utilidad
         if (pedido.pagado_al_vendedor) {
           salesToUpdatesaldo.push({
@@ -220,7 +254,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
             utilidad: sale.utilidad,
             id_pedido: shippingId,
             subtotal: 0, // No afecta el subtotal cuando está pagado
-            pagado_al_vendedor: true
+            pagado_al_vendedor: true,
           });
         } else {
           // Si no está pagado, afecta subtotal - utilidad
@@ -229,7 +263,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
             utilidad: sale.utilidad,
             id_pedido: shippingId,
             subtotal: subtotal,
-            pagado_al_vendedor: false
+            pagado_al_vendedor: false,
           });
         }
       }
