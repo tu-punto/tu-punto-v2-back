@@ -31,62 +31,65 @@ const actualizarSaldoVendedor = async (
     utilidad: number;
     id_pedido?: string;
     subtotal: number;
+    pagado_al_vendedor: boolean;
   }[]
 ) => {
+
   const vendedoresMap = new Map<string, number>();
   const pedidosProcesados = new Set();
 
   for (const venta of ventas) {
-    const { id_vendedor, utilidad, id_pedido, subtotal } = venta;
-
+    const { id_vendedor, utilidad, id_pedido, subtotal, pagado_al_vendedor } = venta;
     let saldoPendiente = 0;
     if (!id_pedido) {
       throw new Error("id_pedido is required for calculating saldo pendiente");
     }
+
     const pedido = await PedidoModel.findById(id_pedido)
       .select("adelanto_cliente cargo_delivery pagado_al_vendedor")
       .lean();
 
     if (!pedido) {
-      console.error(`Pedido con id ${id_pedido} no encontrado`);
+      console.error(`❌ Pedido con id ${id_pedido} no encontrado`);
       continue;
     }
 
+
     if (pedido.pagado_al_vendedor) {
       saldoPendiente = -utilidad;
+      console.log(`→ Pagado al vendedor: saldoPendiente = -utilidad (${-utilidad})`);
     } else {
       saldoPendiente = subtotal - utilidad;
+      console.log(`→ No pagado: saldoPendiente = subtotal - utilidad (${subtotal} - ${utilidad} = ${saldoPendiente})`);
     }
 
     if (!pedidosProcesados.has(id_pedido)) {
-      // Restar adelanto del cliente y cargo de delivery solo una vez por pedido
-      saldoPendiente -= pedido.adelanto_cliente || 0;
-      saldoPendiente -= pedido.cargo_delivery || 0;
+      const adelanto = pedido.adelanto_cliente || 0;
+      const delivery = pedido.cargo_delivery || 0;
+      saldoPendiente -= adelanto;
+      saldoPendiente -= delivery;
 
-      console.log(
-        `→ Pedido procesado: ${id_pedido}, Saldo pendiente calculado: ${saldoPendiente}`
-      );
       pedidosProcesados.add(id_pedido);
-    } else {
-      console.log(`→ Pedido ya procesado: ${id_pedido}`);
-    }
+    } 
 
-    // Acumular el saldo pendiente para el vendedor
-    vendedoresMap.set(
-      id_vendedor,
-      (vendedoresMap.get(id_vendedor) || 0) + saldoPendiente
-    );
+    const currentSaldo = vendedoresMap.get(id_vendedor) || 0;
+    vendedoresMap.set(id_vendedor, currentSaldo + saldoPendiente);
+    console.log(`→ Updated vendedor ${id_vendedor} accumulated saldo: ${currentSaldo + saldoPendiente}`);
   }
 
   // Actualizar el saldo pendiente de cada vendedor
   for (const [id_vendedor, saldoTotal] of vendedoresMap.entries()) {
-    console.log(
-      `✅ Actualizando saldo_pendiente de vendedor ${id_vendedor} con: ${saldoTotal}`
-    );
+    const vendedorBefore = await VendedorModel.findById(id_vendedor).lean();
+    console.log(`→ Current saldo_pendiente: ${vendedorBefore?.saldo_pendiente}`);
+    
     await VendedorModel.findByIdAndUpdate(id_vendedor, {
       $inc: { saldo_pendiente: saldoTotal },
     });
+
+    const vendedorAfter = await VendedorModel.findById(id_vendedor).lean();
+    console.log(`→ New saldo_pendiente: ${vendedorAfter?.saldo_pendiente}`);
   }
+
 };
 
 const registerSaleToShipping = async (
