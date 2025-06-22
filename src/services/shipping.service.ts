@@ -5,6 +5,7 @@ import { Types } from "mongoose";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { SaleService } from "./sale.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -30,62 +31,65 @@ const actualizarSaldoVendedor = async (
     utilidad: number;
     id_pedido?: string;
     subtotal: number;
+    pagado_al_vendedor: boolean;
   }[]
 ) => {
+
   const vendedoresMap = new Map<string, number>();
   const pedidosProcesados = new Set();
 
   for (const venta of ventas) {
-    const { id_vendedor, utilidad, id_pedido, subtotal } = venta;
-
+    const { id_vendedor, utilidad, id_pedido, subtotal, pagado_al_vendedor } = venta;
     let saldoPendiente = 0;
     if (!id_pedido) {
       throw new Error("id_pedido is required for calculating saldo pendiente");
     }
+
     const pedido = await PedidoModel.findById(id_pedido)
       .select("adelanto_cliente cargo_delivery pagado_al_vendedor")
       .lean();
 
     if (!pedido) {
-      console.error(`Pedido con id ${id_pedido} no encontrado`);
+      console.error(`❌ Pedido con id ${id_pedido} no encontrado`);
       continue;
     }
 
+
     if (pedido.pagado_al_vendedor) {
-      saldoPendiente = -utilidad; 
+      saldoPendiente = -utilidad;
+      console.log(`→ Pagado al vendedor: saldoPendiente = -utilidad (${-utilidad})`);
     } else {
-      saldoPendiente = subtotal - utilidad; 
+      saldoPendiente = subtotal - utilidad;
+      console.log(`→ No pagado: saldoPendiente = subtotal - utilidad (${subtotal} - ${utilidad} = ${saldoPendiente})`);
     }
 
     if (!pedidosProcesados.has(id_pedido)) {
-      // Restar adelanto del cliente y cargo de delivery solo una vez por pedido
-      saldoPendiente -= pedido.adelanto_cliente || 0;
-      saldoPendiente -= pedido.cargo_delivery || 0;
+      const adelanto = pedido.adelanto_cliente || 0;
+      const delivery = pedido.cargo_delivery || 0;
+      saldoPendiente -= adelanto;
+      saldoPendiente -= delivery;
 
-      console.log(
-        `→ Pedido procesado: ${id_pedido}, Saldo pendiente calculado: ${saldoPendiente}`
-      );
       pedidosProcesados.add(id_pedido);
-    } else {
-      console.log(`→ Pedido ya procesado: ${id_pedido}`);
-    }
+    } 
 
-    // Acumular el saldo pendiente para el vendedor
-    vendedoresMap.set(
-      id_vendedor,
-      (vendedoresMap.get(id_vendedor) || 0) + saldoPendiente
-    );
+    const currentSaldo = vendedoresMap.get(id_vendedor) || 0;
+    vendedoresMap.set(id_vendedor, currentSaldo + saldoPendiente);
+    console.log(`→ Updated vendedor ${id_vendedor} accumulated saldo: ${currentSaldo + saldoPendiente}`);
   }
 
   // Actualizar el saldo pendiente de cada vendedor
   for (const [id_vendedor, saldoTotal] of vendedoresMap.entries()) {
-    console.log(
-      `✅ Actualizando saldo_pendiente de vendedor ${id_vendedor} con: ${saldoTotal}`
-    );
+    const vendedorBefore = await VendedorModel.findById(id_vendedor).lean();
+    console.log(`→ Current saldo_pendiente: ${vendedorBefore?.saldo_pendiente}`);
+    
     await VendedorModel.findByIdAndUpdate(id_vendedor, {
       $inc: { saldo_pendiente: saldoTotal },
     });
+
+    const vendedorAfter = await VendedorModel.findById(id_vendedor).lean();
+    console.log(`→ New saldo_pendiente: ${vendedorAfter?.saldo_pendiente}`);
   }
+
 };
 
 const registerSaleToShipping = async (
@@ -125,7 +129,41 @@ const registerSaleToShipping = async (
 };
 
 const updateShipping = async (newData: any, shippingId: string) => {
-  return await ShippingRepository.updateShipping(newData, shippingId);
+  const shipping = await ShippingRepository.findById(shippingId);
+  if (!shipping)
+    throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+
+  if (newData.estado_pedido === "Entregado") {
+    const sales = await SaleService.getSalesByShippingId(shippingId);
+    const salesToUpdateSaldo: any = [];
+    sales.forEach((sale) => {
+      if (newData.pagado_al_vendedor) {
+        salesToUpdateSaldo.push({
+          id_vendedor: sale.id_vendedor.toString(),
+          utilidad: sale.utilidad,
+          id_pedido: shippingId,
+          subtotal: 0,
+          pagado_al_vendedor: true,
+        });
+      } else {
+        const subtotal = sale.cantidad * sale.precio_unitario;
+        salesToUpdateSaldo.push({
+          id_vendedor: sale.id_vendedor.toString(),
+          utilidad: sale.utilidad,
+          id_pedido: shippingId,
+          subtotal: subtotal,
+          pagado_al_vendedor: false,
+        });
+      }
+    });
+
+    if (salesToUpdateSaldo.length > 0) {
+      await actualizarSaldoVendedor(salesToUpdateSaldo);
+    }
+  }
+
+  const resShip = await ShippingRepository.updateShipping(newData, shippingId);
+  return resShip;
 };
 
 const getShippingsBySellerService = async (sellerId: string) => {
@@ -172,7 +210,7 @@ const deleteShippingById = async (id: string) => {
     for (const venta of ventas) {
       if (venta.vendedor) {
         await VendedorModel.findByIdAndUpdate(venta.vendedor, {
-          $pull: { venta: venta._id }
+          $pull: { venta: venta._id },
         });
       }
 
@@ -180,10 +218,9 @@ const deleteShippingById = async (id: string) => {
     }
   }
 
-await ShippingRepository.deleteById(id);
+  await ShippingRepository.deleteById(id);
   return { success: true };
 };
-
 
 const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   const savedSales = [];
@@ -212,7 +249,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
         pedido?.estado_pedido === "interno"
       ) {
         const subtotal = sale.cantidad * sale.precio_unitario;
-        
+
         // Si está pagado al vendedor, solo afecta la utilidad
         if (pedido.pagado_al_vendedor) {
           salesToUpdatesaldo.push({
@@ -220,7 +257,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
             utilidad: sale.utilidad,
             id_pedido: shippingId,
             subtotal: 0, // No afecta el subtotal cuando está pagado
-            pagado_al_vendedor: true
+            pagado_al_vendedor: true,
           });
         } else {
           // Si no está pagado, afecta subtotal - utilidad
@@ -229,7 +266,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
             utilidad: sale.utilidad,
             id_pedido: shippingId,
             subtotal: subtotal,
-            pagado_al_vendedor: false
+            pagado_al_vendedor: false,
           });
         }
       }

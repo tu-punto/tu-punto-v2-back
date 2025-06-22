@@ -6,8 +6,6 @@ import { SellerService } from "./seller.service";
 import { ProductService } from './product.service';
 import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
 import { VentaModel } from '../entities/implements/VentaSchema';
-import { ShippingRepository } from '../repositories/shipping.repository';
-import { ObjectId } from 'typeorm';
 
 const getAllSales = async () => {
     return await SaleRepository.findAll();
@@ -59,7 +57,7 @@ const registerMultipleSales = async (sales: any[]) => {
 };
 
 
-const getProductsByShippingId = async (pedidoId: number) => {
+const getSalesByShippingId = async (pedidoId: string) => {
     // Obtener las ventas asociadas
     const sales = await SaleRepository.findByPedidoId(pedidoId);
 
@@ -396,7 +394,7 @@ export const SaleService = {
     getAllSales,
     registerSale,
     registerMultipleSales,
-    getProductsByShippingId,
+    getSalesByShippingId,
     getProductDetailsByProductId,
     updateProducts,
     deleteProducts,
