@@ -150,8 +150,12 @@ const updateStockByVariantCombination = async (
   const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
   if (!sucursal) throw new Error("Sucursal no encontrada");
 
-  //console.log("🔍 Buscando combinación para variantes:", variantes);
-  //console.log("📦 Combinaciones disponibles:", sucursal.combinaciones.map((c, i) => ({ index: i + 1, variantes: c.variantes })));
+  console.log("🛠 Entrando a updateStockByVariantCombination:");
+  console.log("▶️ Input variantes:", variantes);
+
+  sucursal.combinaciones.forEach((c, i) => {
+    console.log(`🧪 Combinación #${i + 1}:`, c.variantes);
+  });
   const combinacion = sucursal.combinaciones.find((c, index) => {
   const variantesPlanas = Object.fromEntries(c.variantes instanceof Map ? c.variantes : Object.entries(c.variantes || {}));
   const combKeys = Object.keys(variantesPlanas);

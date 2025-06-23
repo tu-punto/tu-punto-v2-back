@@ -52,8 +52,13 @@ export const renewSeller = async (req: Request, res: Response) => {
     const id = req.params.id;
     const renewed = await SellerService.renewSeller(id, req.body); // con flux
     res.json({ ok: true, renewed });
-  } catch (err) {
-    res.status(500).json({ msg: "Error renovando vendedor", err });
+  } catch (err: any) {
+    console.error("Error renovando vendedor:", err);
+
+    const status = err.status || 500;
+    const msg = err.msg || "Error renovando vendedor";
+
+    res.status(status).json({ ok: false, msg });
   }
 };
 

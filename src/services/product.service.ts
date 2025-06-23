@@ -8,6 +8,10 @@ import ejs from "ejs";
 import path from "path";
 import fs from "fs/promises";
 import { Buffer } from "buffer";
+import { Types } from 'mongoose';
+import { IProductoDocument } from "../entities/documents/IProductoDocument";
+import { ProductoModel } from "../entities/implements/ProductoSchema";
+
 interface Feature {
   feature: string;
   values: string[];
@@ -25,6 +29,39 @@ const registerProduct = async (product: IProducto): Promise<any> => {
       nuevoProducto.id_vendedor,
       { $push: { producto: nuevoProducto._id } }
     );
+
+    const rawVendedor = await VendedorModel.findById(nuevoProducto.id_vendedor).lean();
+    if (!rawVendedor) throw new Error("Vendedor no encontrado");
+
+    const vendedor = rawVendedor as unknown as {
+      pago_sucursales: { id_sucursal: string | Types.ObjectId }[]
+    };
+
+    const sucursalesHabilitadas = vendedor.pago_sucursales || [];
+
+    if (sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
+      const combinacionesReferencia = nuevoProducto.sucursales[0]?.combinaciones || [];
+
+      for (const sucursal of sucursalesHabilitadas) {
+        const id_sucursal = new Types.ObjectId(sucursal.id_sucursal.toString());
+
+        const yaExiste = nuevoProducto.sucursales.some(
+          s => s.id_sucursal.toString() === id_sucursal.toString()
+        );
+        if (yaExiste) continue;
+
+        nuevoProducto.sucursales.push({
+          id_sucursal,
+          combinaciones: combinacionesReferencia.map(c => ({
+            variantes: c.variantes,
+            precio: c.precio,
+            stock: 0
+          }))
+        });
+      }
+
+      await nuevoProducto.save();
+    }
   }
 
   return nuevoProducto;
@@ -147,9 +184,57 @@ const addVariantToProduct = async (
     precio: number,
     stock: number
   }[]
-) => {
-  return await ProductRepository.addVariantToProduct(productId, sucursalId, combinaciones);
+): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
+
+  const vendedor = await VendedorModel.findById(producto.id_vendedor).lean();
+  if (!vendedor) throw new Error("Vendedor no encontrado");
+
+  // 🔧 casting correcto
+  const sucursalesHabilitadas = (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId }[]) || [];
+
+  for (const sucursalPago of sucursalesHabilitadas) {
+    const id_sucursal = sucursalPago.id_sucursal.toString();
+
+    let sucursalProducto = producto.sucursales.find(
+      s => (s as any).id_sucursal.toString() === id_sucursal
+    );
+
+    if (!sucursalProducto) {
+      // Crear sucursal nueva
+      producto.sucursales.push({
+        id_sucursal: new Types.ObjectId(id_sucursal),
+        combinaciones: combinaciones.map(c => ({
+          variantes: c.variantes,
+          precio: c.precio,
+          stock: 0
+        }))
+      });
+    } else {
+      // Agregar combinaciones faltantes
+      for (const nueva of combinaciones) {
+        const yaExiste = sucursalProducto.combinaciones.some(c =>
+          Object.keys(c.variantes).length === Object.keys(nueva.variantes).length &&
+          Object.keys(nueva.variantes).every(
+            key => c.variantes[key]?.toLowerCase?.() === nueva.variantes[key]?.toLowerCase?.()
+          )
+        );
+
+        if (!yaExiste) {
+          sucursalProducto.combinaciones.push({
+            variantes: nueva.variantes,
+            precio: nueva.precio,
+            stock: sucursalId.toString() === id_sucursal ? nueva.stock : 0
+          });
+        }
+      }
+    }
+  }
+
+  return await producto.save();
 };
+
 
 const updateProduct = async (productId: string, data: Partial<IProducto>) => {
   return await ProductRepository.updateProduct(productId, data);
