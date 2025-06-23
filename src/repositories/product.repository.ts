@@ -150,8 +150,8 @@ const updateStockByVariantCombination = async (
   const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
   if (!sucursal) throw new Error("Sucursal no encontrada");
 
-  console.log("🛠 Entrando a updateStockByVariantCombination:");
-  console.log("▶️ Input variantes:", variantes);
+  //console.log("🛠 Entrando a updateStockByVariantCombination:");
+  //console.log("▶ Input variantes:", variantes);
 
   sucursal.combinaciones.forEach((c, i) => {
     console.log(`🧪 Combinación #${i + 1}:`, c.variantes);
