@@ -119,9 +119,20 @@ export const deleteShippingById = async (req: Request, res: Response) => {
   }
 };
 
+export const getSalesHistory = async (req: Request, res: Response) => {
+  const { date, sucursalId } = req.query;
+  try {
+    const result = await ShippingService.getDailySalesHistory(date as string | undefined, sucursalId as string);
+    res.json(result);
+  } catch (error) {
+    console.error("Error al obtener historial de ventas:", error);
+    res.status(500).json({ success: false, msg: "Error interno" });
+  }
+};
 
 
 export const ShippingController = {
   updateShipping,
-  getShippingById
+  getShippingById,
+  getSalesHistory
 };

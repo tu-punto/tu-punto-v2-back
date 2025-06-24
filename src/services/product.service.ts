@@ -20,6 +20,10 @@ interface Feature {
 const getAllProducts = async () => {
   return await ProductRepository.findAll();
 };
+const getAllTemporaryProducts = async () => {
+  return await ProductRepository.findAllTemporales();
+};
+
 
 const registerProduct = async (product: IProducto): Promise<any> => {
   const nuevoProducto = await ProductRepository.registerProduct(product);
@@ -39,7 +43,8 @@ const registerProduct = async (product: IProducto): Promise<any> => {
 
     const sucursalesHabilitadas = vendedor.pago_sucursales || [];
 
-    if (sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
+    // Si el producto NO es temporal, clona combinaciones a otras sucursales del vendedor
+    if (!nuevoProducto.esTemporal && sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
       const combinacionesReferencia = nuevoProducto.sucursales[0]?.combinaciones || [];
 
       for (const sucursal of sucursalesHabilitadas) {
@@ -62,6 +67,7 @@ const registerProduct = async (product: IProducto): Promise<any> => {
 
       await nuevoProducto.save();
     }
+
   }
 
   return nuevoProducto;
@@ -314,5 +320,7 @@ export const ProductService = {
   updateStockByVariantCombination,
   addVariantToProduct,
   updateProduct,
-  generateIngressPDF
+  generateIngressPDF,
+  getAllTemporaryProducts
+
 };

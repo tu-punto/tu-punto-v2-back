@@ -71,7 +71,7 @@ export const getProductsByShippingId = async (req: Request, res: Response) => {
         id_vendedor: producto.id_vendedor,
         variantes: venta.variantes,
         stockActual: combinacion?.stock ?? 0,
-        esTemporal: false
+        esTemporal: producto.esTemporal || false
       };
     });
 

@@ -3,30 +3,42 @@ import { IPedido } from "../entities/IPedido";
 import { IPedidoDocument } from "../entities/documents/IPedidoDocument";
 
 const findAll = async (): Promise<IPedidoDocument[]> => {
-  const pedidos = await PedidoModel.find().populate([
+  return await PedidoModel.find().populate([
     {
       path: 'venta',
-      populate: {
-        path: 'vendedor',
-        select: 'nombre apellido', 
-      },
+      populate: [
+        {
+          path: 'vendedor',
+          select: 'nombre apellido',
+        },
+        {
+          path: 'producto', 
+          select: 'nombre_producto esTemporal',
+        }
+      ],
     },
     'sucursal',
     'trabajador',
     'lugar_origen',
   ]);
-  return pedidos;
 };
+
 
 
 const findById = async (shippingId: string): Promise<IPedidoDocument | null> => {
   return await PedidoModel.findById(shippingId).populate([
     {
       path: 'venta',
-      populate: {
-        path: 'vendedor',
-        select: 'nombre apellido', 
-      },
+      populate: [
+        {
+          path: 'vendedor',
+          select: 'nombre apellido',
+        },
+        {
+          path: 'producto', 
+          select: 'nombre_producto esTemporal', 
+        }
+      ],
     },
     'sucursal',
     'trabajador',
@@ -38,10 +50,16 @@ const findByIds = async (shippingIds: string[]): Promise<IPedidoDocument[]> => {
   const pedidos = await PedidoModel.find({ _id: { $in: shippingIds } }).populate([
     {
       path: 'venta',
-      populate: {
-        path: 'vendedor',
-        select: 'nombre apellido',
-      },
+      populate: [
+        {
+          path: 'vendedor',
+          select: 'nombre apellido',
+        },
+        {
+          path: 'producto', 
+          select: 'nombre_producto esTemporal',
+        }
+      ],
     },
     'sucursal',
     'trabajador',
@@ -49,6 +67,7 @@ const findByIds = async (shippingIds: string[]): Promise<IPedidoDocument[]> => {
   ]);
   return pedidos;
 };
+
 
 const registerShipping = async (shipping: IPedido): Promise<IPedidoDocument> => {
   const newShipping = new PedidoModel(shipping);

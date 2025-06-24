@@ -11,6 +11,7 @@ productRouter.get("/seller/:id", ProductController.getAllProductsEntryAmountBySe
 productRouter.get("/stock/:idProduct", ProductController.getAllStockByProductId);
 productRouter.get("/:idProduct/sucursal/:idSucursal", ProductController.getProductStock);
 productRouter.get("/:id", ProductController.getProductById);
+productRouter.get("/temporales", ProductController.getTemporaryProducts);
 
 // POST
 productRouter.post("/register", ProductController.registerProductVariants);

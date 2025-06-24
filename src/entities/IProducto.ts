@@ -27,5 +27,6 @@ export interface IProducto {
   ingreso?: Types.ObjectId[];
   group: Types.ObjectId;
   sucursales: ISucursalProducto[];
+  esTemporal?: boolean;
 }
 

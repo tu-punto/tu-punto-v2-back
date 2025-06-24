@@ -30,6 +30,7 @@ const ProductoSchema = new Schema({
   categoria: { type: mongoose.Schema.Types.ObjectId, ref: 'Categoria' },
   venta: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Venta' }],
   ingreso: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ingreso' }],
+  esTemporal: { type: Boolean, default: false },
   group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' },
   groupId: { type: Number },
   sucursales: [SucursalProductoSchema] // ACTUALIZADO

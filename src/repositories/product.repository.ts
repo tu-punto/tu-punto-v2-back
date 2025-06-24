@@ -6,12 +6,20 @@ import { Types } from 'mongoose';
 import mongoose from 'mongoose';
 
 const findAll = async (): Promise<IProductoDocument[]> => {
-  return await ProductoModel.find()
+  return await ProductoModel.find({ esTemporal: { $ne: true } }) // excluye temporales
     .populate('features')
     .populate('categoria')
     .populate('group')
     .exec();
 };
+const findAllTemporales = async (): Promise<IProductoDocument[]> => {
+  return await ProductoModel.find({ esTemporal: true }) // solo temporales
+    .populate('features')
+    .populate('categoria')
+    .populate('group')
+    .exec();
+};
+
 
 const findById = async (productoId: string): Promise<IProductoDocument | null> => {
   return await ProductoModel.findById(productoId).exec();
@@ -236,5 +244,7 @@ export const ProductRepository = {
   updatePriceInSucursal,
   updateStockOfSubvariant,
   updateStockByVariantCombination,
-  addVariantToProduct
+  addVariantToProduct,
+  findAllTemporales
+
 };

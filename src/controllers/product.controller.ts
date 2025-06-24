@@ -11,6 +11,16 @@ export const getProduct = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+export const getTemporaryProducts = async (req: Request, res: Response) => {
+  try {
+    const products = await ProductService.getAllTemporaryProducts();
+    res.json(products);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener productos temporales' });
+  }
+};
+
 
 const registerProduct = async (req: Request, res: Response) => {
   const { product } = req.body;
@@ -186,5 +196,7 @@ export const ProductController = {
   updatePrice,
   updateSubvariantStock,
   addVariantToProduct,
-  generateIngressPDF
+  generateIngressPDF,
+  getTemporaryProducts
+
 };
