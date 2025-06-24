@@ -70,9 +70,8 @@ const actualizarSaldoVendedor = async (
       const delivery = pedido.cargo_delivery || 0;
       saldoPendiente -= adelanto;
       saldoPendiente -= delivery;
-
       pedidosProcesados.add(id_pedido);
-    } 
+    }
 
     const currentSaldo = vendedoresMap.get(id_vendedor) || 0;
     vendedoresMap.set(id_vendedor, currentSaldo + saldoPendiente);
