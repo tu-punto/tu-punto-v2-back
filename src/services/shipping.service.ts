@@ -274,7 +274,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
     if (pedido?.estado_pedido === "Entregado" || pedido?.estado_pedido === "interno") {
       const subtotal = venta.cantidad * venta.precio_unitario;
       salesToUpdateSaldo.push({
-        id_vendedor: String(venta.id_vendedor),
+        id_vendedor: String(venta.vendedor),
         utilidad: venta.utilidad,
         id_pedido: shippingId,
         subtotal: pedido.pagado_al_vendedor ? 0 : subtotal,
