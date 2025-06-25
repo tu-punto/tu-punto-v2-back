@@ -10,7 +10,10 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const deudas = await FinanceFluxService.getSellerInfoById(sellerId);
   const filteredDeudas = deudas.filter((deuda) => deuda.esDeuda);
   const sales = await SaleService.getProductsBySellerId(sellerId);
-  const filteredSales = sales.filter((sale) => !sale.deposito_realizado);
+  const filteredSales = sales.filter(
+    (sale) =>
+      !sale.deposito_realizado && sale.id_pedido.estado_pedido !== "En Espera"
+  );
   const pedidos = Array.from(
     new Set(filteredSales.map((sale) => sale.id_pedido))
   );
