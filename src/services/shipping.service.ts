@@ -106,14 +106,17 @@ const registerSaleToShipping = async (
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
 
+  const { _id, ...rest } = saleWithoutShippingId;
+
   const sale = new VentaModel({
-    ...saleWithoutShippingId,
+    ...rest,
     pedido: new Types.ObjectId(shipping._id),
     id_pedido: shipping._id,
     producto: new Types.ObjectId(saleWithoutShippingId.id_producto),
     vendedor: new Types.ObjectId(saleWithoutShippingId.id_vendedor),
     sucursal: new Types.ObjectId(saleWithoutShippingId.sucursal),
   });
+
 
   const nuevaVenta = await SaleRepository.registerSale(sale);
 
@@ -334,6 +337,7 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
     );
 
     return {
+      _id: p._id,
       fecha: p.fecha_pedido,
       hora: dayjs(p.fecha_pedido).format("HH:mm"),
       tipo_de_pago: p.tipo_de_pago,
