@@ -123,15 +123,20 @@ const getProductDetailsByProductId = async (productId: number) => {
 };
 const getProductsBySellerId = async (sellerId: string) => {
     const sales = await SaleRepository.findBySellerId(sellerId);
-
-    if (sales.length === 0)
-        return []
+    if (!sales || sales.length === 0) {
+        return [];
+    }
     //throw new Error("No existen ventas con ese ID de vendedor");
     const products = sales.map((sale) => {
-
-        return {
-            key: sale.producto._id,
-            producto: sale.producto.nombre_producto,
+        let product
+        if (sale.producto){
+            product = {
+                key: sale.producto._id,
+                producto: sale.producto.nombre_producto,
+                id_producto: sale.producto._id,
+            }
+        }
+        let res = {
             nombre_variante: sale.nombre_variante,
             precio_unitario: sale.precio_unitario,
             cantidad: sale.cantidad,
@@ -139,12 +144,20 @@ const getProductsBySellerId = async (sellerId: string) => {
             id_venta: sale._id,
             id_vendedor: sellerId,
             id_pedido: sale.pedido,
-            id_producto: sale.producto._id,
             id_sucursal: sale.sucursal,
             deposito_realizado: sale.deposito_realizado,
             cliente: sale.pedido.cliente,
             fecha_pedido: sale.pedido.fecha_pedido
         }
+        if (product) {
+            return { ...product, ...res };
+        } else {
+            return {
+                product: 'No encontrado',
+                ...res
+            };
+        }
+
     });
 
 
