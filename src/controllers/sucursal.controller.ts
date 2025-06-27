@@ -43,8 +43,8 @@ export const getSucursalByIdController = async (
 };
 
 export const updateSucursalController = async (req: Request, res: Response) => {
-  const sucursalId = parseInt(req.params.id);
-  const { newData } = req.body;
+  const sucursalId = req.params.id;
+  const newData = req.body; 
   try {
     const updatedSucursal = await SucursalsService.updateSucursal(
       sucursalId,

@@ -303,7 +303,9 @@ const generateIngressPDF = async (data: any): Promise<Buffer> => {
 
   return Buffer.from(pdfBuffer);
 };
-
+const getFlatProductList = async () => {
+  return await ProductRepository.findFlatProductList();
+};
 
 export const ProductService = {
   getAllProducts,
@@ -321,6 +323,6 @@ export const ProductService = {
   addVariantToProduct,
   updateProduct,
   generateIngressPDF,
-  getAllTemporaryProducts
-
+  getAllTemporaryProducts,
+  getFlatProductList
 };

@@ -17,7 +17,7 @@ const getSucursalByID = async (id: number) => {
   return sucursal;
 };
 
-const updateSucursal = async (sucursalID: number, newData: any) => {
+const updateSucursal = async (sucursalID: any, newData: any) => {
   const sucursal = await SucursalRepository.getSucursalByID(sucursalID);
   if (!sucursal)
     throw new Error(`sucursal with id ${sucursalID} doesn't exist`);

@@ -182,6 +182,16 @@ export const generateIngressPDF = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Error al generar PDF" });
   }
 };
+export const getFlatProductList = async (req: Request, res: Response) => {
+  try {
+    const products = await ProductService.getFlatProductList();
+    res.json(products);
+  } catch (error) {
+    console.error("Error en getFlatProductList:", error);
+    res.status(500).json({ error: "Error al obtener productos optimizados" });
+  }
+};
+
 export const ProductController = {
   getProduct,
   registerProduct,
@@ -197,6 +207,7 @@ export const ProductController = {
   updateSubvariantStock,
   addVariantToProduct,
   generateIngressPDF,
-  getTemporaryProducts
+  getTemporaryProducts,
+  getFlatProductList
 
 };
