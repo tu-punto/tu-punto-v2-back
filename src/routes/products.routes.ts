@@ -5,13 +5,14 @@ const productRouter = Router();
 
 // GET
 productRouter.get("/", ProductController.getProduct);
+productRouter.get("/flat", ProductController.getFlatProductList);
 productRouter.get("/features/:id", ProductController.getFeatures);
 productRouter.get("/category/:id", ProductController.getProductCategory);
 productRouter.get("/seller/:id", ProductController.getAllProductsEntryAmountBySellerId);
 productRouter.get("/stock/:idProduct", ProductController.getAllStockByProductId);
 productRouter.get("/:idProduct/sucursal/:idSucursal", ProductController.getProductStock);
-productRouter.get("/:id", ProductController.getProductById);
 productRouter.get("/temporales", ProductController.getTemporaryProducts);
+productRouter.get("/:id", ProductController.getProductById);
 
 // POST
 productRouter.post("/register", ProductController.registerProductVariants);

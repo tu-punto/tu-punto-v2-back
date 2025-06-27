@@ -229,6 +229,62 @@ const addVariantToProduct = async (
 
   return await producto.save();
 };
+const findFlatProductList = async () => {
+  return await ProductoModel.aggregate([
+    { $match: { esTemporal: { $ne: true } } },
+    { $unwind: "$sucursales" },
+    { $unwind: "$sucursales.combinaciones" },
+    {
+      $lookup: {
+        from: "Categoria",
+        localField: "id_categoria",
+        foreignField: "_id",
+        as: "categoria_info"
+      }
+    },
+    {
+      $lookup: {
+        from: "Vendedor",
+        localField: "id_vendedor",
+        foreignField: "_id",
+        as: "vendedor_info"
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        nombre_producto: 1,
+        variante: {
+          $reduce: {
+            input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+            initialValue: "",
+            in: {
+              $cond: [
+                { $eq: ["$$value", ""] },
+                "$$this.v",
+                { $concat: ["$$value", " / ", "$$this.v"] }
+              ]
+            }
+          }
+        },
+        precio: "$sucursales.combinaciones.precio",
+        stock: "$sucursales.combinaciones.stock",
+        sucursalId: "$sucursales.id_sucursal",
+        categoria: { $arrayElemAt: ["$categoria_info.categoria", 0] },
+        id_categoria: "$id_categoria",
+        id_vendedor: "$id_vendedor",
+        vendedor: {
+          $concat: [
+            { $arrayElemAt: ["$vendedor_info.nombre", 0] },
+            " ",
+            { $arrayElemAt: ["$vendedor_info.apellido", 0] }
+          ]
+        }
+      }
+    }
+  ]);
+};
+
 
 export const ProductRepository = {
   findAll,
@@ -245,6 +301,7 @@ export const ProductRepository = {
   updateStockOfSubvariant,
   updateStockByVariantCombination,
   addVariantToProduct,
-  findAllTemporales
+  findAllTemporales,
+  findFlatProductList
 
 };
