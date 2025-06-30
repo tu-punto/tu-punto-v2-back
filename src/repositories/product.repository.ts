@@ -155,7 +155,9 @@ const updateStockByVariantCombination = async (
   const producto = await ProductoModel.findById(productId);
   if (!producto) throw new Error("Producto no encontrado");
 
-  const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
+  const sucursal = producto.sucursales.find(s =>
+    s.id_sucursal.toString() === sucursalId.toString()
+  );
   if (!sucursal) throw new Error("Sucursal no encontrada");
 
   //console.log("🛠 Entrando a updateStockByVariantCombination:");
@@ -229,10 +231,23 @@ const addVariantToProduct = async (
 
   return await producto.save();
 };
-const findFlatProductList = async () => {
-  return await ProductoModel.aggregate([
-    { $match: { esTemporal: { $ne: true } } },
-    { $unwind: "$sucursales" },
+const findFlatProductList = async (sucursalId?: string) => {
+  const match: any = { esTemporal: { $ne: true } };
+
+  const pipeline: any[] = [
+    { $match: match },
+    { $unwind: "$sucursales" }
+  ];
+
+  if (sucursalId) {
+    pipeline.push({
+      $match: {
+        "sucursales.id_sucursal": new Types.ObjectId(sucursalId)
+      }
+    });
+  }
+
+  pipeline.push(
     { $unwind: "$sucursales.combinaciones" },
     {
       $lookup: {
@@ -267,6 +282,7 @@ const findFlatProductList = async () => {
             }
           }
         },
+        variantes_obj: "$sucursales.combinaciones.variantes",
         precio: "$sucursales.combinaciones.precio",
         stock: "$sucursales.combinaciones.stock",
         sucursalId: "$sucursales.id_sucursal",
@@ -282,9 +298,10 @@ const findFlatProductList = async () => {
         }
       }
     }
-  ]);
-};
+  );
 
+  return await ProductoModel.aggregate(pipeline);
+};
 
 export const ProductRepository = {
   findAll,

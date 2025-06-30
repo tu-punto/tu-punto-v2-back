@@ -184,13 +184,15 @@ export const generateIngressPDF = async (req: Request, res: Response) => {
 };
 export const getFlatProductList = async (req: Request, res: Response) => {
   try {
-    const products = await ProductService.getFlatProductList();
+    const sucursalId = req.query.sucursalId as string | undefined;
+    const products = await ProductService.getFlatProductList(sucursalId);
     res.json(products);
   } catch (error) {
     console.error("Error en getFlatProductList:", error);
     res.status(500).json({ error: "Error al obtener productos optimizados" });
   }
 };
+
 
 export const ProductController = {
   getProduct,
