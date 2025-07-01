@@ -15,10 +15,10 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
   diferencia_efectivo: Number,
   diferencia_bancario: Number,
   observaciones: String,
-  created_at: { type: Date, default: Date.now },
-  updated_at: { type: Date, default: Date.now },
   id_efectivo_diario: { type: Schema.Types.ObjectId, ref: 'EfectivoDiario' },
   id_sucursal: { type: Schema.Types.ObjectId, ref: 'Sucursal' },
+},{
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } 
 });
 
 export const CierreCajaModel = model<ICierreCajaDocument>("CierreCaja", CierreCajaSchema);
