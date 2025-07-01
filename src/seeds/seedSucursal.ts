@@ -8,7 +8,7 @@ export const seedSucursal = async () => {
   }
 
   const nuevaSucursal = new SucursalModel({
-    nombre: 'Sucursal Principal',
+    nombre: 'Prado',
     direccion: 'Prado 123',
     ciudad: 'La Paz',
     telefono: 12345678,
