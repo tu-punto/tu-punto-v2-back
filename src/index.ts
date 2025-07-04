@@ -14,8 +14,8 @@ const client_url = process.env.CLIENT_URL || "http://localhost:5173";
 const client_url2 = process.env.CLIENT_URL_2 || "http://localhost:5173";
 
 connectToMongoDB().then(async() => {
-  await seedSucursal();
-  await seedUser();
+  //await seedSucursal();
+  //await seedUser();
   app.use(
     cors({
       origin: [client_url, client_url2],

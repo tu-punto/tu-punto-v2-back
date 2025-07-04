@@ -232,6 +232,8 @@ const addVariantToProduct = async (
   return await producto.save();
 };
 const findFlatProductList = async (sucursalId?: string) => {
+    console.log("📦 findFlatProductList recibido sucursalId:", sucursalId);
+
   const match: any = { esTemporal: { $ne: true } };
 
   const pipeline: any[] = [
@@ -239,13 +241,16 @@ const findFlatProductList = async (sucursalId?: string) => {
     { $unwind: "$sucursales" }
   ];
 
-  if (sucursalId) {
+  if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
     pipeline.push({
       $match: {
         "sucursales.id_sucursal": new Types.ObjectId(sucursalId)
       }
     });
+  } else if (sucursalId) {
+    console.warn("⚠️ sucursalId inválido recibido en findFlatProductList:", sucursalId);
   }
+
 
   pipeline.push(
     { $unwind: "$sucursales.combinaciones" },
