@@ -129,7 +129,7 @@ const getProductsBySellerId = async (sellerId: string) => {
     //throw new Error("No existen ventas con ese ID de vendedor");
     const products = sales.map((sale) => {
         let product
-        if (sale.producto){
+        if (sale.producto) {
             product = {
                 key: sale.producto._id,
                 producto: sale.producto.nombre_producto,
@@ -253,103 +253,105 @@ const getDataPaymentProof = async (sellerId: number) => {
 }
 
 const updateSaleById = async (id: string, fields: any) => {
-  const venta = await SaleRepository.findById(id);
-  if (!venta) {
-    console.error(`Sale with id ${id} not found`);
-    return null;
-  }
-  const { id_sucursal, cantidad, precio_unitario, utilidad, ...others } = fields;
-
-  const cleanedNombreVariante = venta.nombre_variante
-    ?.trim()
-    .replace(/[\s/-]+/g, "");
-  const cleanedNombreProducto = venta.producto.nombre_producto
-    ?.trim()
-    .replace(/\s+/g, "")
-    .replace(/-+/g, "");
-
-  const producto = await ProductService.getProductById(
-    venta.producto._id!.toString()
-  );
-  const sucursal = producto.sucursales.find(
-    (s) => s.id_sucursal.toString() === id_sucursal
-  );
-
-  if (!sucursal) {
-    console.error(
-      `Sucursal with id ${id_sucursal} not found in product ${producto.nombre_producto}`
-    );
-    return null;
-  }
-
-  let indexToUpdate = -1;
-  const varianteToUpdate = sucursal.combinaciones.find((combinacion, index) => {
-    const variantes: any = combinacion.variantes;
-    let variantName = "";
-    for (const [key, value] of variantes.entries()) {
-      variantName += value.trim().replace(/[\s/-]+/g, "");
+    const venta = await SaleRepository.findById(id);
+    if (!venta) {
+        console.error(`Sale with id ${id} not found`);
+        return null;
     }
-    if (`${cleanedNombreProducto}${variantName}` === cleanedNombreVariante) {
-      indexToUpdate = index;
-      return combinacion;
+    const { id_sucursal, cantidad, precio_unitario, utilidad, ...others } = fields;
+
+    const cleanedNombreVariante = venta.nombre_variante
+        ?.trim()
+        .replace(/[\s/-]+/g, "");
+    const cleanedNombreProducto = venta.producto.nombre_producto
+        ?.trim()
+        .replace(/\s+/g, "")
+        .replace(/-+/g, "");
+
+    const producto = await ProductService.getProductById(
+        venta.producto._id!.toString()
+    );
+    const sucursal = producto.sucursales.find(
+        (s) => s.id_sucursal.toString() === venta.sucursal.toString()
+    );
+
+    if (!sucursal) {
+        console.error(
+            `Sucursal with id ${venta.sucursal} not found in product ${producto.nombre_producto}`
+        );
+        return null;
     }
-  });
 
-  if (!varianteToUpdate) {
-    console.error(
-      `Variante with name ${venta.nombre_variante} not found in product ${producto.nombre_producto}`
-    );
-    return null;
-  }
+    let indexToUpdate = -1;
+    const varianteToUpdate = sucursal.combinaciones.find((combinacion, index) => {
+        const variantes: any = combinacion.variantes;
+        let variantName = "";
+        for (const [key, value] of variantes.entries()) {
+            variantName += value.trim().replace(/[\s/-]+/g, "");
+        }
+        if (`${cleanedNombreProducto}${variantName}` === cleanedNombreVariante) {
+            indexToUpdate = index;
+            return combinacion;
+        }
+    });
 
-  const oldStock = varianteToUpdate.stock;
-  const stockAdjustment = venta.cantidad - cantidad;
-  const newStock = oldStock + stockAdjustment;
+    if (!varianteToUpdate) {
+        console.error(
+            `Variante with name ${venta.nombre_variante} not found in product ${producto.nombre_producto}`
+        );
+        return null;
+    }
 
-  if (newStock < 0) {
-    throw new Error(
-      "No hay suficiente stock disponible para realizar la operación."
-    );
-  }
-  let addPendingSaldo = 0
-  const oldSubtotal = venta.cantidad * venta.precio_unitario;
-  const newSubtotal = cantidad * precio_unitario;
+    const oldStock = varianteToUpdate.stock;
+    const stockAdjustment = venta.cantidad - cantidad;
+    const newStock = oldStock + stockAdjustment;
 
-  if (venta.pedido.pagado_al_vendedor) {
-    addPendingSaldo = venta.utilidad - utilidad
-  } else {
-    addPendingSaldo = -(oldSubtotal - venta.utilidad) + (newSubtotal - utilidad);
+    if (newStock < 0) {
+        throw new Error(
+            "No hay suficiente stock disponible para realizar la operación."
+        );
+    }
+    let addPendingSaldo = 0
+    const oldSubtotal = venta.cantidad * venta.precio_unitario;
+    const newSubtotal = cantidad * precio_unitario;
 
-  }
+    if (venta.pedido.pagado_al_vendedor) {
+        addPendingSaldo = venta.utilidad - utilidad
+    } else {
+        addPendingSaldo = -(oldSubtotal - venta.utilidad) + (newSubtotal - utilidad);
 
-  sucursal.combinaciones[indexToUpdate].stock = newStock;
+    }
 
-  await ProductService.updateProduct(producto._id!.toString(), {
-    sucursales: [...producto.sucursales, sucursal],
-  });
+    sucursal.combinaciones[indexToUpdate].stock = newStock;
+
+    await ProductService.updateProduct(producto._id!.toString(), {
+        sucursales: producto.sucursales.map((s) =>
+            s.id_sucursal === venta.sucursal
+                ? { ...s, combinaciones: [...s.combinaciones] } : s)
+    });
 
 
-  const updatedSale = await SaleRepository.updateSale({
-    _id: id,
-    cantidad,
-    precio_unitario,
-    utilidad,
-    ...others
-  });
-  await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
+    const updatedSale = await SaleRepository.updateSale({
+        _id: id,
+        cantidad,
+        precio_unitario,
+        utilidad,
+        ...others
+    });
+    await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
 
-  return updatedSale;
+    return updatedSale;
 };
 
 const deleteSaleById = async (id: string, id_sucursal: string) => {
     const venta = await SaleRepository.findById(id);
     if (!venta) return null;
-    
+
     const cleanedNombreVariante = venta.nombre_variante?.trim().replace(/[\s/-]+/g, '');
     const cleanedNombreProducto = venta.producto.nombre_producto?.trim().replace(/\s+/g, '').replace(/-+/g, '');
 
     const producto = await ProductService.getProductById(venta.producto._id!.toString());
-    const sucursal = producto.sucursales.find(s => s.id_sucursal.toString() === id_sucursal);
+    const sucursal = producto.sucursales.find(s => s.id_sucursal.toString() === venta.sucursal.toString());
     if (!sucursal) {
         console.error(`Sucursal with id ${id_sucursal} not found in product ${producto.nombre_producto}`);
         return null;
@@ -383,16 +385,18 @@ const deleteSaleById = async (id: string, id_sucursal: string) => {
         addPendingSaldo = subtotal - venta.utilidad;
     }
 
-    const resProduct = await ProductService.updateProduct(producto._id!.toString(), { 
-        sucursales: [...producto.sucursales, sucursal] 
+    const resProduct = await ProductService.updateProduct(producto._id!.toString(), {
+        sucursales: producto.sucursales.map(s => s.id_sucursal === venta.sucursal
+            ? { ...s, combinaciones: [...s.combinaciones] }
+            : s)
     });
-    
+
     if (!resProduct) {
         console.error(`Error updating product ${producto.nombre_producto} stock after deleting sale ${id}`);
         return null;
     }
 
-    const resSaldo = await SellerService.updateSellerSaldo(venta.vendedor, -addPendingSaldo); 
+    const resSaldo = await SellerService.updateSellerSaldo(venta.vendedor, -addPendingSaldo);
     if (!resSaldo) {
         console.error(`Error updating seller saldo for sale ${id}`);
         return null;
