@@ -13,9 +13,9 @@ const assertFlux = (flux: IFlujoFinanciero | null) => {
 
 const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 
-const registerFinanceFlux = async (flux: IFlujoFinanciero) =>
+const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
   await FinanceFluxRepository.registerFinanceFlux(flux);
-
+};
 
 const payDebt = async (fluxId: string) => {
   const _id = new Types.ObjectId(fluxId);
@@ -25,9 +25,11 @@ const payDebt = async (fluxId: string) => {
 
   await FinanceFluxRepository.updateById(fluxId, { esDeuda: false });
 
-  await SellerRepository.incrementDebt(flux!.vendedor!.toString(), -flux!.monto);
+  await SellerRepository.incrementDebt(
+    flux!.vendedor!.toString(),
+    -flux!.monto
+  );
 };
-
 
 const getWorkerById = async (workerId: any) => {
   const flux = await FinanceFluxRepository.findWorkerById(workerId);
@@ -64,7 +66,10 @@ const getStatsService = async () => {
   return stats;
 };
 
-const updateFinanceFlux = async (fluxId: string, updates: Partial<IFlujoFinanciero>) => {
+const updateFinanceFlux = async (
+  fluxId: string,
+  updates: Partial<IFlujoFinanciero>
+) => {
   const _id = new Types.ObjectId(fluxId);
 
   const existingFlux = await FinanceFluxRepository.findById(_id);
@@ -75,17 +80,18 @@ const updateFinanceFlux = async (fluxId: string, updates: Partial<IFlujoFinancie
   const updatedFlux = await FinanceFluxRepository.updateById(fluxId, updates);
   if (!updatedFlux) throw new Error("Error al actualizar el flujo");
 
-
   const newDeuda = updatedFlux.esDeuda ? updatedFlux.monto : 0;
   const diff = newDeuda - oldDeuda;
 
   if (diff !== 0 && updatedFlux.id_vendedor) {
-    await SellerRepository.incrementDebt(updatedFlux.id_vendedor.toString(), diff);
+    await SellerRepository.incrementDebt(
+      updatedFlux.id_vendedor.toString(),
+      diff
+    );
   }
 
   return updatedFlux;
 };
-
 
 export const FinanceFluxService = {
   getAllFinanceFluxes,
@@ -95,5 +101,5 @@ export const FinanceFluxService = {
   getSellerById,
   getSellerInfoById,
   getStatsService,
-  updateFinanceFlux
+  updateFinanceFlux,
 };
