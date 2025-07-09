@@ -7,6 +7,7 @@ const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
   return await FlujoFinancieroModel.find()
     .populate('id_vendedor', 'nombre apellido') // <-- solo estos campos
     .populate('id_trabajador', 'nombre')        // <-- solo este campo
+    .populate('id_sucursal', 'nombre')
     .exec();
 };
 

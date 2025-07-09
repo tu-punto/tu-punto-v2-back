@@ -38,6 +38,11 @@ const FlujoFinancieroSchema = new Schema({
     type: Types.ObjectId,
     ref: 'Trabajador',
     default: null
+  },
+  id_sucursal: {
+    type: Types.ObjectId,
+    ref: 'Sucursal',
+    default: null
   }
 
 }, {
