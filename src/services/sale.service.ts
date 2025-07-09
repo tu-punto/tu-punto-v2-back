@@ -128,37 +128,38 @@ const getProductsBySellerId = async (sellerId: string) => {
     }
     //throw new Error("No existen ventas con ese ID de vendedor");
     const products = sales.map((sale) => {
-        let product
-        if (sale.producto) {
-            product = {
-                key: sale.producto._id,
-                producto: sale.producto.nombre_producto,
-                id_producto: sale.producto._id,
-            }
-        }
-        let res = {
-            nombre_variante: sale.nombre_variante,
-            precio_unitario: sale.precio_unitario,
-            cantidad: sale.cantidad,
-            utilidad: sale.utilidad,
-            id_venta: sale._id,
-            id_vendedor: sellerId,
-            id_pedido: sale.pedido,
-            id_sucursal: sale.sucursal,
-            deposito_realizado: sale.deposito_realizado,
-            cliente: sale.pedido.cliente,
-            fecha_pedido: sale.pedido.fecha_pedido
-        }
-        if (product) {
-            return { ...product, ...res };
-        } else {
-            return {
-                product: 'No encontrado',
-                ...res
-            };
-        }
+    if (!sale.pedido) {
+        console.warn(`⚠️ Venta sin pedido referenciado: ${sale._id}`);
+    } else if (!sale.pedido.cliente) {
+        console.warn(`⚠️ Pedido con cliente vacío en venta: ${sale._id}`);
+        console.log("🧾 Pedido completo:", JSON.stringify(sale.pedido, null, 2));
+    }
 
-    });
+    let product;
+    if (sale.producto) {
+        product = {
+            key: sale.producto._id,
+            producto: sale.producto.nombre_producto,
+            id_producto: sale.producto._id,
+        };
+    }
+
+    let res = {
+        nombre_variante: sale.nombre_variante,
+        precio_unitario: sale.precio_unitario,
+        cantidad: sale.cantidad,
+        utilidad: sale.utilidad,
+        id_venta: sale._id,
+        id_vendedor: sellerId,
+        id_pedido: sale.pedido?._id ?? null,
+        id_sucursal: sale.sucursal,
+        deposito_realizado: sale.deposito_realizado,
+        cliente: sale.pedido?.cliente ?? null,
+        fecha_pedido: sale.pedido?.fecha_pedido ?? null
+    };
+
+    return product ? { ...product, ...res } : { product: 'No encontrado', ...res };
+});
 
 
     return products;
