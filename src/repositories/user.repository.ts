@@ -24,9 +24,24 @@ const getUserById = async (id: string): Promise<IUserDocument | null> => {
   return user;
 };
 
+const getAllUsers = async () => {
+  return await UserModel.find({}).select('-password').sort({ createdAt: -1 });
+};
+
+const updateUser = async (id: string, updateData: any) => {
+  return await UserModel.findByIdAndUpdate(id, updateData, { new: true }).select('-password');
+};
+
+const deleteUser = async (id: string) => {
+  return await UserModel.findByIdAndDelete(id);
+};
+
 export const UserRepository = {
   findAll,
   registerUserRepo,
   getUserByEmail,
   getUserById,
+  getAllUsers,
+  updateUser,
+  deleteUser,
 };

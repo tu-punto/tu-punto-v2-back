@@ -34,4 +34,8 @@ const UserSchema = new Schema<IUserDocument>({
   timestamps: false
 });
 
+UserSchema.index({ email: 1 }); 
+UserSchema.index({ role: 1 }); 
+UserSchema.index({ createdAt: -1 }); 
+
 export const UserModel = model<IUserDocument>('User', UserSchema);
