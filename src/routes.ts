@@ -12,7 +12,7 @@ import workerRouter from "./routes/worker.routes";
 import pdfRouter from "./routes/pdf.routes";
 import paymentProofRouter from "./routes/paymentProof.routes";
 import entryRouter from "./routes/entry.routes";
-import userRouter from "./routes/user.route";
+import userRouter from "./routes/user.routes";
 import whatsRouter from "./routes/whatsapp.route";
 import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";

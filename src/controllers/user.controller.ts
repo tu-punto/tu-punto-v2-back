@@ -133,3 +133,44 @@ export const logoutUserController = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Error logging out user" });
   }
 };
+
+export const getAllUsersController = async (req: Request, res: Response) => {
+  try {
+    const users = await UserService.getAllUsers();
+    res.json({ success: true, data: users });
+  } catch (error) {
+    res.status(500).json({ success: false, msg: "Error al obtener usuarios" });
+  }
+};
+
+export const updateUserController = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { email, role, password } = req.body;
+    
+    const updateData: any = { email, role };
+    
+    if (password) {
+      updateData.password = await hashPassword(password);
+    }
+
+    const updatedUser = await UserService.updateUser(id, updateData);
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    res.json({ success: true, data: updatedUser });
+  } catch (error) {
+    res.status(500).json({ success: false, msg: "Error al actualizar usuario" });
+  }
+};
+
+export const deleteUserController = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await UserService.deleteUser(id);
+    res.json({ success: true, msg: "Usuario eliminado" });
+  } catch (error) {
+    res.status(500).json({ success: false, msg: "Error al eliminar usuario" });
+  }
+};
