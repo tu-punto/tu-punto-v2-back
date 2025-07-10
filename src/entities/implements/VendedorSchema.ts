@@ -64,7 +64,18 @@ export const VendedorSchema = new Schema({
     entrega_simple: {
       type: Number,
       default: 0
+    },
+    fecha_ingreso: {
+      type: Date, 
+      default: Date.now
+    },
+    fecha_salida: {
+      type: Date,
+    },
+    comentario: {
+      type: String,
     }
+
   }],
 
   comision_porcentual: {
