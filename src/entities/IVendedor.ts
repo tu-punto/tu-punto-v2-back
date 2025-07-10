@@ -26,6 +26,9 @@ export interface IVendedor {
       exhibicion: number;
       delivery: number;
       entrega_simple: number;
+      fecha_ingreso: Date;
+      fecha_salida?: Date;
+      comentario?: string;
     }[];
 
     comision_porcentual: number;
