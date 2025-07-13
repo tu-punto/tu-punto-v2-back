@@ -25,6 +25,12 @@ const registerShipping = async (shipping: any) => {
   if (!shipping.fecha_pedido) {
     shipping.fecha_pedido = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
+  if (!shipping.hora_entrega_acordada) {
+    shipping.hora_entrega_acordada = moment().tz("America/La_Paz").toDate();
+  }
+  if (!shipping.hora_entrega_real) {
+    shipping.hora_entrega_real = moment().tz("America/La_Paz").toDate();
+  }
   return await ShippingRepository.registerShipping(shipping);
 };
 const getShippingById = async (id: string) => {
@@ -291,8 +297,13 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   return { success: true, ventas: savedSales };
 };
 const getDailySalesHistory = async (date: string | undefined, sucursalId: string) => {
-  const startOfDay = date ? dayjs(date).startOf('day').toDate() : null;
-  const endOfDay = date ? dayjs(date).endOf('day').toDate() : null;
+  const startOfDay = date
+  ? moment.tz(date, "America/La_Paz").startOf('day').toDate()
+  : null;
+
+const endOfDay = date
+  ? moment.tz(date, "America/La_Paz").endOf('day').toDate()
+  : null;
 
   const filter: any = {
     $or: [
@@ -308,7 +319,7 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
     // Si no hay fecha seleccionada, solo mostrar hasta hoy
     filter.fecha_pedido = { $lte: new Date() };
   }
-  //console.log("📅 Filtro aplicado:", filter);
+  //console.log("Filtro aplicado:", filter);
 
   const pedidos = await PedidoModel.find(filter)
     .populate({
@@ -342,7 +353,7 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
     return {
       _id: p._id,
       fecha: p.fecha_pedido,
-      hora: dayjs(p.fecha_pedido).format("HH:mm"),
+      hora: moment(p.fecha_pedido).tz("America/La_Paz").format("HH:mm"),
       tipo_de_pago: p.tipo_de_pago,
       monto_total: montoTotal,
       subtotal_efectivo: p.subtotal_efectivo || 0,
