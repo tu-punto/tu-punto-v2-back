@@ -8,6 +8,7 @@ import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { SaleService } from "./sale.service";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import dayjs from 'dayjs';
+import moment from 'moment-timezone';
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -21,6 +22,9 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
+  if (!shipping.fecha_pedido) {
+    shipping.fecha_pedido = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
+  }
   return await ShippingRepository.registerShipping(shipping);
 };
 const getShippingById = async (id: string) => {
@@ -238,7 +242,6 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   for (let sale of sales) {
     let productId = sale.id_producto;
 
-    // 🔄 Si no tiene id_producto válido, crearlo como temporal
     if (!productId || productId.length !== 24) {
       const nuevoProducto = await ProductoModel.create({
       nombre_producto: sale.nombre_variante || sale.producto,
@@ -249,7 +252,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
         id_sucursal: sale.sucursal,
         combinaciones: [{
           variantes: {
-            Variante: "Temporal" // 👈 etiqueta por defecto
+            Variante: "Temporal" 
           },
           precio: sale.precio_unitario,
           stock: sale.cantidad || 1
