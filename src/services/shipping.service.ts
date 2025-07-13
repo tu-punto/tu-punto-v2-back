@@ -22,15 +22,24 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
-  console.log("🕓 Fecha recibida desde frontend:");
+  console.log("📦 [ANTES DE CONVERTIR]");
   console.log("→ fecha_pedido:", shipping.fecha_pedido);
   console.log("→ hora_entrega_real:", shipping.hora_entrega_real);
   console.log("→ hora_entrega_acordada:", shipping.hora_entrega_acordada);
-  console.log("→ Tipos:", {
-    fecha_pedido: typeof shipping.fecha_pedido,
-    hora_entrega_real: typeof shipping.hora_entrega_real,
-    hora_entrega_acordada: typeof shipping.hora_entrega_acordada
-  });
+  if (shipping.fecha_pedido) {
+    shipping.fecha_pedido = moment.tz(shipping.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
+  }
+  if (shipping.hora_entrega_real) {
+    shipping.hora_entrega_real = moment.tz(shipping.hora_entrega_real, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
+  }
+  if (shipping.hora_entrega_acordada) {
+    shipping.hora_entrega_acordada = moment.tz(shipping.hora_entrega_acordada, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
+  }
+  console.log("📦 [DESPUÉS DE CONVERTIR]");
+  console.log("→ fecha_pedido:", shipping.fecha_pedido);
+  console.log("→ hora_entrega_real:", shipping.hora_entrega_real);
+  console.log("→ hora_entrega_acordada:", shipping.hora_entrega_acordada);
+
   if (!shipping.fecha_pedido) {
     shipping.fecha_pedido = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
