@@ -170,28 +170,39 @@ const updateShipping = async (newData: any, shippingId: string) => {
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
 
+  if ('fecha_pedido' in newData) {
+    delete newData.fecha_pedido;
+  }
+
+  if (newData.hora_entrega_acordada) {
+    newData.hora_entrega_acordada = moment
+      .tz(newData.hora_entrega_acordada, "America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
+
+  if (!newData.hora_entrega_real && newData.hora_entrega_acordada) {
+    newData.hora_entrega_real = newData.hora_entrega_acordada;
+  }
+
+  if (newData.hora_entrega_real) {
+    newData.hora_entrega_real = moment
+      .tz(newData.hora_entrega_real, "America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
+
   if (newData.estado_pedido === "Entregado") {
     const sales = await SaleService.getSalesByShippingId(shippingId);
     const salesToUpdateSaldo: any = [];
+
     sales.forEach((sale) => {
-      if (newData.pagado_al_vendedor) {
-        salesToUpdateSaldo.push({
-          id_vendedor: sale.id_vendedor.toString(),
-          utilidad: sale.utilidad,
-          id_pedido: shippingId,
-          subtotal: 0,
-          pagado_al_vendedor: true,
-        });
-      } else {
-        const subtotal = sale.cantidad * sale.precio_unitario;
-        salesToUpdateSaldo.push({
-          id_vendedor: sale.id_vendedor.toString(),
-          utilidad: sale.utilidad,
-          id_pedido: shippingId,
-          subtotal: subtotal,
-          pagado_al_vendedor: false,
-        });
-      }
+      const subtotal = sale.cantidad * sale.precio_unitario;
+      salesToUpdateSaldo.push({
+        id_vendedor: sale.id_vendedor.toString(),
+        utilidad: sale.utilidad,
+        id_pedido: shippingId,
+        subtotal: newData.pagado_al_vendedor ? 0 : subtotal,
+        pagado_al_vendedor: !!newData.pagado_al_vendedor,
+      });
     });
 
     if (salesToUpdateSaldo.length > 0) {
