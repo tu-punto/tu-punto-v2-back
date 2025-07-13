@@ -22,14 +22,23 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
+  console.log("🕓 Fecha recibida desde frontend:");
+  console.log("→ fecha_pedido:", shipping.fecha_pedido);
+  console.log("→ hora_entrega_real:", shipping.hora_entrega_real);
+  console.log("→ hora_entrega_acordada:", shipping.hora_entrega_acordada);
+  console.log("→ Tipos:", {
+    fecha_pedido: typeof shipping.fecha_pedido,
+    hora_entrega_real: typeof shipping.hora_entrega_real,
+    hora_entrega_acordada: typeof shipping.hora_entrega_acordada
+  });
   if (!shipping.fecha_pedido) {
     shipping.fecha_pedido = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
   if (!shipping.hora_entrega_acordada) {
-    shipping.hora_entrega_acordada = moment().tz("America/La_Paz").toDate();
+    shipping.hora_entrega_acordada = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
   if (!shipping.hora_entrega_real) {
-    shipping.hora_entrega_real = moment().tz("America/La_Paz").toDate();
+    shipping.hora_entrega_real = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
   return await ShippingRepository.registerShipping(shipping);
 };
@@ -310,13 +319,12 @@ const endOfDay = date
       { sucursal: sucursalId },
       { lugar_origen: sucursalId }
     ],
-    estado_pedido: { $ne: "En Espera" } // ⬅️ filtrar los "En Espera"
+    estado_pedido: { $ne: "En Espera" } 
   };
 
   if (startOfDay && endOfDay) {
   filter.fecha_pedido = { $gte: startOfDay, $lte: endOfDay };
   } else {
-    // Si no hay fecha seleccionada, solo mostrar hasta hoy
     filter.fecha_pedido = { $lte: new Date() };
   }
   //console.log("Filtro aplicado:", filter);
