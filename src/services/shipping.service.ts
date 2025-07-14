@@ -22,10 +22,6 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
-  console.log("📦 [ANTES DE CONVERTIR]");
-  console.log("→ fecha_pedido:", shipping.fecha_pedido);
-  console.log("→ hora_entrega_real:", shipping.hora_entrega_real);
-  console.log("→ hora_entrega_acordada:", shipping.hora_entrega_acordada);
   if (shipping.fecha_pedido) {
     shipping.fecha_pedido = moment.tz(shipping.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
@@ -35,11 +31,7 @@ const registerShipping = async (shipping: any) => {
   if (shipping.hora_entrega_acordada) {
     shipping.hora_entrega_acordada = moment.tz(shipping.hora_entrega_acordada, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
-  console.log("📦 [DESPUÉS DE CONVERTIR]");
-  console.log("→ fecha_pedido:", shipping.fecha_pedido);
-  console.log("→ hora_entrega_real:", shipping.hora_entrega_real);
-  console.log("→ hora_entrega_acordada:", shipping.hora_entrega_acordada);
-
+  
   if (!shipping.fecha_pedido) {
     shipping.fecha_pedido = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
@@ -326,28 +318,22 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   return { success: true, ventas: savedSales };
 };
 const getDailySalesHistory = async (date: string | undefined, sucursalId: string) => {
-  const startOfDay = date
-  ? moment.tz(date, "America/La_Paz").startOf('day').toDate()
-  : null;
-
-const endOfDay = date
-  ? moment.tz(date, "America/La_Paz").endOf('day').toDate()
-  : null;
+  const startOfDay = date ? dayjs(date).startOf('day').toDate() : null;
+  const endOfDay = date ? dayjs(date).endOf('day').toDate() : null;
 
   const filter: any = {
     $or: [
       { sucursal: sucursalId },
       { lugar_origen: sucursalId }
     ],
-    estado_pedido: { $ne: "En Espera" } 
+    estado_pedido: { $ne: "En Espera" }
   };
 
   if (startOfDay && endOfDay) {
-  filter.fecha_pedido = { $gte: startOfDay, $lte: endOfDay };
+    filter.hora_entrega_acordada = { $gte: startOfDay, $lte: endOfDay };
   } else {
-    filter.fecha_pedido = { $lte: new Date() };
+    filter.hora_entrega_acordada = { $lte: new Date() };
   }
-  //console.log("Filtro aplicado:", filter);
 
   const pedidos = await PedidoModel.find(filter)
     .populate({
@@ -357,10 +343,9 @@ const endOfDay = date
         { path: 'producto', select: 'nombre_producto' }
       ]
     })
-    .sort({ fecha_pedido: -1 })
+    .sort({ hora_entrega_acordada: -1 })
     .lean();
 
-    
   const resumen = pedidos.map(p => {
     const ventasNormales = (Array.isArray(p.venta) ? p.venta : []).filter((v: any) =>
       v && typeof v === 'object' &&
@@ -380,8 +365,8 @@ const endOfDay = date
 
     return {
       _id: p._id,
-      fecha: p.fecha_pedido,
-      hora: moment(p.fecha_pedido).tz("America/La_Paz").format("HH:mm"),
+      fecha: p.hora_entrega_acordada,
+      hora: dayjs(p.hora_entrega_acordada).format("HH:mm"),
       tipo_de_pago: p.tipo_de_pago,
       monto_total: montoTotal,
       subtotal_efectivo: p.subtotal_efectivo || 0,
@@ -398,7 +383,6 @@ const endOfDay = date
 
   return { resumen, totales };
 };
-
 
 export const ShippingService = {
   getAllShippings,
