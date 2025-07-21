@@ -74,8 +74,11 @@ export const VendedorSchema = new Schema({
     },
     comentario: {
       type: String,
+    }, 
+    activo: {
+      type: Boolean,
+      default: true
     }
-
   }],
 
   comision_porcentual: {
