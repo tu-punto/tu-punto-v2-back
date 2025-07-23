@@ -30,7 +30,7 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
   await saveFlux({
     tipo: "INGRESO",
     categoria: "REGISTRO",
-    concepto: `Alta vendedor ${nuevo.nombre}`,
+    concepto: `Alta hasta el ${nuevo.fecha_vigencia}`,
     monto: montoTotal,
     fecha: new Date(),
     esDeuda: seller.esDeuda,
@@ -147,7 +147,7 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
     await saveFlux({
       tipo: "INGRESO",
       categoria: "RENOVACION",
-      concepto: `Renovación vendedor ${actualizado.nombre}`,
+      concepto: `Renovación hasta el ${actualizado.fecha_vigencia}`,
       monto: montoNuevo,
       fecha: new Date(),
       esDeuda: data.esDeuda ?? true,
