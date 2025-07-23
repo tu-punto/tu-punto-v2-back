@@ -42,9 +42,9 @@ export const incrementDebt = async (id: string, delta: number) => {
 const findDebtsBySeller = async (sellerId: string) => {
   return await FlujoFinancieroModel.find({
     id_vendedor: new Types.ObjectId(sellerId),
-    esDeuda: true,
+    // esDeuda: true,
   })
-    .select("monto concepto fecha")
+    .select("monto concepto fecha esDeuda")
     .lean()
     .exec();
 };
