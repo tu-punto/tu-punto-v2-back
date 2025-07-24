@@ -41,23 +41,30 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
       foundSucursal?.nombre || "Sucursal desconocida",
       sale.precio_unitario,
       sale.cantidad,
-      `Bs. ${sale.cantidad * sale.precio_unitario}`,
-      `Bs. ${(sale.cantidad * sale.precio_unitario - sale.utilidad).toFixed(
-        2
-      )}`,
+      !sale.id_pedido.pagado_al_vendedor
+        ? `Bs. ${sale.cantidad * sale.precio_unitario}`
+        : "Bs. 0",
+      !sale.id_pedido.pagado_al_vendedor
+        ? `Bs. ${(sale.cantidad * sale.precio_unitario - sale.utilidad).toFixed(
+            2
+          )}`
+        : `Bs. -${sale.utilidad.toFixed(2)}`,
     ];
   });
 
-  const totalVentas = filteredSales.reduce(
-    (acc: number, sale: any) => acc + sale.cantidad * sale.precio_unitario,
-    0
-  );
+  const totalVentas = filteredSales.reduce((acc: number, sale: any) => {
+    if (!sale.id_pedido.pagado_al_vendedor) {
+      return acc + sale.cantidad * sale.precio_unitario;
+    }
+    return acc;
+  }, 0);
 
-  const totalVentasComision = filteredSales.reduce(
-    (acc: number, sale: any) =>
-      acc + sale.cantidad * sale.precio_unitario - sale.utilidad,
-    0
-  );
+  const totalVentasComision = filteredSales.reduce((acc: number, sale: any) => {
+    if (!sale.id_pedido.pagado_al_vendedor) {
+      return acc + sale.cantidad * sale.precio_unitario - sale.utilidad;
+    }
+    return acc - sale.utilidad;
+  }, 0);
 
   salesTableData.push([
     "TOTAL VENTAS",
