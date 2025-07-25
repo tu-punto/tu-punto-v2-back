@@ -100,3 +100,12 @@ export const getSellerDebts = async (req: Request, res: Response) => {
     res.status(500).json({ msg: "Error obteniendo deudas del vendedor", err });
   }
 };
+
+export const getServicesSummary = async (_: Request, res: Response) => {
+  try {
+    const resumen = await SellerService.getServicesSummary();
+    res.json(resumen);
+  } catch (err) {
+    res.status(500).json({ msg: "Error generando resumen", err });
+  }
+};

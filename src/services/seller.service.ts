@@ -232,6 +232,56 @@ const updateSellerSaldo = async (sellerId: any, addSaldo: number) => {
   });
 };
 
+const getServicesSummary = async () => {
+  const sellers = await SellerRepository.findAll();
+
+  const resumen: Record<string, Record<string, number>> = {};
+
+  for (const seller of sellers) {
+    for (const pago of seller.pago_sucursales || []) {
+      const sucursal = pago.sucursalName;
+
+      if (!resumen[sucursal]) resumen[sucursal] = {
+        Almacenamiento: 0,
+        Exhibición: 0,
+        "Entregas Simples": 0,
+        Delivery: 0,
+        TOTAL: 0,
+      };
+
+      const montoAlmacenamiento = pago.alquiler || 0;
+      const montoExhibicion = pago.exhibicion || 0;
+      const montoEntrega = pago.entrega_simple || 0;
+      const montoDelivery = pago.delivery || 0;
+
+      resumen[sucursal].Almacenamiento += montoAlmacenamiento;
+      resumen[sucursal].Exhibición += montoExhibicion;
+      resumen[sucursal]["Entregas Simples"] += montoEntrega;
+      resumen[sucursal].Delivery += montoDelivery;
+
+      const totalSucursal = montoAlmacenamiento + montoExhibicion + montoEntrega + montoDelivery;
+      resumen[sucursal].TOTAL += totalSucursal;
+
+      // Acumular en TOTAL general
+      if (!resumen.TOTAL) resumen.TOTAL = {
+        Almacenamiento: 0,
+        Exhibición: 0,
+        "Entregas Simples": 0,
+        Delivery: 0,
+        TOTAL: 0,
+      };
+
+      resumen.TOTAL.Almacenamiento += montoAlmacenamiento;
+      resumen.TOTAL.Exhibición += montoExhibicion;
+      resumen.TOTAL["Entregas Simples"] += montoEntrega;
+      resumen.TOTAL.Delivery += montoDelivery;
+      resumen.TOTAL.TOTAL += totalSucursal;
+    }
+  }
+
+  return resumen;
+};
+
 export const SellerService = {
   getAllSellers,
   getSeller,
@@ -241,4 +291,5 @@ export const SellerService = {
   paySellerDebt,
   getSellerDebts,
   updateSellerSaldo,
+  getServicesSummary,
 };
