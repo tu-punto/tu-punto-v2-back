@@ -10,5 +10,6 @@ sellerRouter.get('/:id', SellerController.getSeller);
 sellerRouter.put("/renew/:id", SellerController.renewSeller);
 sellerRouter.post("/:id/pay", SellerController.paySellerDebt);
 sellerRouter.get('/:id/debts', SellerController.getSellerDebts);
+sellerRouter.get('/summary/services', SellerController.getServicesSummary);
 
 export default sellerRouter;
