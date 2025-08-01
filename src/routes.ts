@@ -16,6 +16,7 @@ import userRouter from "./routes/user.routes";
 import whatsRouter from "./routes/whatsapp.route";
 import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";
+import externalSaleRouter from "./routes/external.routes";
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use("/user", userRouter);
 router.use("/whats", whatsRouter);
 router.use("/boxClose", boxCloseRouter);
 router.use("/dailyEffective", dailyEffectiveRouter);
+router.use("/external", externalSaleRouter)
 
 export default router;
