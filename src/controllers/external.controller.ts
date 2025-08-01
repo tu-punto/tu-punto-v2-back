@@ -1,6 +1,16 @@
 import { Request, Response } from "express";
 import { ExternalSaleService } from "../services/external.service";
 
+export const getAllExternalSales = async (req: Request, res: Response) => {
+    try {
+        const externalSales = await ExternalSaleService.getAllExternalSales();
+        res.json(externalSales);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+}
+
 export const registerExternalSale = async (req: Request, res: Response) => {
     const externalSale = req.body;
     try {
@@ -13,4 +23,18 @@ export const registerExternalSale = async (req: Request, res: Response) => {
         console.error(error);
         res.status(500).json({error: "Internal Server Error"});
     }
+}
+
+export const deleteExternalSaleByID = async (req: Request, res: Response) => {
+    const {id} =  req.params;
+    try {
+        await ExternalSaleService.deleteExternalSaleByID(id);
+        res.json({
+            success: true,
+            message: "Venta externa eliminada exitosamente"
+        });
+    } catch (error) {
+    console.error("Error al eliminar la venta externa:", error);
+    res.status(500).json({ success: false, msg: "No se pudo eliminar la venta externa" });
+  }
 }
