@@ -12,7 +12,7 @@ const getAllSucursals = async () => {
 };
 
 const getSucursalByID = async (id: number) => {
-  return await SucursalModel.findOne({ id_sucursal: id }).populate([
+  return await SucursalModel.findOne({ _id: id }).populate([
     'pedido',
     'trabajador',
     'ingreso',
@@ -30,8 +30,8 @@ const updateSucursal = async (
   newData: Partial<ISucursal>
 ) => {
   const updated = await SucursalModel.findOneAndUpdate(
-    { id_sucursal: sucursal.id_sucursal },
-    { ...sucursal, ...newData },
+    { _id: sucursal._id},
+    newData,
     { new: true }
   );
   return updated;
