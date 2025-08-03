@@ -239,6 +239,8 @@ const getServicesSummary = async () => {
 
   for (const seller of sellers) {
     for (const pago of seller.pago_sucursales || []) {
+      if (!pago.activo) continue;
+      
       const sucursal = pago.sucursalName;
 
       if (!resumen[sucursal]) resumen[sucursal] = {
