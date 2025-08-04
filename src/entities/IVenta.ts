@@ -20,4 +20,6 @@ export interface IVenta {
   quien_paga_delivery?: 'comprador' | 'vendedor' | 'tupunto';
   nombre_variante?: string;
 
+  comision: number;
+  fecha: Date;
 }
