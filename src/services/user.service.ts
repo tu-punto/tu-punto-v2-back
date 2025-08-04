@@ -24,6 +24,10 @@ const deleteUser = async (id: string) => {
   return await UserRepository.deleteUser(id);
 };
 
+const getAdmins = async () => {
+  return await UserRepository.getAdmins();
+};
+
 export const UserService = {
   registerUserService,
   findByEmailService,
@@ -31,5 +35,6 @@ export const UserService = {
   getAllUsers,
   updateUser,
   deleteUser,
+  getAdmins
 };
 

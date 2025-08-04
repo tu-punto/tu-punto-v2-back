@@ -143,6 +143,32 @@ export const getAllUsersController = async (req: Request, res: Response) => {
   }
 };
 
+export const getAdminsController = async (req: Request, res: Response) => {
+  try {
+    const admins = await UserService.getAdmins(); 
+
+    const formatted = await Promise.all(
+      admins.map(async (admin) => {
+        const vendedor = await VendedorModel.findOne({ mail: admin.email });
+
+        const name = vendedor
+          ? `${vendedor.nombre} ${vendedor.apellido}`.trim()
+          : admin.email;
+
+        return {
+          _id: admin._id,
+          name,
+        };
+      })
+    );
+
+    res.json(formatted);
+  } catch (err) {
+    console.error("Error fetching admins:", err);
+    res.status(500).json({ error: "Error al obtener administradores" });
+  }
+};
+
 export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
