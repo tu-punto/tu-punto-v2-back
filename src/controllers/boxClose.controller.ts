@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { BoxCloseService } from "../services/boxClose.service";
+import { UserModel } from "../entities/implements/UserSchema";
 
 export const getBoxClosingsController = async (req: Request, res: Response) => {
   try {
@@ -11,13 +12,21 @@ export const getBoxClosingsController = async (req: Request, res: Response) => {
   }
 };
 
-export const registerBoxCloseController = async (
-  req: Request,
-  res: Response
-) => {
+export const registerBoxCloseController = async (req: Request, res: Response) => {
   const boxClose = req.body;
+
   try {
-    const newBoxClose = await BoxCloseService.registerBoxClose(boxClose);
+    const responsable = boxClose.responsable;
+
+    if (!responsable || !responsable.id || !responsable.nombre) {
+      return res.status(400).json({ error: "Datos de responsable incompletos" });
+    }
+
+    const newBoxClose = await BoxCloseService.registerBoxClose({
+      ...boxClose,
+      responsable,
+    });
+
     res.json({
       status: true,
       newBoxClose,

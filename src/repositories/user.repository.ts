@@ -24,6 +24,11 @@ const getUserById = async (id: string): Promise<IUserDocument | null> => {
   return user;
 };
 
+const getAdmins = async () => {
+  return await UserModel.find({ role: "admin" }).select("_id email");
+};
+
+
 const getAllUsers = async () => {
   return await UserModel.find({}).select('-password').sort({ createdAt: -1 });
 };
@@ -44,4 +49,5 @@ export const UserRepository = {
   getAllUsers,
   updateUser,
   deleteUser,
+  getAdmins
 };
