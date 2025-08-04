@@ -1,6 +1,10 @@
-import { Types } from 'mongoose';
+import { Types } from "mongoose";
+
 export interface ICierreCaja {
-  responsible: string;
+  responsable: {
+    id: Types.ObjectId;
+    nombre: string;
+  };
   ventas_efectivo: number;
   ventas_qr: number;
   efectivo_inicial: number;
@@ -15,11 +19,11 @@ export interface ICierreCaja {
   observaciones: string;
   created_at: Date;
   updated_at: Date;
-  id_efectivo_diario: Types.ObjectId;
+
+  efectivo_diario: {
+    corte: number;
+    cantidad: number;
+  }[];
+
   id_sucursal: Types.ObjectId;
 }
-
-
-
-
-

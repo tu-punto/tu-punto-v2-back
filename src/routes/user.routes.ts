@@ -7,6 +7,7 @@ import {
   getAllUsersController,
   updateUserController,
   deleteUserController,
+  getAdminsController,
 } from "../controllers/user.controller";
 
 const userRouter = Router();
@@ -17,6 +18,8 @@ userRouter.get("/info", getUserInfoController);
 userRouter.post("/logout", logoutUserController);
 
 userRouter.get("/", getAllUsersController);
+userRouter.get("/admins", getAdminsController);
+
 userRouter.put("/:id", updateUserController);
 userRouter.delete("/:id", deleteUserController);
 

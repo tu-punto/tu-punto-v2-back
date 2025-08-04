@@ -2,7 +2,10 @@ import { Schema, model } from "mongoose";
 import { ICierreCajaDocument } from "../documents/ICierreCajaDocument"; 
 
 const CierreCajaSchema = new Schema<ICierreCajaDocument>({
-  responsible: String,
+  responsable: {
+    id: { type: Schema.Types.ObjectId, ref: "User" },
+    nombre: String,
+  },  
   ventas_efectivo: Number,
   ventas_qr: Number,
   efectivo_inicial: Number,
@@ -15,10 +18,18 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
   diferencia_efectivo: Number,
   diferencia_bancario: Number,
   observaciones: String,
-  id_efectivo_diario: { type: Schema.Types.ObjectId, ref: 'EfectivoDiario' },
+
+  efectivo_diario: [
+    {
+      corte: Number,     
+      cantidad: Number,  
+    }
+  ],
+
   id_sucursal: { type: Schema.Types.ObjectId, ref: 'Sucursal' },
-},{
-  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } 
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
+
 
 export const CierreCajaModel = model<ICierreCajaDocument>("CierreCaja", CierreCajaSchema);
