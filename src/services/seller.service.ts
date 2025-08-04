@@ -30,7 +30,7 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
 
   await saveFlux({
     tipo: "INGRESO",
-    categoria: "REGISTRO",
+    categoria: "SERVICIO",
     concepto: `Alta hasta el ${dayjs(new Date(nuevo.fecha_vigencia)).format(
       "DD/MM/YYYY"
     )}`,
@@ -171,7 +171,7 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
   if (montoNuevo > 0 && actualizado) {
     await saveFlux({
       tipo: "INGRESO",
-      categoria: "RENOVACION",
+      categoria: "SERVICIO",
       concepto: `Renovación hasta el ${dayjs(
         new Date(actualizado.fecha_vigencia)
       ).format("DD/MM/YYYY")}`,

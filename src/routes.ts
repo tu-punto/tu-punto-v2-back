@@ -17,6 +17,8 @@ import whatsRouter from "./routes/whatsapp.route";
 import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";
 import dashboardRouter from "./routes/dashboard.routes";
+import financeFluxCategoryRouter from "./routes/financeFluxCategory.routes";
+
 
 const router = Router();
 
@@ -29,6 +31,7 @@ router.use("/group", groupRouter);
 router.use("/shipping", shippingRouter);
 router.use("/sucursal", sucursalRouter);
 router.use("/financeFlux", financeFluxRouter);
+router.use("/financeFlux/category", financeFluxCategoryRouter);
 router.use("/worker", workerRouter);
 router.use("/pdf", pdfRouter);
 router.use("/paymentProof", paymentProofRouter);
