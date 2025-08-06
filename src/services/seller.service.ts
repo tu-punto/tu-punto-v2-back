@@ -6,15 +6,35 @@ import { Types } from "mongoose";
 import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
 import dayjs from "dayjs";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { SaleService } from "./sale.service";
+import { calcPagoPendiente } from "../utils/seller.utils";
+import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
+import { FinanceFluxService } from "./financeFlux.service";
+import { IFinanceFlux } from "../entities/IFinanceFlux";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
 const getAllSellers = async () => {
-  const sellers = await SellerRepository.findAll();
-  return sellers.map((seller) => ({
-    ...seller,
-    pago_mensual: calcPagoMensual(seller),
-  }));
+  const sellers = await SellerRepository.findAll() as IVendedorDocument[];
+  const sales = await SaleService.getAllSales();
+  const debts = await FinanceFluxService.getDebts();
+  const processedSellers: any[] = [];
+  for (const seller of sellers) {
+    const sellerSales = sales.filter(
+      (s: any) => s.vendedor._id.toString() === seller._id.toString()
+    );
+    const sellerDebts = debts.filter(
+      (d: any) => d.id_vendedor._id.toString() === seller._id.toString()
+    );
+    const metrics = calcPagoPendiente(sellerSales, sellerDebts as IFinanceFlux[]);
+    const pagoMensual = calcPagoMensual(seller);
+    processedSellers.push({
+      ...seller,
+      ...metrics,
+      pago_mensual: pagoMensual,
+    });
+  }
+  return processedSellers;
 };
 
 const getSeller = async (sellerId: string) => {
@@ -240,16 +260,17 @@ const getServicesSummary = async () => {
   for (const seller of sellers) {
     for (const pago of seller.pago_sucursales || []) {
       if (!pago.activo) continue;
-      
+
       const sucursal = pago.sucursalName;
 
-      if (!resumen[sucursal]) resumen[sucursal] = {
-        Almacenamiento: 0,
-        Exhibición: 0,
-        "Entregas Simples": 0,
-        Delivery: 0,
-        TOTAL: 0,
-      };
+      if (!resumen[sucursal])
+        resumen[sucursal] = {
+          Almacenamiento: 0,
+          Exhibición: 0,
+          "Entregas Simples": 0,
+          Delivery: 0,
+          TOTAL: 0,
+        };
 
       const montoAlmacenamiento = pago.alquiler || 0;
       const montoExhibicion = pago.exhibicion || 0;
@@ -261,17 +282,19 @@ const getServicesSummary = async () => {
       resumen[sucursal]["Entregas Simples"] += montoEntrega;
       resumen[sucursal].Delivery += montoDelivery;
 
-      const totalSucursal = montoAlmacenamiento + montoExhibicion + montoEntrega + montoDelivery;
+      const totalSucursal =
+        montoAlmacenamiento + montoExhibicion + montoEntrega + montoDelivery;
       resumen[sucursal].TOTAL += totalSucursal;
 
       // Acumular en TOTAL general
-      if (!resumen.TOTAL) resumen.TOTAL = {
-        Almacenamiento: 0,
-        Exhibición: 0,
-        "Entregas Simples": 0,
-        Delivery: 0,
-        TOTAL: 0,
-      };
+      if (!resumen.TOTAL)
+        resumen.TOTAL = {
+          Almacenamiento: 0,
+          Exhibición: 0,
+          "Entregas Simples": 0,
+          Delivery: 0,
+          TOTAL: 0,
+        };
 
       resumen.TOTAL.Almacenamiento += montoAlmacenamiento;
       resumen.TOTAL.Exhibición += montoExhibicion;

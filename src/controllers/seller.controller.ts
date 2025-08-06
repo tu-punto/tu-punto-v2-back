@@ -7,6 +7,7 @@ export const getSellers = async (_: Request, res: Response) => {
     const sellerList = await SellerService.getAllSellers();
     res.json(sellerList);
   } catch (err) {
+    console.error("Error obteniendo vendedores:", err);
     res.status(500).json({ msg: "Error obteniendo vendedores", err });
   }
 };
@@ -23,6 +24,7 @@ export const getSeller = async (req: Request, res: Response) => {
     }
     res.json(seller);
   } catch (err) {
+    console.error("Error obteniendo vendedor:", err);
     res.status(500).json({ msg: "Error obteniendo vendedor", err });
   }
 };
