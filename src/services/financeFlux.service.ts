@@ -13,6 +13,8 @@ const assertFlux = (flux: IFlujoFinanciero | null) => {
 
 const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 
+const getDebts = async () => await FinanceFluxRepository.findAllDebts();
+
 const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
   await FinanceFluxRepository.registerFinanceFlux(flux);
 };
@@ -102,4 +104,5 @@ export const FinanceFluxService = {
   getSellerInfoById,
   getStatsService,
   updateFinanceFlux,
+  getDebts,
 };
