@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { getAllShippings, getSellerShippings, uploadShipping } from "../controllers/shippingGuide.controller";
+import upload from '../config/multerConfig'
 
 
 const shippingGuideRouter = Router();
 
 shippingGuideRouter.get("/",getAllShippings)
 shippingGuideRouter.get("/seller",getSellerShippings)
-shippingGuideRouter.post("/upload",uploadShipping)
+shippingGuideRouter.post("/upload",upload.single('imagen'),uploadShipping)
 
 export default shippingGuideRouter;
