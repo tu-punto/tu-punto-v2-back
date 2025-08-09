@@ -14,8 +14,8 @@ export const getAllShippings = async (req: Request, res: Response) => {
 
 export const getSellerShippings = async (req: Request, res: Response) => {
     try {
-        const {id_vendedor} = req.body
-        const shippingGuides = await ShippingGuideService.getSellerShippings(id_vendedor);
+        const {id} = req.params
+        const shippingGuides = await ShippingGuideService.getSellerShippings(id);
         res.json(shippingGuides);
     } catch (error) {
         console.error(error);
