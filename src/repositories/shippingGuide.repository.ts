@@ -24,8 +24,17 @@ const uploadShipping = async(shippingGuide: IGuiaEnvio): Promise<IGuiaEnvioDocum
     return saved;
 }
 
+const markAsDelivered = async(shippingGuideID: string) => {
+    return await GuiaEnviosModel.findByIdAndUpdate(
+        shippingGuideID,
+        { $set: {isRecogido: true}},
+        { new: true}
+    )
+}
+
 export const ShippingGuideRepository = {
     getAllShippings,
     getSellerShippings,
     uploadShipping,
+    markAsDelivered
 }

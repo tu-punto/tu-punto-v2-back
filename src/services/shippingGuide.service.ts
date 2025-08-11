@@ -20,8 +20,13 @@ const uploadShipping = async (shippingGuide: any) => {
     return await ShippingGuideRepository.uploadShipping(shippingGuide);
 }
 
+const markAsDelivered = async (shippingGuideID: string) => {
+    return await ShippingGuideRepository.markAsDelivered(shippingGuideID);
+}
+
 export const ShippingGuideService = {
     getAllShippings,
     getSellerShippings,
     uploadShipping,
+    markAsDelivered,
 }

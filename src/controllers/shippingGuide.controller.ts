@@ -43,3 +43,16 @@ export const uploadShipping = async (req: Request, res: Response) => {
     }
 }
 
+export const markAsDelivered = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const updatedShipping = await ShippingGuideService.markAsDelivered(id);
+        res.json({
+            status: true,
+            updatedShipping
+        })
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error"})
+    }
+}

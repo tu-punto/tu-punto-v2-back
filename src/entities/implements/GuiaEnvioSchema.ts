@@ -24,6 +24,10 @@ const GuiaEnvioSchema = new Schema({
         type: String,
         required: false,
         enum: ['image/jpeg', 'image/png', 'image/webp']
+    },
+    isRecogido: {
+        type: Boolean,
+        default: false
     }
 },{
     collection: 'GuiaEnvio',

@@ -8,4 +8,5 @@ export interface IGuiaEnvio {
     fecha_subida: Date;
     imagen?: Buffer;
     tipoArchivo: "image/jpeg"|"image/png"|"image/webp";
+    isRecogido?: boolean;
 }
