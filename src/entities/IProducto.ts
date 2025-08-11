@@ -28,5 +28,9 @@ export interface IProducto {
   group: Types.ObjectId;
   sucursales: ISucursalProducto[];
   esTemporal?: boolean;
+  
+  qrCode?: string;          
+  qrImagePath?: string;     
+  qrProductURL?: string;    
 }
 
