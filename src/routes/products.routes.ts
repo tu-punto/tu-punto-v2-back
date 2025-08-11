@@ -12,6 +12,10 @@ productRouter.get("/seller/:id", ProductController.getAllProductsEntryAmountBySe
 productRouter.get("/stock/:idProduct", ProductController.getAllStockByProductId);
 productRouter.get("/:idProduct/sucursal/:idSucursal", ProductController.getProductStock);
 productRouter.get("/temporales", ProductController.getTemporaryProducts);
+
+productRouter.get("/:id/qr", ProductController.getProductQR); 
+productRouter.get("/qr/:qrCode", ProductController.findProductByQR);
+
 productRouter.get("/:id", ProductController.getProductById);
 
 // POST
@@ -20,6 +24,8 @@ productRouter.post("/registerVariant", ProductController.registerProduct);
 productRouter.post("/addFeatures", ProductController.addFeatureToProduct);
 productRouter.post("/add-variant", ProductController.addVariantToProduct);
 productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF);
+
+productRouter.post("/:id/regenerate-qr", ProductController.regenerateProductQR); // Regenerar QR
 
 // PUT
 productRouter.put("/update-price", ProductController.updatePrice);
