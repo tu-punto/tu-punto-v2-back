@@ -8,7 +8,9 @@ import {
   getShippingsBySellerController,
   addTemporaryProductsToShipping,
   deleteShippingById,
-  getSalesHistory 
+  getSalesHistory,
+  generateQRForShipping,
+  getShippingByQR 
 } from "../controllers/shipping.controller";
 
 const shippingRouter = Router();
@@ -32,5 +34,9 @@ shippingRouter.get("/by/:id", ShippingController.getShippingById);
 shippingRouter.get("/history/sales", getSalesHistory);
 
 shippingRouter.delete("/:id", deleteShippingById);
+
+shippingRouter.get("/:id/qr", generateQRForShipping);
+
+shippingRouter.get("/qr/:id", getShippingByQR);
 
 export default shippingRouter;

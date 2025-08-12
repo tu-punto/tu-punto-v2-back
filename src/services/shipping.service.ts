@@ -384,6 +384,36 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
   return { resumen, totales };
 };
 
+const saveQRCode = async (shippingId: string, qrCode: string) => {
+  return await PedidoModel.findByIdAndUpdate(
+    shippingId,
+    { $set: { qr_code: qrCode } },
+    { new: true }
+  );
+};
+
+const getShippingDetailsForQR = async (shippingId: string) => {
+  return await PedidoModel.findById(shippingId)
+    .populate([
+      {
+        path: 'venta',
+        populate: [
+          {
+            path: 'vendedor',
+            select: 'nombre apellido',
+          },
+          {
+            path: 'producto',
+            select: 'nombre_producto precio'
+          }
+        ]
+      },
+      'sucursal',
+      'trabajador'
+    ])
+    .lean();
+};
+
 export const ShippingService = {
   getAllShippings,
   getShippingByIds,
@@ -395,5 +425,7 @@ export const ShippingService = {
   addTemporaryProductsToShipping,
   deleteShippingById,
   processSalesForShipping,
-  getDailySalesHistory
+  getDailySalesHistory,
+  saveQRCode,
+  getShippingDetailsForQR
 };
