@@ -8,7 +8,7 @@ const PedidoSchema = new Schema({
   },
   telefono_cliente: {
     type: String,
-    required:false
+    required: false
   },
   tipo_de_pago: {
     type: String,
@@ -31,9 +31,9 @@ const PedidoSchema = new Schema({
     default: ""
   },
   lugar_origen: {
-  type: Schema.Types.ObjectId,
-  ref: 'Sucursal',
-  required: false
+    type: Schema.Types.ObjectId,
+    ref: 'Sucursal',
+    required: false
   },
 
   lugar_entrega: {
@@ -57,9 +57,9 @@ const PedidoSchema = new Schema({
     default: 0
   },
   esta_pagado: {
-  type: String,
-  enum: ['si', 'no', 'adelanto'],
-  default: 'no'
+    type: String,
+    enum: ['si', 'no', 'adelanto'],
+    default: 'no'
   },
   pagado_al_vendedor: {
     type: Boolean,
@@ -83,19 +83,23 @@ const PedidoSchema = new Schema({
     ref: 'Sucursal',
     required: false
   },
+  qr_code: {
+    type: String,
+    default: ""
+  },
   venta: [{
     type: Types.ObjectId,
     ref: 'Venta'
   }],
   productos_temporales: [
-  {
-    producto: { type: String, required: true },
-    cantidad: { type: Number, required: true },
-    precio_unitario: { type: Number, required: true },
-    utilidad: { type: Number, default: 0 },
-    id_vendedor: { type: Schema.Types.ObjectId, ref: 'Vendedor', required: true }
-  }
-],
+    {
+      producto: { type: String, required: true },
+      cantidad: { type: Number, required: true },
+      precio_unitario: { type: Number, required: true },
+      utilidad: { type: Number, default: 0 },
+      id_vendedor: { type: Schema.Types.ObjectId, ref: 'Vendedor', required: true }
+    }
+  ],
 }, {
   collection: 'Pedido',
   timestamps: false
