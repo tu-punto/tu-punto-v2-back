@@ -9,6 +9,10 @@ const getSellerShippings = async (sellerID: string) => {
     return await ShippingGuideRepository.getSellerShippings(sellerID);
 }
 
+const getBranchShippings = async (branchID: string) => {
+    return await ShippingGuideRepository.getBranchShippings(branchID);
+}
+
 const uploadShipping = async (shippingGuide: any) => {
     if (shippingGuide.fecha_subida) {
         shippingGuide.fecha_subida = moment.tz(shippingGuide.fecha_subida, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss"); 
@@ -27,6 +31,7 @@ const markAsDelivered = async (shippingGuideID: string) => {
 export const ShippingGuideService = {
     getAllShippings,
     getSellerShippings,
+    getBranchShippings,
     uploadShipping,
     markAsDelivered,
 }
