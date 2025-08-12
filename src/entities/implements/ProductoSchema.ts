@@ -33,7 +33,18 @@ const ProductoSchema = new Schema({
   esTemporal: { type: Boolean, default: false },
   group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' },
   groupId: { type: Number },
-  sucursales: [SucursalProductoSchema] // ACTUALIZADO
+  sucursales: [SucursalProductoSchema],
+  
+  qrCode: { 
+    type: String, 
+    unique: true, 
+    sparse: true 
+  },
+  qrImagePath: { type: String },
+  qrProductURL: { type: String }
 }, { timestamps: true, collection: 'Producto' });
+
+// Índice para optimizar búsquedas por QR
+ProductoSchema.index({ qrCode: 1 });
 
 export const ProductoModel = model<IProductoDocument>("Producto", ProductoSchema);

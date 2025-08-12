@@ -23,6 +23,7 @@ export const getTemporaryProducts = async (req: Request, res: Response) => {
 
 
 const registerProduct = async (req: Request, res: Response) => {
+  
   const { product } = req.body;
   try {
     const newProduct = await ProductService.registerProduct(product);
@@ -38,14 +39,87 @@ const registerProduct = async (req: Request, res: Response) => {
 };
 
 export const registerProductVariants = async (req: Request, res: Response) => {
-  console.log("Registering product with variants", req.body);
+  console.log("📥 Body recibido en /register:", JSON.stringify(req.body, null, 2));
 
   try {
-    const newProduct = await ProductService.registerProduct(req.body); // ✅ usa req.body directamente
-    res.json({ success: true, newProduct });
+    const newProduct = await ProductService.registerProduct(req.body);
+    res.status(201).json({ success: true, newProduct });
+  } catch (error: any) {
+    console.error("❌ Error al registrar variantes:", error?.message || error);
+    res.status(500).json({
+      success: false,
+      message: "Error al registrar producto con variantes",
+      error: error?.message || error
+    });
+  }
+};
+
+
+
+export const getProductQR = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const format = req.query.format as 'path' | 'base64' || 'path';
+  
+  try {
+    const qrData = await ProductService.getProductQR(id, format);
+    res.json({
+      success: true,
+      qrData
+    });
   } catch (error) {
-    console.error("Error al registrar variantes:", error);
-    res.status(500).json({ success: false, message: "Error al registrar producto con variantes" });
+    console.error("Error obteniendo QR:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error al obtener QR del producto", 
+      error 
+    });
+  }
+};
+
+export const regenerateProductQR = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  
+  try {
+    const qrData = await ProductService.regenerateProductQR(id);
+    res.json({
+      success: true,
+      message: "QR regenerado correctamente",
+      qrData
+    });
+  } catch (error) {
+    console.error("Error regenerando QR:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error al regenerar QR del producto", 
+      error 
+    });
+  }
+};
+
+// Buscar producto por código QR
+export const findProductByQR = async (req: Request, res: Response) => {
+  const { qrCode } = req.params;
+  
+  try {
+    const product = await ProductService.findProductByQRCode(qrCode);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Producto no encontrado con ese código QR"
+      });
+    }
+    
+    res.json({
+      success: true,
+      product
+    });
+  } catch (error) {
+    console.error("Error buscando producto por QR:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error al buscar producto por código QR", 
+      error 
+    });
   }
 };
 
@@ -210,6 +284,9 @@ export const ProductController = {
   addVariantToProduct,
   generateIngressPDF,
   getTemporaryProducts,
-  getFlatProductList
+  getFlatProductList,
+  getProductQR,
+  regenerateProductQR,
+  findProductByQR
 
 };

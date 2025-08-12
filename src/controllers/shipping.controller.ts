@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ShippingService } from "../services/shipping.service";
+import QRCode from 'qrcode';
 
 export const getShipping = async (req: Request, res: Response) => {
   try {
@@ -63,7 +64,7 @@ export const getShippingById = async (req: Request, res: Response) => {
 
 const updateShipping = async (req: Request, res: Response) => {
   const id = req.params.id;
-  const newData = req.body; 
+  const newData = req.body;
 
   try {
     const shippingUpdated = await ShippingService.updateShipping(newData, id);
@@ -129,7 +130,50 @@ export const getSalesHistory = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, msg: "Error interno" });
   }
 };
+export const generateQRForShipping = async (req: Request, res: Response) => {
+  const { id } = req.params;
 
+  try {
+    const shipping = await ShippingService.getShippingById(id);
+    if (!shipping) {
+      return res.status(404).json({ error: "Pedido no encontrado" });
+    }
+
+    // Generar URL para el QR (ajusta según tu dominio)
+    const qrUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/shipping/qr/${id}`;
+
+    // Generar el código QR
+    const qrCode = await QRCode.toDataURL(qrUrl);
+
+    // Guardar el código QR en el pedido
+    await ShippingService.saveQRCode(id, qrCode);
+
+    res.json({
+      success: true,
+      qrCode: qrCode,
+      shippingId: id
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al generar el QR" });
+  }
+};
+
+export const getShippingByQR = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const shipping = await ShippingService.getShippingDetailsForQR(id);
+    if (!shipping) {
+      return res.status(404).json({ error: "Pedido no encontrado" });
+    }
+
+    res.json(shipping);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener información del pedido" });
+  }
+};
 
 export const ShippingController = {
   updateShipping,
