@@ -7,6 +7,11 @@ const GuiaEnvioSchema = new Schema({
         ref: 'Vendedor',
         required: true
     },
+    sucursal: {
+        type: Schema.Types.ObjectId,
+        ref: 'Sucursal',
+        required: true
+    },
     descripcion: {
         type: String,
         maxlength: 200,
