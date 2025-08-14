@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@vercel/postgres": "^0.9.0",
+    "aws-sdk": "^2.1692.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
