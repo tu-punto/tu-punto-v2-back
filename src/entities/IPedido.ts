@@ -9,6 +9,7 @@ export interface IPedido {
 
   fecha_pedido: Date;
   hora_entrega_acordada: Date;
+  hora_entrega_rango_final: Date;
   hora_entrega_real: Date;
 
   observaciones: string;
