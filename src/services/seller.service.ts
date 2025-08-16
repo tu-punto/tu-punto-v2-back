@@ -42,15 +42,16 @@ const getAllSellers = async () => {
 
 const getSeller = async (sellerId: string) => {
   const seller = await SellerRepository.findById(sellerId);
-  const sales = await SaleService.getAllSales();
-  const sellerSales = sales.filter(
-    (s: any) => s.vendedor._id.toString() === sellerId.toString()
-  );
+  if (!seller) {
+    console.error(`Seller with id ${sellerId} not found`);
+    return null;
+  }
+  const sales = await SaleService.getRawSalesBySellerId(sellerId);
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
   const debts = fluxes.filter((f) => f.esDeuda);
-  const metrics = calcPagoPendiente(sellerSales, debts as IFinanceFlux[]);
+  const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[]);
 
-  return { ...seller, pago_mensual: calcPagoMensual(seller!), ...metrics };
+  return { ...seller, pago_mensual: calcPagoMensual(seller), ...metrics };
 };
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
