@@ -170,6 +170,14 @@ const getProductsBySellerId = async (sellerId: string) => {
     return products;
 }
 
+const getRawSalesBySellerId = async (sellerId: string) => {
+    const sales = await SaleRepository.findBySellerId(sellerId);
+    if (!sales || sales.length === 0) {
+        return [];
+    }
+    return sales
+}
+
 
 const updateProducts = async (shippingId: any, prods: any[]) => {
     const sale = await SaleRepository.findByPedidoId(shippingId)
@@ -430,5 +438,6 @@ export const SaleService = {
     updateSaleById,
     deleteSaleById,
     deleteSalesByIdsAndPullFromPedido,
+    getRawSalesBySellerId
 
 }
