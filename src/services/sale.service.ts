@@ -413,6 +413,15 @@ const deleteSaleById = async (id: string, id_sucursal: string) => {
     return res;
 };
 
+const getRawSalesBySellerId = async (sellerId: string) => {
+    const sales = await SaleRepository.findBySellerId(sellerId);
+    if (!sales || sales.length === 0) {
+        return [];
+    }
+    return sales
+}
+
+
 export const SaleService = {
     getAllSales,
     registerSale,
@@ -430,5 +439,6 @@ export const SaleService = {
     updateSaleById,
     deleteSaleById,
     deleteSalesByIdsAndPullFromPedido,
+    getRawSalesBySellerId
 
 }
