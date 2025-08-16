@@ -12,8 +12,8 @@ const ComprobantePagoSchema = new Schema<IComprobantePagoDocument>({
     required: true,
     default: Date.now,
   },
-  comprobante_entrada_pdf: {
-    type: String,
+  comprobante_pago_pdf: {
+    type: Buffer, 
     required: true,
   },
   total_ventas: {
@@ -24,11 +24,29 @@ const ComprobantePagoSchema = new Schema<IComprobantePagoDocument>({
     type: Number,
     required: true,
   },
+  total_deliverys: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  total_mensualidades: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  monto_pagado: {
+    type: Number,
+    required: true,
+  },
+  filename: {
+    type: String,
+    required: true,
+  },
   vendedor: {
     type: Schema.Types.ObjectId,
     ref: 'Vendedor',
     required: true,
-  }
+  },
 }, {
   collection: 'Comprobante_Pago',
   timestamps: true

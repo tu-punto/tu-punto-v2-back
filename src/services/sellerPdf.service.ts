@@ -4,8 +4,12 @@ import { SaleService } from "./sale.service";
 import { SellerService } from "./seller.service";
 import { FinanceFluxService } from "./financeFlux.service";
 import { SucursalsService } from "./sucursals.service";
+import { ComprobantePagoModel } from "../entities/implements/ComprobantePagoSchema";
+import mongoose from "mongoose";
+import { ComprobanteService } from "./comprobante.service";
 
-const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
+const generateSellerPdfBuffer = async (sellerId: any) => {
+
   const sucursales = await SucursalsService.getAllSucursals();
   const deudas = await FinanceFluxService.getSellerInfoById(sellerId);
   const filteredDeudas = deudas.filter((deuda) => deuda.esDeuda);
@@ -18,6 +22,9 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     new Set(filteredSales.map((sale) => sale.id_pedido))
   );
 
+  const seller = await SellerService.getSeller(sellerId);
+  const sellerName = seller?.nombre || `Vendedor_${sellerId}`;
+  const sellerLastName = seller?.apellido || "Desconocido";
   const doc = new jsPDF();
 
   // Título del PDF centrado
@@ -204,6 +211,21 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   );
 
   const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `comprobante_${sellerName}_${sellerLastName}_${timestamp}.pdf`;
+
+  const comprobante = await ComprobanteService.registerComprobante({
+    comprobante_pago_pdf: pdfBuffer,
+    total_ventas: totalVentas,
+    total_adelantos: totalAdelantos,
+    total_deliverys: totalDeliverys,
+    total_mensualidades: totalMensualidades,
+    monto_pagado: montoPagado,
+    vendedor: sellerId,
+    filename,
+  });
+
 
   return pdfBuffer;
 };
