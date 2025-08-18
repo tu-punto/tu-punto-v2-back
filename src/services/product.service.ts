@@ -102,11 +102,6 @@ const regenerateProductQR = async (productId: string): Promise<{
   const producto = await ProductRepository.findById(productId);
   if (!producto) throw new Error("Producto no encontrado");
 
-  // Eliminar QR anterior si existe
-  if (producto.qrImagePath) {
-    await QRService.deleteQRFile(producto.qrImagePath);
-  }
-
   // Generar nuevo QR
   const { qrPath, productCode, productURL } = await QRService.generateAndSaveQR(productId);
   const { qrBase64 } = await QRService.generateQRBase64(productId, productCode);

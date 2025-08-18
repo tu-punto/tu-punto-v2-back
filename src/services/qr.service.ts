@@ -1,20 +1,16 @@
 import QRCode from 'qrcode';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import fs from 'fs/promises';
+import AWS from 'aws-sdk';
+
+AWS.config.update({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  region: process.env.AWS_REGION!
+});
+
+export const s3 = new AWS.S3();
 
 export class QRService {
-  private static QR_DIRECTORY = path.resolve(__dirname, '../../public/qr-codes');
-
-  // Asegura que el directorio para QR existe
-  private static async ensureQRDirectory(): Promise<void> {
-    try {
-      await fs.access(this.QR_DIRECTORY);
-    } catch {
-      await fs.mkdir(this.QR_DIRECTORY, { recursive: true });
-    }
-  }
-
   // Genera un código único para el producto
   static generateUniqueProductCode(productId: string): string {
     const uuid = uuidv4();
@@ -23,7 +19,6 @@ export class QRService {
 
   // Genera la URL del producto (puedes personalizarla según tu frontend)
   private static generateProductURL(productCode: string, productId: string): string {
-    // Cambia esta URL por la de tu aplicación frontend
     const baseURL = process.env.FRONTEND_URL || 'https://tuapp.com';
     return `${baseURL}/product/${productId}?qr=${productCode}`;
   }
@@ -54,23 +49,34 @@ export class QRService {
     };
   }
 
-  // Genera y guarda el QR en el sistema de archivos
+  // Genera y guarda el QR en S3
   static async generateAndSaveQR(productId: string, productCode?: string): Promise<{
     qrPath: string;
     productCode: string;
     productURL: string;
   }> {
-    await this.ensureQRDirectory();
-
     const { qrBuffer, productCode: code, productURL } = await this.generateQRBuffer(productId, productCode);
-    
-    const fileName = `qr-${productId}-${Date.now()}.png`;
-    const qrPath = path.join(this.QR_DIRECTORY, fileName);
-    
-    await fs.writeFile(qrPath, qrBuffer);
 
+    const fileName = `qr-${productId}-${Date.now()}.png`;
+    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
+    const s3Key = `qr-codes/${fileName}`;
+
+    // Subir a S3
+    await s3
+      .putObject({
+        Bucket: bucketName,
+        Key: s3Key,
+        Body: qrBuffer,
+        ContentType: 'image/png' 
+      })
+      .promise();
+
+
+    // URL pública del archivo en S3
+    const qrPath = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+    console.log(`QR code uploaded to S3: ${qrPath}`);
     return {
-      qrPath: `/qr-codes/${fileName}`, // Ruta relativa para el frontend
+      qrPath,
       productCode: code,
       productURL
     };
@@ -83,7 +89,7 @@ export class QRService {
     productURL: string;
   }> {
     const { qrBuffer, productCode: code, productURL } = await this.generateQRBuffer(productId, productCode);
-    
+
     const qrBase64 = `data:image/png;base64,${qrBuffer.toString('base64')}`;
 
     return {
@@ -91,15 +97,5 @@ export class QRService {
       productCode: code,
       productURL
     };
-  }
-
-  // Elimina un archivo QR del sistema
-  static async deleteQRFile(qrPath: string): Promise<void> {
-    try {
-      const fullPath = path.join(__dirname, '../../public', qrPath);
-      await fs.unlink(fullPath);
-    } catch (error) {
-      console.warn('No se pudo eliminar el archivo QR:', error);
-    }
   }
 }
