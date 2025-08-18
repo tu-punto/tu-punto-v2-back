@@ -19,6 +19,7 @@ import dailyEffectiveRouter from "./routes/dailyEffective.routes";
 import externalSaleRouter from "./routes/external.routes";
 import dashboardRouter from "./routes/dashboard.routes";
 import financeFluxCategoryRouter from "./routes/financeFluxCategory.routes";
+import qr from "./routes/qr.routes";
 
 const router = Router();
 
@@ -42,5 +43,6 @@ router.use("/boxClose", boxCloseRouter);
 router.use("/dailyEffective", dailyEffectiveRouter);
 router.use("/external", externalSaleRouter)
 router.use("/dashboard", dashboardRouter);
+router.use("/qr", qr);
 
 export default router;
