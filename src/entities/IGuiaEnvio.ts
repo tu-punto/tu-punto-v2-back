@@ -4,6 +4,7 @@ export interface IGuiaEnvio {
     _id?: Types.ObjectId;
 
     vendedor: Types.ObjectId;
+    sucursal: Types.ObjectId;
     descripcion?: string;
     fecha_subida: Date;
     imagen?: Buffer;
