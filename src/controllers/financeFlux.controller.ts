@@ -51,6 +51,7 @@ export const updateFinanceFlux = async (req: Request, res: Response) => {
     const updatedFlux = await FinanceFluxService.updateFinanceFlux(fluxId, updates);
     res.json({ ok: true, updatedFlux });
   } catch (err: any) {
+    console.error("Error updating finance flux:", err);
     res.status(400).json({ ok: false, error: err.message });
   }
 };
