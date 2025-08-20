@@ -24,6 +24,14 @@ const ComprobantePagoSchema = new Schema<IComprobantePagoDocument>({
     type: Number,
     required: true,
   },
+  total_deliverys: {
+    type: Number,
+    required: true,
+  },
+  total_mensualidades: {
+    type: Number,
+    required: true,
+  },
   vendedor: {
     type: Schema.Types.ObjectId,
     ref: 'Vendedor',
