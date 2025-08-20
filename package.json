@@ -12,6 +12,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.872.0",
+    "@aws-sdk/s3-request-presigner": "^3.872.0",
     "@vercel/postgres": "^0.9.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
