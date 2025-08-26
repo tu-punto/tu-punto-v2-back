@@ -15,28 +15,22 @@ const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
 const getAllSellers = async () => {
-  const sellers = (await SellerRepository.findAll()) as IVendedorDocument[];
-  const sales = await SaleService.getAllSales();
-  const debts = await FinanceFluxService.getDebts();
-  const processedSellers: any[] = [];
-  for (const seller of sellers) {
-    const sellerSales = sales.filter(
-      (s: any) => s.vendedor._id.toString() === seller._id.toString()
-    );
-    const sellerDebts = debts.filter(
-      (d: any) => d.id_vendedor._id.toString() === seller._id.toString()
-    );
+  const sellersWithData = await SellerRepository.findWithDebtsAndSales();
+
+  const processedSellers = sellersWithData.map((sellerData: any) => {
     const metrics = calcPagoPendiente(
-      sellerSales,
-      sellerDebts as IFinanceFlux[]
+      sellerData.sales,
+      sellerData.debts as IFinanceFlux[]
     );
-    const pagoMensual = calcPagoMensual(seller);
-    processedSellers.push({
-      ...seller,
+    const pagoMensual = calcPagoMensual(sellerData);
+
+    return {
+      ...sellerData,
       ...metrics,
       pago_mensual: pagoMensual,
-    });
-  }
+    };
+  });
+
   return processedSellers;
 };
 

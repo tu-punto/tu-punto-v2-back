@@ -6,9 +6,10 @@ import { SellerService } from "./seller.service";
 import { ProductService } from './product.service';
 import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
 import { VentaModel } from '../entities/implements/VentaSchema';
+import { IVenta } from '../entities/IVenta';
 
-const getAllSales = async () => {
-    return await SaleRepository.findAll();
+const getAllSales = async ()=> {
+    return await SaleRepository.findAll()
 };
 
 const registerSale = async (sale: any) => {
