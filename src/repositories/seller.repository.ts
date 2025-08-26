@@ -101,31 +101,53 @@ const findWithDebtsAndSales = async () => {
   return await VendedorModel.aggregate([
     {
       $lookup: {
-        from: "ventas", 
-        localField: "_id",
-        foreignField: "vendedor",
-        as: "sales",
-      },
+        from: "Venta",
+        let: { vendedor_id: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$vendedor", "$$vendedor_id"] }
+            }
+          },
+          {
+            $lookup: {
+              from: "Pedido",
+              let: { pedido_id: "$pedido" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$_id", "$$pedido_id"] }
+                  }
+                }
+              ],
+              as: "pedido"
+            }
+          },
+          {
+            $unwind: {
+              path: "$pedido",
+              preserveNullAndEmptyArrays: true
+            }
+          }
+        ],
+        as: "sales"
+      }
     },
     {
       $lookup: {
-        from: "flujofinancieros", 
-        localField: "_id",
-        foreignField: "id_vendedor",
-        as: "debts",
-      },
-    },
-    {
-      $addFields: {
-        debts: {
-          $filter: {
-            input: "$debts",
-            as: "debt",
-            cond: { $eq: ["$$debt.esDeuda", true] },
-          },
-        },
-      },
-    },
+        from: "Flujo_Financiero",
+        let: { vendedor_id: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+              esDeuda: true
+            }
+          }
+        ],
+        as: "debts"
+      }
+    }
   ]).exec();
 };
 
