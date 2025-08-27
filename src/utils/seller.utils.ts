@@ -12,6 +12,7 @@ export interface PagoSucursal {
   exhibicion?: number;
   delivery?: number;
   entrega_simple?: number;
+  activo?: boolean;
 }
 
 export const calcSucursalSubtotal = (p: PagoSucursal): number =>
@@ -23,31 +24,29 @@ export const calcSucursalSubtotal = (p: PagoSucursal): number =>
 export const calcSellerDebt = (sellerLike: {
   pago_sucursales: PagoSucursal[];
 }): number =>
-  sellerLike.pago_sucursales.reduce(
-    (tot, p) => tot + calcSucursalSubtotal(p),
-    0
-  );
+  sellerLike.pago_sucursales
+    .filter((p) => p.activo)
+    .reduce((tot, p) => tot + calcSucursalSubtotal(p), 0);
 
 export const calcPagoMensual = (seller: {
   pago_sucursales: PagoSucursal[];
 }): number =>
-  seller.pago_sucursales.reduce(
-    (tot, p) =>
-      tot +
-      Number(p.alquiler ?? 0) +
-      Number(p.exhibicion ?? 0) +
-      Number(p.delivery ?? 0) +
-      Number(p.entrega_simple ?? 0),
-    0
-  );
+  seller.pago_sucursales
+    .filter((p) => p.activo)
+    .reduce(
+      (tot, p) =>
+        tot +
+        Number(p.alquiler ?? 0) +
+        Number(p.exhibicion ?? 0) +
+        Number(p.delivery ?? 0) +
+        Number(p.entrega_simple ?? 0),
+      0
+    );
 
 export const calcPagoPendiente = (sales: any, debts: IFinanceFlux[]) => {
   const pedidosProcesados = new Set();
   const saldoPendiente = sales.reduce((acc: number, sale: any) => {
-    if (
-      sale.deposito_realizado ||
-      sale.pedido.estado_pedido === "En Espera"
-    ) {
+    if (sale.deposito_realizado || sale.pedido.estado_pedido === "En Espera") {
       return acc;
     }
     const subtotal = sale.cantidad * sale.precio_unitario;

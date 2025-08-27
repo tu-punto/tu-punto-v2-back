@@ -29,7 +29,7 @@ export interface IVendedor {
       fecha_ingreso: Date;
       fecha_salida?: Date;
       comentario?: string;
-      activo?: Boolean
+      activo?: boolean
     }[];
 
     comision_porcentual: number;

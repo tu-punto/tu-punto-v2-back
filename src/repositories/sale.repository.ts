@@ -6,7 +6,7 @@ import { Types } from 'mongoose';
 
 
 const findAll = async (): Promise<IVentaDocument[]> => {
-  return await VentaModel.find().populate(['producto', 'pedido', 'vendedor']);
+  return await VentaModel.find().populate(['producto', 'pedido', 'vendedor']).lean().exec();
 };
 
 

@@ -12,7 +12,7 @@ import {
 } from "../controllers/shipping.controller";
 
 const shippingRouter = Router();
-
+//rutas
 shippingRouter.get("/", getShipping);
 
 shippingRouter.get("/:ids", getShippingByIds);

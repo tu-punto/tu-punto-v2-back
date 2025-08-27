@@ -15,42 +15,37 @@ const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
 const getAllSellers = async () => {
-  const sellers = (await SellerRepository.findAll()) as IVendedorDocument[];
-  const sales = await SaleService.getAllSales();
-  const debts = await FinanceFluxService.getDebts();
-  const processedSellers: any[] = [];
-  for (const seller of sellers) {
-    const sellerSales = sales.filter(
-      (s: any) => s.vendedor._id.toString() === seller._id.toString()
-    );
-    const sellerDebts = debts.filter(
-      (d: any) => d.id_vendedor._id.toString() === seller._id.toString()
-    );
+  const sellersWithData = await SellerRepository.findWithDebtsAndSales();
+
+  const processedSellers = sellersWithData.map((sellerData: any) => {
     const metrics = calcPagoPendiente(
-      sellerSales,
-      sellerDebts as IFinanceFlux[]
+      sellerData.sales,
+      sellerData.debts as IFinanceFlux[]
     );
-    const pagoMensual = calcPagoMensual(seller);
-    processedSellers.push({
-      ...seller,
+    const pagoMensual = calcPagoMensual(sellerData);
+
+    return {
+      ...sellerData,
       ...metrics,
       pago_mensual: pagoMensual,
-    });
-  }
+    };
+  });
+
   return processedSellers;
 };
 
 const getSeller = async (sellerId: string) => {
   const seller = await SellerRepository.findById(sellerId);
-  const sales = await SaleService.getAllSales();
-  const sellerSales = sales.filter(
-    (s: any) => s.vendedor._id.toString() === sellerId.toString()
-  );
+  if (!seller) {
+    console.error(`Seller with id ${sellerId} not found`);
+    return null;
+  }
+  const sales = await SaleService.getRawSalesBySellerId(sellerId);
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
   const debts = fluxes.filter((f) => f.esDeuda);
-  const metrics = calcPagoPendiente(sellerSales, debts as IFinanceFlux[]);
+  const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[]);
 
-  return { ...seller, pago_mensual: calcPagoMensual(seller!), ...metrics };
+  return { ...seller, pago_mensual: calcPagoMensual(seller), ...metrics };
 };
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
