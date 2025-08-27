@@ -1,5 +1,6 @@
 import { VentaModel } from "../entities/implements/VentaSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { IVenta } from "../entities/IVenta";
 import { IVentaDocument } from "../entities/documents/IVentaDocument";
 import { Types } from 'mongoose';
@@ -14,6 +15,30 @@ const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
   if (sale.sucursal && typeof sale.sucursal === 'string') {
     sale.sucursal = new Types.ObjectId(sale.sucursal);
   }
+
+  // Busca el vendedor para obtener sus comisiones
+  const vendedor = await VendedorModel.findById(sale.id_vendedor);
+
+  let comision = 0;
+  const precioUnitario = sale.precio_unitario || 0;
+  const cantidad = sale.cantidad || 1;
+  const totalVenta = precioUnitario * cantidad;
+
+  if (vendedor) {
+    // Comisión porcentual
+    if (
+      typeof vendedor.comision_porcentual === 'number' &&
+      vendedor.comision_porcentual > 0
+    ) {
+      comision += totalVenta * (vendedor.comision_porcentual / 100);
+    }
+    // Comisión fija
+    if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
+      comision += vendedor.comision_fija;
+    }
+  }
+
+  sale.comision = comision;
 
   const newSale = new VentaModel(sale);
   const saved = await newSale.save();
