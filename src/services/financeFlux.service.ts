@@ -14,7 +14,20 @@ const assertFlux = (flux: IFlujoFinanciero | null) => {
 const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 
 const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
-  await FinanceFluxRepository.registerFinanceFlux(flux);
+  let montoFinal = flux.monto;
+
+  if (flux.tipo === "INGRESO" && flux.id_vendedor) {
+    const vendedor = await SellerRepository.findById(flux.id_vendedor);
+    if (vendedor && vendedor.comision_porcentual) {
+      const extra = flux.monto * (vendedor.comision_porcentual / 100);
+      montoFinal += extra;
+    }
+  }
+
+  await FinanceFluxRepository.registerFinanceFlux({
+    ...flux,
+    monto: montoFinal,
+  });
 };
 
 const payDebt = async (fluxId: string) => {
