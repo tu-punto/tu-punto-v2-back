@@ -25,11 +25,7 @@ const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
   const totalVenta = precioUnitario * cantidad;
 
   if (vendedor) {
-    // Comisión porcentual
-    if (
-      typeof vendedor.comision_porcentual === 'number' &&
-      vendedor.comision_porcentual > 0
-    ) {
+    if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
       comision += totalVenta * (vendedor.comision_porcentual / 100);
     }
     // Comisión fija
@@ -155,6 +151,30 @@ const deleteSaleById = async (id: string) => {
   return res.deletedCount > 0;
 };
 
+async function recalcularComisiones() {
+  const ventas = await VentaModel.find();
+  for (const venta of ventas) {
+    const vendedor = await VendedorModel.findById(venta.id_vendedor);
+    let comision = 0;
+    const precioUnitario = venta.precio_unitario || 0;
+    const cantidad = venta.cantidad || 1;
+    const totalVenta = precioUnitario * cantidad;
+
+    if (vendedor) {
+      if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
+        comision += totalVenta * (vendedor.comision_porcentual / 100);
+      }
+      if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
+        comision += vendedor.comision_fija;
+      }
+    }
+
+    venta.comision = comision;
+    await venta.save();
+  }
+  console.log("Comisiones recalculadas y guardadas.");
+}
+
 export const SaleRepository = {
   findAll,
   registerSale,
@@ -169,6 +189,7 @@ export const SaleRepository = {
   deleteSalesByIds,
   getDataPaymentProof,
   deleteSalesOfProducts,
-  deleteSaleById
+  deleteSaleById,
+  recalcularComisiones
 };
 
