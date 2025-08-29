@@ -83,3 +83,12 @@ export const getStatsController = async (_: Request, res: Response) => {
     res.status(500).json({ msg: "Error calculando estadísticas", err });
   }
 };
+
+export const getFinancialSummaryController = async (_: Request, res: Response) => {
+  try {
+    const summary = await FinanceFluxService.getFinancialSummary();
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ msg: "Error calculando resumen financiero", err });
+  }
+};
