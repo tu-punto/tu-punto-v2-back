@@ -11,6 +11,7 @@ import { calcPagoPendiente } from "../utils/seller.utils";
 import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 import { FinanceFluxService } from "./financeFlux.service";
 import { IFinanceFlux } from "../entities/IFinanceFlux";
+import { PaymentProofService } from "./paymentProof.service";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -313,6 +314,18 @@ const getServicesSummary = async () => {
   return resumen;
 };
 
+const getSellerPaymentProofs = async (sellerId: string) => {
+  try {
+    const comprobantes =
+      PaymentProofService.getComprobantesByVendedor(sellerId);
+
+    return comprobantes;
+  } catch (error) {
+    console.error("Error en getSellerPaymentProofs:", error);
+    throw error;
+  }
+};
+
 export const SellerService = {
   getAllSellers,
   getSeller,
@@ -323,4 +336,5 @@ export const SellerService = {
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,
+  getSellerPaymentProofs,
 };

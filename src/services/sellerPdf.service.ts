@@ -7,6 +7,7 @@ import { SucursalsService } from "./sucursals.service";
 import { uploadPdfToAws } from "./bucket.service";
 import { ComprobantePagoModel } from "../entities/implements/ComprobantePagoSchema";
 import mongoose from "mongoose";
+import { PaymentProofService } from "./paymentProof.service";
 
 const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const sucursales = await SucursalsService.getAllSucursals();
@@ -209,11 +210,12 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
 
   const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
 
-  const filename = `comprobante_pago_${seller?.nombre}_${seller?.apellido}_${new Date().toISOString()}.pdf`;
+  const filename = `comprobante_pago_${seller?.nombre}_${
+    seller?.apellido
+  }_${new Date().toISOString()}.pdf`;
   const pdfUrl = await uploadPdfToAws(pdfBuffer, filename);
 
-  const comprobante = new ComprobantePagoModel({
-    _id: new mongoose.Types.ObjectId(),
+  const savedUrl = await PaymentProofService.createComprobante({
     vendedor: sellerId,
     comprobante_entrada_pdf: pdfUrl.url,
     monto_pagado: montoPagado,
@@ -222,8 +224,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     total_deliverys: totalDeliverys,
     total_mensualidades: totalMensualidades,
   });
-
-  await comprobante.save();
+  console.log("Comprobante de pago guardado con URL:", savedUrl);
 
   return pdfBuffer;
 };
