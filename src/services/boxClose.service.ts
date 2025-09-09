@@ -1,3 +1,4 @@
+import { ICierreCaja } from "../entities/ICierreCaja";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 
 const getAllBoxClosings = async () => {
@@ -13,9 +14,14 @@ const getBoxCloseById = async (id: string) => {
   if (!category) throw new Error("Doesn't exist a box close with such id");
   return category;
 };
+const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
+  return await BoxCloseRepository.updateBoxClose(id, updates);
+};
+
 
 export const BoxCloseService = {
   getAllBoxClosings,
   registerBoxClose,
   getBoxCloseById,
+  updateBoxClose,
 };

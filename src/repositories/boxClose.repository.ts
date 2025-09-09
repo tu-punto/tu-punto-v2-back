@@ -18,9 +18,14 @@ const getBoxCloseById = async (id: string): Promise<ICierreCaja | null> => {
     .lean() 
     .exec();
 };
+const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
+  return await CierreCajaModel.findByIdAndUpdate(id, updates, { new: true });
+};
+
 
 export const BoxCloseRepository = {
   findAll,
   registerBoxClose,
   getBoxCloseById,
+  updateBoxClose,
 };
