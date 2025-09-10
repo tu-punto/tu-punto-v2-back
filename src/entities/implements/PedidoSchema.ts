@@ -26,6 +26,10 @@ const PedidoSchema = new Schema({
     type: Date,
     default: Date.now
   },
+  hora_entrega_rango_final: {
+    type: Date,
+    required: false,
+  },
   observaciones: {
     type: String,
     default: ""
