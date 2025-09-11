@@ -141,13 +141,13 @@ export const updatePrice = async (req: Request, res: Response) => {
 
 export const updateSubvariantStock = async (req: Request, res: Response) => {
   //console.log("Updating subvariant stock");
-  const { productId, sucursalId, variantes, stock } = req.body;  try {
+  const { productId, sucursalId, variantes, stock } = req.body; try {
     const result = await ProductService.updateStockByVariantCombination({
       productId,
       sucursalId,
       variantes,
       stock
-  });
+    });
 
     res.json({ success: true, result });
   } catch (error) {
@@ -169,7 +169,7 @@ export const addVariantToProduct = async (req: Request, res: Response) => {
 export const generateIngressPDF = async (req: Request, res: Response) => {
   try {
     const pdfBuffer = await ProductService.generateIngressPDF(req.body);
-    
+
     res.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": "attachment; filename=Comprobante_Ingresos.pdf",
@@ -182,10 +182,28 @@ export const generateIngressPDF = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Error al generar PDF" });
   }
 };
+let flatProductCache: any = null;
+let flatProductCacheTime = 0;
+const CACHE_TTL = 60 * 1000; 
+
 export const getFlatProductList = async (req: Request, res: Response) => {
+  const sucursalId = req.query.sucursalId as string | undefined;
+  const now = Date.now();
+
+  if (
+    flatProductCache &&
+    flatProductCacheTime + CACHE_TTL > now &&
+    flatProductCache.sucursalId === sucursalId
+  ) {
+    console.log("🟢 Respondiendo productos desde CACHE para sucursal:", sucursalId);
+    return res.json(flatProductCache.data);
+  }
+
   try {
-    const sucursalId = req.query.sucursalId as string | undefined;
     const products = await ProductService.getFlatProductList(sucursalId);
+    flatProductCache = { sucursalId, data: products };
+    flatProductCacheTime = now;
+     console.log("🔵 Consultando productos en BASE DE DATOS para sucursal:", sucursalId);
     res.json(products);
   } catch (error) {
     console.error("Error en getFlatProductList:", error);
