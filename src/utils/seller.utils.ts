@@ -43,41 +43,51 @@ export const calcPagoMensual = (seller: {
       0
     );
 
-export const calcPagoPendiente = (sales: any, debts: IFinanceFlux[]) => {
+export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
   const pedidosProcesados = new Set();
-  const saldoPendiente = sales.reduce((acc: number, sale: any) => {
-    if (sale.deposito_realizado || sale.pedido.estado_pedido === "En Espera") {
+  const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {
+    if (!sale) {
+      console.warn('[calcPagoPendiente] Sale vacío', { index: i });
       return acc;
     }
-    const subtotal = sale.cantidad * sale.precio_unitario;
 
-    let subtotalDeuda = 0;
-
-    if (sale.pedido.pagado_al_vendedor) {
-      subtotalDeuda = -sale.utilidad;
-    } else {
-      subtotalDeuda = subtotal - sale.utilidad;
+    if (!sale.pedido) {
+      console.warn('[calcPagoPendiente] Venta sin pedido', {
+        index: i,
+        saleId: sale?._id,
+        pedidoId: sale?.pedido?._id,
+      });
+      return acc; // evita que truene
     }
+
+    if (sale.deposito_realizado || sale.pedido.estado_pedido === 'En Espera') {
+      return acc;
+    }
+
+    // resto de tu lógica…
+    const subtotal = sale.cantidad * sale.precio_unitario;
+    let subtotalDeuda = sale.pedido.pagado_al_vendedor
+      ? -sale.utilidad
+      : subtotal - sale.utilidad;
 
     if (!pedidosProcesados.has(sale.pedido._id)) {
       subtotalDeuda -=
-        sale.pedido.adelanto_cliente + sale.pedido.cargo_delivery;
+        (sale.pedido.adelanto_cliente ?? 0) +
+        (sale.pedido.cargo_delivery ?? 0);
       pedidosProcesados.add(sale.pedido._id);
     }
 
     return acc + subtotalDeuda;
   }, 0);
 
-  const deuda = debts.reduce((acc, debt) => {
-    if (debt.esDeuda) {
-      return acc + debt.monto;
-    }
-    return acc;
+  const deuda = (debts || []).reduce((acc, debt) => {
+    return debt.esDeuda ? acc + debt.monto : acc;
   }, 0);
 
   return {
     saldo_pendiente: saldoPendiente,
-    deuda: deuda,
+    deuda,
     pago_pendiente: saldoPendiente - deuda,
   };
 };
+
