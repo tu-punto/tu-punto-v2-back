@@ -7,7 +7,6 @@ export interface IGuiaEnvio {
     sucursal: Types.ObjectId;
     descripcion?: string;
     fecha_subida: Date;
-    imagen?: Buffer;
-    tipoArchivo: "image/jpeg"|"image/png"|"image/webp";
+    imagen_key?: string;
     isRecogido?: boolean;
 }
