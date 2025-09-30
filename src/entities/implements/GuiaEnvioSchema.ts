@@ -7,6 +7,11 @@ const GuiaEnvioSchema = new Schema({
         ref: 'Vendedor',
         required: true
     },
+    sucursal: {
+        type: Schema.Types.ObjectId,
+        ref: 'Sucursal',
+        required: true
+    },
     descripcion: {
         type: String,
         maxlength: 200,
@@ -16,14 +21,9 @@ const GuiaEnvioSchema = new Schema({
         type: Date,
         default: Date.now
     },
-    imagen: {
-        type: Buffer,
-        required: false
-    },
-    tipoArchivo: {
+    imagen_key: {
         type: String,
-        required: false,
-        enum: ['image/jpeg', 'image/png', 'image/webp']
+        required: false
     },
     isRecogido: {
         type: Boolean,

@@ -16,6 +16,15 @@ const getSellerShippings = async (sellerID: string): Promise<IGuiaEnvioDocument[
     return await GuiaEnviosModel.find({ vendedor: sellerObjectId }).populate('vendedor');
 };
 
+const getBranchShippings = async (branchID: string): Promise<IGuiaEnvioDocument[]> => {
+     if(!Types.ObjectId.isValid(branchID)) {
+        throw new Error("ID de sucursal no válido");
+     }
+
+     const branchObjectID = new Types.ObjectId(branchID);
+     return await GuiaEnviosModel.find({ sucursal: branchObjectID }).populate('sucursal').populate('vendedor')
+}
+
 const uploadShipping = async(shippingGuide: IGuiaEnvio): Promise<IGuiaEnvioDocument> => {
     const newShippingGuide = new GuiaEnviosModel(shippingGuide);
     console.log(shippingGuide)
@@ -35,6 +44,7 @@ const markAsDelivered = async(shippingGuideID: string) => {
 export const ShippingGuideRepository = {
     getAllShippings,
     getSellerShippings,
+    getBranchShippings,
     uploadShipping,
     markAsDelivered
 }
