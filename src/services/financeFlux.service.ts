@@ -185,6 +185,6 @@ export const FinanceFluxService = {
   getSellerInfoById,
   getStatsService,
   updateFinanceFlux,
-  getFinancialSummary
+  getFinancialSummary,
   getDebts,
 };
