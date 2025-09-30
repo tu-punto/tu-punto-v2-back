@@ -50,3 +50,19 @@ export const getBoxCloseByIdController = async (
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
+export const updateBoxCloseController = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body;
+
+  try {
+    const updated = await BoxCloseService.updateBoxClose(id, updates);
+    if (!updated) {
+      return res.status(404).json({ error: "Cierre de caja no encontrado" });
+    }
+    res.json({ status: true, updated });
+  } catch (error) {
+    console.error("Error actualizando cierre de caja", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+

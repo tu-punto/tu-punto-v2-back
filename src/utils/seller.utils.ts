@@ -1,29 +1,93 @@
+import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
+import { IVentaDocument } from "../entities/documents/IVentaDocument";
+import { IFinanceFlux } from "../entities/IFinanceFlux";
+import { IVendedor } from "../entities/IVendedor";
+import { IVenta } from "../entities/IVenta";
+import { FinanceFluxService } from "../services/financeFlux.service";
+import { SaleService } from "../services/sale.service";
+import { SellerService } from "../services/seller.service";
+
 export interface PagoSucursal {
-    alquiler?: number;
-    exhibicion?: number;
-    delivery?: number;
-    entrega_simple?: number;
+  alquiler?: number;
+  exhibicion?: number;
+  delivery?: number;
+  entrega_simple?: number;
+  activo?: boolean;
 }
 
 export const calcSucursalSubtotal = (p: PagoSucursal): number =>
-    (p.alquiler ?? 0) +
-    (p.exhibicion ?? 0) +
-    (p.delivery ?? 0) +
-    (p.entrega_simple ?? 0);
+  (p.alquiler ?? 0) +
+  (p.exhibicion ?? 0) +
+  (p.delivery ?? 0) +
+  (p.entrega_simple ?? 0);
 
-export const calcSellerDebt = (sellerLike: { pago_sucursales: PagoSucursal[] }): number =>
-    sellerLike.pago_sucursales.reduce((tot, p) => tot + calcSucursalSubtotal(p), 0);
-
+export const calcSellerDebt = (sellerLike: {
+  pago_sucursales: PagoSucursal[];
+}): number =>
+  sellerLike.pago_sucursales
+    .filter((p) => p.activo)
+    .reduce((tot, p) => tot + calcSucursalSubtotal(p), 0);
 
 export const calcPagoMensual = (seller: {
-    pago_sucursales: PagoSucursal[];
+  pago_sucursales: PagoSucursal[];
 }): number =>
-    seller.pago_sucursales.reduce(
-        (tot, p) =>
-            tot +
-            Number(p.alquiler ?? 0) +
-            Number(p.exhibicion ?? 0) +
-            Number(p.delivery ?? 0) +
-            Number(p.entrega_simple ?? 0),
-        0
+  seller.pago_sucursales
+    .filter((p) => p.activo)
+    .reduce(
+      (tot, p) =>
+        tot +
+        Number(p.alquiler ?? 0) +
+        Number(p.exhibicion ?? 0) +
+        Number(p.delivery ?? 0) +
+        Number(p.entrega_simple ?? 0),
+      0
     );
+
+export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
+  const pedidosProcesados = new Set();
+  const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {
+    if (!sale) {
+      console.warn('[calcPagoPendiente] Sale vacío', { index: i });
+      return acc;
+    }
+
+    if (!sale.pedido) {
+      console.warn('[calcPagoPendiente] Venta sin pedido', {
+        index: i,
+        saleId: sale?._id,
+        pedidoId: sale?.pedido?._id,
+      });
+      return acc; // evita que truene
+    }
+
+    if (sale.deposito_realizado || sale.pedido.estado_pedido === 'En Espera') {
+      return acc;
+    }
+
+    // resto de tu lógica…
+    const subtotal = sale.cantidad * sale.precio_unitario;
+    let subtotalDeuda = sale.pedido.pagado_al_vendedor
+      ? -sale.utilidad
+      : subtotal - sale.utilidad;
+
+    if (!pedidosProcesados.has(sale.pedido._id)) {
+      subtotalDeuda -=
+        (sale.pedido.adelanto_cliente ?? 0) +
+        (sale.pedido.cargo_delivery ?? 0);
+      pedidosProcesados.add(sale.pedido._id);
+    }
+
+    return acc + subtotalDeuda;
+  }, 0);
+
+  const deuda = (debts || []).reduce((acc, debt) => {
+    return debt.esDeuda ? acc + debt.monto : acc;
+  }, 0);
+
+  return {
+    saldo_pendiente: saldoPendiente,
+    deuda,
+    pago_pendiente: saldoPendiente - deuda,
+  };
+};
+

@@ -7,6 +7,7 @@ export const getSellers = async (_: Request, res: Response) => {
     const sellerList = await SellerService.getAllSellers();
     res.json(sellerList);
   } catch (err) {
+    console.error("Error obteniendo vendedores:", err);
     res.status(500).json({ msg: "Error obteniendo vendedores", err });
   }
 };
@@ -23,6 +24,7 @@ export const getSeller = async (req: Request, res: Response) => {
     }
     res.json(seller);
   } catch (err) {
+    console.error("Error obteniendo vendedor:", err);
     res.status(500).json({ msg: "Error obteniendo vendedor", err });
   }
 };
@@ -107,5 +109,23 @@ export const getServicesSummary = async (_: Request, res: Response) => {
     res.json(resumen);
   } catch (err) {
     res.status(500).json({ msg: "Error generando resumen", err });
+  }
+};
+
+export const getSellerPaymentProofs = async (req: Request, res: Response) => {
+  try {
+    console.log("Obteniendo comprobantes de pago para el vendedor...");
+    const { id } = req.params;
+
+    const result = await SellerService.getSellerPaymentProofs(id);
+    console.log("Comprobantes de pago obtenidos:", result);
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error obteniendo comprobantes de pago:", err);
+    res.status(500).json({
+      msg: "Error obteniendo comprobantes de pago",
+      error: err,
+    });
   }
 };

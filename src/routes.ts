@@ -16,8 +16,10 @@ import userRouter from "./routes/user.routes";
 import whatsRouter from "./routes/whatsapp.route";
 import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";
+import externalSaleRouter from "./routes/external.routes";
+import dashboardRouter from "./routes/dashboard.routes";
 import financeFluxCategoryRouter from "./routes/financeFluxCategory.routes";
-
+import shippingGuideRouter from "./routes/shippingGuide.routes";
 
 const router = Router();
 
@@ -39,5 +41,8 @@ router.use("/user", userRouter);
 router.use("/whats", whatsRouter);
 router.use("/boxClose", boxCloseRouter);
 router.use("/dailyEffective", dailyEffectiveRouter);
+router.use("/external", externalSaleRouter)
+router.use("/dashboard", dashboardRouter);
+router.use("/shippingGuide", shippingGuideRouter);
 
 export default router;

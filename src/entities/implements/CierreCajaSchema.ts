@@ -25,6 +25,24 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
       cantidad: Number,  
     }
   ],
+  operaciones_adicionales: [
+    {
+      tipo: {
+        type: String,
+        enum: ["delivery", "gasto_profit", "pago_cliente"],
+        required: true,
+      },
+      descripcion: { type: String, required: true },
+      cliente: { type: String }, // Solo aplica para "pago_cliente"
+      metodo: {
+        type: String,
+        enum: ["efectivo", "qr"],
+        required: true,
+      },
+      monto: { type: Number, required: true },
+    }
+  ],
+
 
   id_sucursal: { type: Schema.Types.ObjectId, ref: 'Sucursal' },
 }, {

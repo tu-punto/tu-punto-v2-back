@@ -11,5 +11,6 @@ sellerRouter.put("/renew/:id", SellerController.renewSeller);
 sellerRouter.post("/:id/pay", SellerController.paySellerDebt);
 sellerRouter.get('/:id/debts', SellerController.getSellerDebts);
 sellerRouter.get('/summary/services', SellerController.getServicesSummary);
+sellerRouter.get('/:id/payment-proofs', SellerController.getSellerPaymentProofs); 
 
 export default sellerRouter;

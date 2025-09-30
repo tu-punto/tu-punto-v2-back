@@ -27,7 +27,10 @@ const FlujoFinancieroSchema = new Schema({
     type: Boolean,
     default: false
   },
-
+  founder: {
+    type: String,
+    default: 'N/A'
+  },
   id_vendedor: {
     type: Types.ObjectId,
     ref: 'Vendedor',

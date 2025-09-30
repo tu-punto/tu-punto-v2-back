@@ -7,6 +7,8 @@ export interface IComprobantePago {
   comprobante_entrada_pdf: string;
   total_ventas: number;
   total_adelantos: number;
+  total_deliverys: number;
+  total_mensualidades: number;
   id_vendedor: number;
 
   vendedor: Types.ObjectId; 

@@ -6,20 +6,47 @@ import { Types } from "mongoose";
 import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
 import dayjs from "dayjs";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { SaleService } from "./sale.service";
+import { calcPagoPendiente } from "../utils/seller.utils";
+import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
+import { FinanceFluxService } from "./financeFlux.service";
+import { IFinanceFlux } from "../entities/IFinanceFlux";
+import { PaymentProofService } from "./paymentProof.service";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
 const getAllSellers = async () => {
-  const sellers = await SellerRepository.findAll();
-  return sellers.map((seller) => ({
-    ...seller,
-    pago_mensual: calcPagoMensual(seller),
-  }));
+  const sellersWithData = await SellerRepository.findWithDebtsAndSales();
+
+  const processedSellers = sellersWithData.map((sellerData: any) => {
+    const metrics = calcPagoPendiente(
+      sellerData.sales,
+      sellerData.debts as IFinanceFlux[]
+    );
+    const pagoMensual = calcPagoMensual(sellerData);
+
+    return {
+      ...sellerData,
+      ...metrics,
+      pago_mensual: pagoMensual,
+    };
+  });
+
+  return processedSellers;
 };
 
 const getSeller = async (sellerId: string) => {
   const seller = await SellerRepository.findById(sellerId);
-  return { ...seller, pago_mensual: calcPagoMensual(seller!) };
+  if (!seller) {
+    console.error(`Seller with id ${sellerId} not found`);
+    return null;
+  }
+  const sales = await SaleService.getRawSalesBySellerId(sellerId);
+  const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
+  const debts = fluxes.filter((f) => f.esDeuda);
+  const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[]);
+
+  return { ...seller, pago_mensual: calcPagoMensual(seller), ...metrics };
 };
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
@@ -239,15 +266,18 @@ const getServicesSummary = async () => {
 
   for (const seller of sellers) {
     for (const pago of seller.pago_sucursales || []) {
+      if (!pago.activo) continue;
+
       const sucursal = pago.sucursalName;
 
-      if (!resumen[sucursal]) resumen[sucursal] = {
-        Almacenamiento: 0,
-        Exhibición: 0,
-        "Entregas Simples": 0,
-        Delivery: 0,
-        TOTAL: 0,
-      };
+      if (!resumen[sucursal])
+        resumen[sucursal] = {
+          Almacenamiento: 0,
+          Exhibición: 0,
+          "Entregas Simples": 0,
+          Delivery: 0,
+          TOTAL: 0,
+        };
 
       const montoAlmacenamiento = pago.alquiler || 0;
       const montoExhibicion = pago.exhibicion || 0;
@@ -259,17 +289,19 @@ const getServicesSummary = async () => {
       resumen[sucursal]["Entregas Simples"] += montoEntrega;
       resumen[sucursal].Delivery += montoDelivery;
 
-      const totalSucursal = montoAlmacenamiento + montoExhibicion + montoEntrega + montoDelivery;
+      const totalSucursal =
+        montoAlmacenamiento + montoExhibicion + montoEntrega + montoDelivery;
       resumen[sucursal].TOTAL += totalSucursal;
 
       // Acumular en TOTAL general
-      if (!resumen.TOTAL) resumen.TOTAL = {
-        Almacenamiento: 0,
-        Exhibición: 0,
-        "Entregas Simples": 0,
-        Delivery: 0,
-        TOTAL: 0,
-      };
+      if (!resumen.TOTAL)
+        resumen.TOTAL = {
+          Almacenamiento: 0,
+          Exhibición: 0,
+          "Entregas Simples": 0,
+          Delivery: 0,
+          TOTAL: 0,
+        };
 
       resumen.TOTAL.Almacenamiento += montoAlmacenamiento;
       resumen.TOTAL.Exhibición += montoExhibicion;
@@ -282,6 +314,18 @@ const getServicesSummary = async () => {
   return resumen;
 };
 
+const getSellerPaymentProofs = async (sellerId: string) => {
+  try {
+    const comprobantes =
+      PaymentProofService.getComprobantesByVendedor(sellerId);
+
+    return comprobantes;
+  } catch (error) {
+    console.error("Error en getSellerPaymentProofs:", error);
+    throw error;
+  }
+};
+
 export const SellerService = {
   getAllSellers,
   getSeller,
@@ -292,4 +336,5 @@ export const SellerService = {
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,
+  getSellerPaymentProofs,
 };
