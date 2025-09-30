@@ -37,17 +37,19 @@ export const getBranchShippings = async (req: Request, res: Response) => {
 
 export const uploadShipping = async (req: Request, res: Response) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ error: "No se recibió ninguna imagen" });
-        }
-        const imagen_s3_key = await uploadFileToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
-        const shippingGuide: IGuiaEnvio = {
+        let shippingGuide: IGuiaEnvio = {
             vendedor: req.body.vendedor,
             sucursal: req.body.sucursal,
             descripcion: req.body.descripcion,
             fecha_subida: new Date(),
-            imagen_key: imagen_s3_key,
-        };
+        }
+        if (req.file) {
+            const imagen_s3_key = await uploadFileToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
+            shippingGuide = {
+                ...shippingGuide, 
+                imagen_key: imagen_s3_key
+            }
+        }
         const newShippingGuide = await ShippingGuideService.uploadShipping(shippingGuide);
         res.json({
             status: true,
