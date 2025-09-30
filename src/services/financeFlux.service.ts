@@ -1,3 +1,4 @@
+import { VendedorSchema } from './../entities/implements/VendedorSchema';
 import { Types } from "mongoose";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
@@ -6,6 +7,9 @@ import { WorkerRepository } from "../repositories/worker.repository";
 import { FinanceFluxInteractor } from "../interactors/financeFlux.interactor";
 import { ITrabajador } from "../entities/ITrabajador";
 import { IVendedor } from "../entities/IVendedor";
+import { SaleRepository } from "../repositories/sale.repository";
+import { ShippingService } from "./shipping.service";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -16,7 +20,20 @@ const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 const getDebts = async () => await FinanceFluxRepository.findAllDebts();
 
 const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
-  await FinanceFluxRepository.registerFinanceFlux(flux);
+  let montoFinal = flux.monto;
+
+  if (flux.tipo === "INGRESO" && flux.id_vendedor) {
+    const vendedor = await SellerRepository.findById(flux.id_vendedor);
+    if (vendedor && vendedor.comision_porcentual) {
+      const extra = flux.monto * (vendedor.comision_porcentual / 100);
+      montoFinal += extra;
+    }
+  }
+
+  await FinanceFluxRepository.registerFinanceFlux({
+    ...flux,
+    monto: montoFinal,
+  });
 };
 
 const payDebt = async (fluxId: string) => {
@@ -95,6 +112,70 @@ const updateFinanceFlux = async (
   return updatedFlux;
 };
 
+const getFinancialSummary = async () => {
+  const fluxes = await FinanceFluxRepository.findAll();
+
+  const shippings = await ShippingService.getAllShippings();
+
+  const sales = await SaleRepository.findAll();
+
+  let ingresos = 0;
+  let gastos = 0;
+  let inversiones = 0;
+  let montoCobradoDelivery = 0;
+  let costoDelivery = 0;
+  let comision = 0;
+  let mercaderiaVendida = 0;
+
+  for (const f of fluxes) {
+    if (f.tipo === "INGRESO") ingresos += f.monto || 0;
+    else if (f.tipo === "GASTO") gastos += f.monto || 0;
+    else if (f.tipo === "INVERSION") inversiones += f.monto || 0;
+  }
+
+  for (const s of shippings) {
+    montoCobradoDelivery += s.cargo_delivery || 0;
+    costoDelivery += s.costo_delivery || 0;
+  }
+  const balanceDelivery = montoCobradoDelivery - costoDelivery;
+
+  for (const v of sales) {
+    let comisionVenta = v.comision;
+    if (!comisionVenta) {
+      // Calcula la comisión si no está guardada
+      const vendedor = v.vendedor || (await VendedorModel.findById(v.id_vendedor));
+      const precioUnitario = v.precio_unitario || 0;
+      const cantidad = v.cantidad || 1;
+      const totalVenta = precioUnitario * cantidad;
+      comisionVenta = 0;
+      if (vendedor) {
+        if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
+          comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
+        }
+        if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
+          comisionVenta += vendedor.comision_fija;
+        }
+      }
+    }
+    comision += comisionVenta || 0;
+    mercaderiaVendida += (v.cantidad || 1) * (v.precio_unitario || 0);
+  }
+
+  const utilidad = ingresos - gastos + balanceDelivery;
+  const caja = inversiones + utilidad;
+
+  return {
+    ingresos,
+    gastos,
+    inversiones,
+    balanceDelivery,
+    utilidad,
+    caja,
+    comision,
+    mercaderiaVendida
+  };
+};
+
 export const FinanceFluxService = {
   getAllFinanceFluxes,
   registerFinanceFlux,
@@ -104,5 +185,6 @@ export const FinanceFluxService = {
   getSellerInfoById,
   getStatsService,
   updateFinanceFlux,
+  getFinancialSummary
   getDebts,
 };
