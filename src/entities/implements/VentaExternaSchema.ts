@@ -48,6 +48,11 @@ const VentaExternaSchema = new Schema({
     precio_total: {
         type: Number,
         required: true
+    },
+
+    delivered: {
+        type: Boolean,
+        default: false,
     }
 }, {
     collection: 'VentaExterna',
