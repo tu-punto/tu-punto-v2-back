@@ -20,8 +20,17 @@ const deleteExternalSaleByID = async (externalSaleID: string) => {
     return await VentaExternaModel.findByIdAndDelete(externalSaleID);
 }
 
+const updateExternalSaleByID = async (id: string, externalSale: IVentaExterna): Promise<IVentaExternaDocument | null> => {
+    return await VentaExternaModel.findByIdAndUpdate(
+        id,
+        externalSale,
+        { new: true }
+    ).populate('sucursal');
+}
+
 export const ExternalSaleRepository = {
     getAllExternalSales,
     registerExternalSale,
-    deleteExternalSaleByID
+    deleteExternalSaleByID,
+    updateExternalSaleByID
 };
