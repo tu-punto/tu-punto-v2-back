@@ -24,8 +24,21 @@ const deleteExternalSaleByID = async (id: string) => {
     return await ExternalSaleRepository.deleteExternalSaleByID(id);
 }
 
+const updateExternalSaleByID = async (id: string, externalSale: any) => {
+    if (externalSale.fecha_pedido) {
+        externalSale.fecha_pedido = moment.tz(externalSale.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
+    }
+
+    if (externalSale.id_sucursal) {
+        externalSale.sucursal = externalSale.id_sucursal;
+    }
+
+    return await ExternalSaleRepository.updateExternalSaleByID(id, externalSale);
+}
+
 export const ExternalSaleService = {
     getAllExternalSales,
     registerExternalSale,
     deleteExternalSaleByID,
+    updateExternalSaleByID
 }
