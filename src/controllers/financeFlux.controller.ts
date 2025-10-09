@@ -84,9 +84,14 @@ export const getStatsController = async (_: Request, res: Response) => {
   }
 };
 
-export const getFinancialSummaryController = async (_: Request, res: Response) => {
+export const getFinancialSummaryController = async (req: Request, res: Response) => {
   try {
-    const summary = await FinanceFluxService.getFinancialSummary();
+    const { startDate, endDate } = req.query;
+
+    const parsedStart = startDate ? new Date(startDate as string) : null;
+    const parsedEnd = endDate ? new Date(endDate as string) : null;
+
+    const summary = await FinanceFluxService.getFinancialSummary(parsedStart, parsedEnd);
     res.json(summary);
   } catch (err) {
     res.status(500).json({ msg: "Error calculando resumen financiero", err });

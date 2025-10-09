@@ -112,13 +112,22 @@ const updateFinanceFlux = async (
   return updatedFlux;
 };
 
-const getFinancialSummary = async () => {
+const getFinancialSummary = async (startDate?: Date | null, endDate?: Date | null) => {
   const fluxes = await FinanceFluxRepository.findAll();
-
   const shippings = await ShippingService.getAllShippings();
-
   const sales = await SaleRepository.findAll();
 
+  const isInRange = (date: Date) => {
+    if (!startDate) return true;
+    const end = endDate || new Date();
+    return date >= startDate && date <= end;
+  };
+
+  const filteredFluxes = fluxes.filter(f => f.fecha && isInRange(new Date(f.fecha)));
+  const filteredShippings = shippings.filter(s => s.fecha_pedido && isInRange(new Date(s.fecha_pedido)));
+  const filteredSales = sales.filter(v => v.fecha && isInRange(new Date(v.fecha)));
+
+  // --- VARIABLES ---
   let ingresos = 0;
   let gastos = 0;
   let inversiones = 0;
@@ -127,39 +136,47 @@ const getFinancialSummary = async () => {
   let comision = 0;
   let mercaderiaVendida = 0;
 
-  for (const f of fluxes) {
+  // --- FLUJOS FINANCIEROS (tabla Gastos e Ingresos) ---
+  for (const f of filteredFluxes) {
     if (f.tipo === "INGRESO") ingresos += f.monto || 0;
     else if (f.tipo === "GASTO") gastos += f.monto || 0;
     else if (f.tipo === "INVERSION") inversiones += f.monto || 0;
   }
 
-  for (const s of shippings) {
+  // --- DELIVERY ---
+  for (const s of filteredShippings) {
     montoCobradoDelivery += s.cargo_delivery || 0;
     costoDelivery += s.costo_delivery || 0;
   }
   const balanceDelivery = montoCobradoDelivery - costoDelivery;
 
-  for (const v of sales) {
+  // --- COMISIONES Y MERCADERÍA ---
+  for (const v of filteredSales) {
     let comisionVenta = v.comision;
     if (!comisionVenta) {
-      // Calcula la comisión si no está guardada
       const vendedor = v.vendedor || (await VendedorModel.findById(v.id_vendedor));
       const precioUnitario = v.precio_unitario || 0;
       const cantidad = v.cantidad || 1;
       const totalVenta = precioUnitario * cantidad;
       comisionVenta = 0;
+
       if (vendedor) {
-        if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
+        if (vendedor.comision_porcentual) {
           comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
         }
-        if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
+        if (vendedor.comision_fija) {
           comisionVenta += vendedor.comision_fija;
         }
       }
     }
+
     comision += comisionVenta || 0;
     mercaderiaVendida += (v.cantidad || 1) * (v.precio_unitario || 0);
   }
+
+  // --- 💰 REGLAS DE NEGOCIO REALES ---
+  ingresos += comision;               // agregar comisiones
+  ingresos += montoCobradoDelivery;   // agregar ingresos delivery (externos)
 
   const utilidad = ingresos - gastos + balanceDelivery;
   const caja = inversiones + utilidad;
@@ -172,9 +189,10 @@ const getFinancialSummary = async () => {
     utilidad,
     caja,
     comision,
-    mercaderiaVendida
+    mercaderiaVendida,
   };
 };
+
 
 export const FinanceFluxService = {
   getAllFinanceFluxes,
