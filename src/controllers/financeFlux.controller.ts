@@ -88,12 +88,27 @@ export const getFinancialSummaryController = async (req: Request, res: Response)
   try {
     const { startDate, endDate } = req.query;
 
-    const parsedStart = startDate ? new Date(startDate as string) : null;
-    const parsedEnd = endDate ? new Date(endDate as string) : null;
+    const filters: any = {};
 
-    const summary = await FinanceFluxService.getFinancialSummary(parsedStart, parsedEnd);
+    if (startDate) {
+      filters.startDate = new Date(startDate as string);
+    }
+    if (endDate) {
+      const endDateTime = new Date(endDate as string);
+      endDateTime.setHours(23, 59, 59, 999);
+      filters.endDate = endDateTime;
+    }
+
+    console.log("🔍 Filters applied:", filters);
+
+    // Pasar filters solo si existen, sino undefined para obtener todos los datos
+    const summary = await FinanceFluxService.getFinancialSummary(
+      Object.keys(filters).length > 0 ? filters : undefined
+    );
+
     res.json(summary);
   } catch (err) {
+    console.error("❌ Error in financial summary:", err);
     res.status(500).json({ msg: "Error calculando resumen financiero", err });
   }
 };

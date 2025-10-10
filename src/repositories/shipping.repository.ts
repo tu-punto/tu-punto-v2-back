@@ -86,7 +86,26 @@ const deleteById = async (shippingId: string) => {
   return await PedidoModel.findByIdAndDelete(shippingId);
 };
 
-
+const findAllWithFilter = async (filter: any = {}): Promise<IPedidoDocument[]> => {
+  return await PedidoModel.find(filter).populate([
+    {
+      path: 'venta',
+      populate: [
+        {
+          path: 'vendedor',
+          select: 'nombre apellido',
+        },
+        {
+          path: 'producto', 
+          select: 'nombre_producto esTemporal',
+        }
+      ],
+    },
+    'sucursal',
+    'trabajador',
+    'lugar_origen',
+  ]).lean().exec();
+};
 
 export const ShippingRepository = {
   findAll,
@@ -95,6 +114,7 @@ export const ShippingRepository = {
   findByIds,
   updateShipping,
   deleteById,
+  findAllWithFilter
 };
 
   

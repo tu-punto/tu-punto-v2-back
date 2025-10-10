@@ -175,6 +175,10 @@ async function recalcularComisiones() {
   console.log("Comisiones recalculadas y guardadas.");
 }
 
+const findAllWithFilter = async (filter: any = {}): Promise<IVentaDocument[]> => {
+  return await VentaModel.find(filter).populate(['producto', 'pedido', 'vendedor']).lean().exec();
+};
+
 export const SaleRepository = {
   findAll,
   registerSale,
@@ -190,6 +194,7 @@ export const SaleRepository = {
   getDataPaymentProof,
   deleteSalesOfProducts,
   deleteSaleById,
-  recalcularComisiones
+  recalcularComisiones,
+  findAllWithFilter
 };
 

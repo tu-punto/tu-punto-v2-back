@@ -112,23 +112,35 @@ const updateFinanceFlux = async (
   return updatedFlux;
 };
 
-const getFinancialSummary = async (startDate?: Date | null, endDate?: Date | null) => {
-  const fluxes = await FinanceFluxRepository.findAll();
-  const shippings = await ShippingService.getAllShippings();
-  const sales = await SaleRepository.findAll();
+const getFinancialSummary = async (filters?: {
+  startDate?: Date;
+  endDate?: Date;
+}) => {
+  // Si no hay filtros, obtener todos los datos
+  let fluxes, shippings, sales;
 
-  const isInRange = (date: Date) => {
-    if (!startDate) return true;
-    const end = endDate || new Date();
-    return date >= startDate && date <= end;
-  };
+  if (filters && (filters.startDate || filters.endDate)) {
+    // Construir filtros de fecha
+    const dateFilter: any = {};
+    if (filters.startDate) dateFilter.$gte = filters.startDate;
+    if (filters.endDate) dateFilter.$lte = filters.endDate;
 
-  const filteredFluxes = fluxes.filter(f => f.fecha && isInRange(new Date(f.fecha)));
-  const filteredShippings = shippings.filter(s => s.fecha_pedido && isInRange(new Date(s.fecha_pedido)));
-  const filteredSales = sales.filter(v => v.fecha && isInRange(new Date(v.fecha)));
+    // Aplicar filtros a TODAS las consultas
+    const fluxFilter = { fecha: dateFilter };
+    const shippingFilter = { hora_entrega_acordada: dateFilter };
+    const salesFilter = { fecha: dateFilter };
 
+    fluxes = await FinanceFluxRepository.findAllWithFilter(fluxFilter);
+    shippings = await ShippingService.getAllShippingsWithFilter(shippingFilter);
+    sales = await SaleRepository.findAllWithFilter(salesFilter);
+  } else {
+    // Sin filtros
+    fluxes = await FinanceFluxRepository.findAll();
+    shippings = await ShippingService.getAllShippings();
+    sales = await SaleRepository.findAll();
+  }
   // --- VARIABLES ---
-  let ingresos = 0;
+  let ingresosTabla = 0;      // Solo ingresos de la tabla
   let gastos = 0;
   let inversiones = 0;
   let montoCobradoDelivery = 0;
@@ -137,48 +149,66 @@ const getFinancialSummary = async (startDate?: Date | null, endDate?: Date | nul
   let mercaderiaVendida = 0;
 
   // --- FLUJOS FINANCIEROS (tabla Gastos e Ingresos) ---
-  for (const f of filteredFluxes) {
-    if (f.tipo === "INGRESO") ingresos += f.monto || 0;
+  for (const f of fluxes) {
+    if (f.tipo === "INGRESO") ingresosTabla += f.monto || 0;
     else if (f.tipo === "GASTO") gastos += f.monto || 0;
     else if (f.tipo === "INVERSION") inversiones += f.monto || 0;
   }
 
   // --- DELIVERY ---
-  for (const s of filteredShippings) {
+  for (const s of shippings) {
     montoCobradoDelivery += s.cargo_delivery || 0;
     costoDelivery += s.costo_delivery || 0;
   }
   const balanceDelivery = montoCobradoDelivery - costoDelivery;
 
+  // Obtener todos los vendedores únicos de las ventas filtradas
+  const vendedorIds = [...new Set(sales
+    .filter(v => v.id_vendedor)
+    .map(v => v.id_vendedor.toString()))];
+
+  const vendedores = await VendedorModel.find({
+    _id: { $in: vendedorIds }
+  }).lean();
+
+  // Crear un mapa para acceso rápido
+  const vendedorMap = new Map();
+  vendedores.forEach(v => vendedorMap.set(v._id.toString(), v));
+
   // --- COMISIONES Y MERCADERÍA ---
-  for (const v of filteredSales) {
+  for (const v of sales) {
     let comisionVenta = v.comision;
     if (!comisionVenta) {
-      const vendedor = v.vendedor || (await VendedorModel.findById(v.id_vendedor));
+      // Usar el vendedor del mapa en lugar de hacer una consulta individual
+      const vendedorId = v.id_vendedor?.toString();
+      const vendedor = v.vendedor || vendedorMap.get(vendedorId);
+
       const precioUnitario = v.precio_unitario || 0;
       const cantidad = v.cantidad || 1;
       const totalVenta = precioUnitario * cantidad;
       comisionVenta = 0;
 
       if (vendedor) {
-        if (vendedor.comision_porcentual) {
+        if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
           comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
         }
-        if (vendedor.comision_fija) {
+        if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
           comisionVenta += vendedor.comision_fija;
         }
       }
     }
-
     comision += comisionVenta || 0;
     mercaderiaVendida += (v.cantidad || 1) * (v.precio_unitario || 0);
   }
 
-  // --- 💰 REGLAS DE NEGOCIO REALES ---
-  ingresos += comision;               // agregar comisiones
-  ingresos += montoCobradoDelivery;   // agregar ingresos delivery (externos)
+  // --- 💰 CÁLCULOS FINALES SEGÚN TUS REGLAS DE NEGOCIO ---
 
-  const utilidad = ingresos - gastos + balanceDelivery;
+  // Ingresos = Ingresos tabla + Comisiones + Ingresos delivery externos
+  const ingresos = ingresosTabla + comision + montoCobradoDelivery;
+
+  const utilidad = ingresos - gastos - costoDelivery;
+
+  // Caja = Inversión + Utilidad
   const caja = inversiones + utilidad;
 
   return {
@@ -190,9 +220,16 @@ const getFinancialSummary = async (startDate?: Date | null, endDate?: Date | nul
     caja,
     comision,
     mercaderiaVendida,
+    debug: {
+      ingresosTabla,
+      montoCobradoDelivery,
+      costoDelivery,
+      salesCount: sales.length,
+      fluxesCount: fluxes.length,
+      shippingsCount: shippings.length
+    }
   };
 };
-
 
 export const FinanceFluxService = {
   getAllFinanceFluxes,

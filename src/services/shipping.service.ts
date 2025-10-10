@@ -384,6 +384,10 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
   return { resumen, totales };
 };
 
+const getAllShippingsWithFilter = async (filter: any = {}) => {
+  return await ShippingRepository.findAllWithFilter(filter);
+};
+
 export const ShippingService = {
   getAllShippings,
   getShippingByIds,
@@ -395,5 +399,6 @@ export const ShippingService = {
   addTemporaryProductsToShipping,
   deleteShippingById,
   processSalesForShipping,
-  getDailySalesHistory
+  getDailySalesHistory,
+  getAllShippingsWithFilter
 };

@@ -76,6 +76,14 @@ const markFinanceFluxAsPaid = async (sellerId: string): Promise<void> => {
   );
 };
 
+const findAllWithFilter = async (filter: any = {}): Promise<IFlujoFinancieroDocument[]> => {
+  return await FlujoFinancieroModel.find(filter)
+    .populate("id_vendedor", "nombre apellido")
+    .populate("id_trabajador", "nombre")
+    .populate("id_sucursal", "nombre")
+    .exec();
+};
+
 export const FinanceFluxRepository = {
   findAll,
   registerFinanceFlux,
@@ -86,4 +94,5 @@ export const FinanceFluxRepository = {
   updateById,
   markFinanceFluxAsPaid,
   findAllDebts,
+  findAllWithFilter,
 };
