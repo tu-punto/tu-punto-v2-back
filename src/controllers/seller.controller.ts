@@ -118,7 +118,6 @@ export const getSellerPaymentProofs = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const result = await SellerService.getSellerPaymentProofs(id);
-    console.log("Comprobantes de pago obtenidos:", result);
 
     res.json(result);
   } catch (err) {
