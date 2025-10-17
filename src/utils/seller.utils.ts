@@ -70,11 +70,11 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       ? -sale.utilidad
       : subtotal - sale.utilidad;
 
-    if (!pedidosProcesados.has(sale.pedido._id)) {
+    if (!pedidosProcesados.has(sale.pedido._id.toString())) {
       subtotalDeuda -=
         (sale.pedido.adelanto_cliente ?? 0) +
         (sale.pedido.cargo_delivery ?? 0);
-      pedidosProcesados.add(sale.pedido._id);
+      pedidosProcesados.add(sale.pedido._id.toString());
     }
 
     return acc + subtotalDeuda;

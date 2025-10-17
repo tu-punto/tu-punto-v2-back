@@ -85,12 +85,12 @@ const actualizarSaldoVendedor = async (
       console.log(`→ No pagado: saldoPendiente = subtotal - utilidad (${subtotal} - ${utilidad} = ${saldoPendiente})`);
     }
 
-    if (!pedidosProcesados.has(id_pedido)) {
+    if (!pedidosProcesados.has(id_pedido.toString())) {
       const adelanto = pedido.adelanto_cliente || 0;
       const delivery = pedido.cargo_delivery || 0;
       saldoPendiente -= adelanto;
       saldoPendiente -= delivery;
-      pedidosProcesados.add(id_pedido);
+      pedidosProcesados.add(id_pedido.toString());
     }
 
     const currentSaldo = vendedoresMap.get(id_vendedor) || 0;

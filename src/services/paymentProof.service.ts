@@ -6,7 +6,6 @@ const getComprobantesByVendedor = async (vendedorId: string) => {
       vendedorId
     );
 
-    console.log("Comprobantes obtenidos en el servicio:", comprobantes);
     return comprobantes;
   } catch (error) {
     console.error("Error en getComprobantesByVendedor:", error);
