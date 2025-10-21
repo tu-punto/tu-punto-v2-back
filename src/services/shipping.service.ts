@@ -172,6 +172,12 @@ const updateShipping = async (newData: any, shippingId: string) => {
       .format("YYYY-MM-DD HH:mm:ss");
   }
 
+  if (newData.hora_entrega_rango_final) {
+    newData.hora_entrega_rango_final = moment
+      .tz(newData.hora_entrega_rango_final, "America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
+
   if (!newData.hora_entrega_real && newData.hora_entrega_acordada) {
     newData.hora_entrega_real = newData.hora_entrega_acordada;
   }
