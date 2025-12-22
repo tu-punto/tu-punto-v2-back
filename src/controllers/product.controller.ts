@@ -201,7 +201,10 @@ export const getFlatProductList = async (req: Request, res: Response) => {
 
   try {
     const sucursalId = req.query.sucursalId as string | undefined;
-    const products = await ProductService.getFlatProductList(sucursalId);
+    const limit = Number(req.query.limit) || 200;
+    const skip = Number(req.query.skip) || 0;
+
+    const products = await ProductService.getFlatProductList(sucursalId, limit, skip);
 
 
 

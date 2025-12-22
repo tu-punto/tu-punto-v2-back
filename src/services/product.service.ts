@@ -303,8 +303,8 @@ const generateIngressPDF = async (data: any): Promise<Buffer> => {
 
   return Buffer.from(pdfBuffer);
 };
-const getFlatProductList = async (sucursalId?: string) => {
-  return await ProductRepository.findFlatProductList(sucursalId);
+const getFlatProductList = async (sucursalId?: string, limit?: number, skip?: number) => {
+  return await ProductRepository.findFlatProductList(sucursalId, limit, skip);
 };
 
 export const ProductService = {

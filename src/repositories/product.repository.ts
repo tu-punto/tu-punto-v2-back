@@ -231,63 +231,38 @@ const addVariantToProduct = async (
 
   return await producto.save();
 };
-const findFlatProductList = async (sucursalId?: string) => {
-    console.log("📦 findFlatProductList recibido sucursalId:", sucursalId);
-
-  const match: any = { esTemporal: { $ne: true } };
-
+const findFlatProductList = async (
+  sucursalId?: string,
+  limit = 200,
+  skip = 0
+) => {
   const pipeline: any[] = [
-    { $match: match },
-    { $unwind: "$sucursales" }
+    { $match: { esTemporal: { $ne: true } } },
+    { $unwind: "$sucursales" },
   ];
 
   if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
     pipeline.push({
-      $match: {
-        "sucursales.id_sucursal": new Types.ObjectId(sucursalId)
-      }
+      $match: { "sucursales.id_sucursal": new Types.ObjectId(sucursalId) }
     });
-  } else if (sucursalId) {
-    console.warn("⚠️ sucursalId inválido recibido en findFlatProductList:", sucursalId);
   }
-
 
   pipeline.push(
     { $unwind: "$sucursales.combinaciones" },
-    {
-      $lookup: {
-        from: "Categoria",
-        localField: "id_categoria",
-        foreignField: "_id",
-        as: "categoria_info"
-      }
-    },
-    {
-      $lookup: {
-        from: "Vendedor",
-        localField: "id_vendedor",
-        foreignField: "_id",
-        as: "vendedor_info"
-      }
-    },
+    { $lookup: { from: "Categoria", localField: "id_categoria", foreignField: "_id", as: "categoria_info" } },
+    { $lookup: { from: "Vendedor", localField: "id_vendedor", foreignField: "_id", as: "vendedor_info" } },
     {
       $project: {
         _id: 1,
         nombre_producto: 1,
+        variantes_obj: "$sucursales.combinaciones.variantes",
         variante: {
           $reduce: {
             input: { $objectToArray: "$sucursales.combinaciones.variantes" },
             initialValue: "",
-            in: {
-              $cond: [
-                { $eq: ["$$value", ""] },
-                "$$this.v",
-                { $concat: ["$$value", " / ", "$$this.v"] }
-              ]
-            }
+            in: { $cond: [{ $eq: ["$$value", ""] }, "$$this.v", { $concat: ["$$value", " / ", "$$this.v"] }] }
           }
         },
-        variantes_obj: "$sucursales.combinaciones.variantes",
         precio: "$sucursales.combinaciones.precio",
         stock: "$sucursales.combinaciones.stock",
         sucursalId: "$sucursales.id_sucursal",
@@ -302,10 +277,12 @@ const findFlatProductList = async (sucursalId?: string) => {
           ]
         }
       }
-    }
+    },
+    { $skip: skip },
+    { $limit: limit }
   );
 
-  return await ProductoModel.aggregate(pipeline);
+  return await ProductoModel.aggregate(pipeline).option({ allowDiskUse: true });
 };
 
 export const ProductRepository = {
