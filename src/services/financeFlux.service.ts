@@ -10,6 +10,7 @@ import { IVendedor } from "../entities/IVendedor";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingService } from "./shipping.service";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { ExternalSaleRepository } from "../repositories/external.repository";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -119,16 +120,19 @@ const getFinancialSummary = async () => {
 
   const sales = await SaleRepository.findAll();
 
-  let ingresos = 0;
+  const externalSales = await ExternalSaleRepository.getAllExternalSales();
+
+  let ingresosFluxes = 0;
   let gastos = 0;
   let inversiones = 0;
   let montoCobradoDelivery = 0;
   let costoDelivery = 0;
   let comision = 0;
   let mercaderiaVendida = 0;
+  let ingresosEntregasExternas = 0;
 
   for (const f of fluxes) {
-    if (f.tipo === "INGRESO") ingresos += f.monto || 0;
+    if (f.tipo === "INGRESO") ingresosFluxes += f.monto || 0;
     else if (f.tipo === "GASTO") gastos += f.monto || 0;
     else if (f.tipo === "INVERSION") inversiones += f.monto || 0;
   }
@@ -161,7 +165,18 @@ const getFinancialSummary = async () => {
     mercaderiaVendida += (v.cantidad || 1) * (v.precio_unitario || 0);
   }
 
+  // Suma ingresos por entregas externas
+  for (const e of externalSales) {
+    ingresosEntregasExternas += e.precio_total || 0;
+  }
+
+  // Ingresos = Flujos INGRESO + Comisiones + Ingresos por entregas externas
+  const ingresos = ingresosFluxes + comision + ingresosEntregasExternas;
+
+  // Utilidad = Ingresos - Gastos + Balance Delivery
   const utilidad = ingresos - gastos + balanceDelivery;
+
+  // Caja = Inversión + Utilidad
   const caja = inversiones + utilidad;
 
   return {
