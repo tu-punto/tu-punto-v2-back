@@ -263,10 +263,18 @@ const getServicesSummary = async () => {
   const sellers = await SellerRepository.findAll();
 
   const resumen: Record<string, Record<string, number>> = {};
+  const today = dayjs();
 
   for (const seller of sellers) {
     for (const pago of seller.pago_sucursales || []) {
-      if (!pago.activo) continue;
+      const start = pago.fecha_ingreso ? dayjs(pago.fecha_ingreso) : null;
+      const end = pago.fecha_salida ? dayjs(pago.fecha_salida) : null;
+
+      const fueraDeRango =
+        (start && start.isAfter(today)) ||
+        (end && end.isBefore(today));
+
+      if (pago.activo === false || fueraDeRango) continue;
 
       const sucursal = pago.sucursalName;
 
