@@ -184,6 +184,20 @@ const getCommissionTotal = async (opts: CommissionRange) => {
   return { comision: total };
 };
 
+const getMerchandiseSoldTotal = async (opts: CommissionRange) => {
+  const { fromDate, toDate } = parseRangeToDates(opts);
+  const sales = await SaleRepository.findByPedidoDateRange(fromDate, toDate);
+
+  let total = 0;
+  for (const v of sales) {
+    const cantidad = (v as any).cantidad || 0;
+    const precio = (v as any).precio_unitario || 0;
+    total += cantidad * precio;
+  }
+
+  return { mercaderiaVendida: total };
+};
+
 const getFinancialSummary = async () => {
   const fluxes = await FinanceFluxRepository.findAll();
 
@@ -270,4 +284,5 @@ export const FinanceFluxService = {
   getFinancialSummary,
   getDebts,
   getCommissionTotal,
+  getMerchandiseSoldTotal,
 };
