@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as fluxController from "../controllers/financeFlux.controller";
-import { getFinancialSummaryController } from "../controllers/financeFlux.controller";
+import { getFinancialSummaryController, getCommissionController } from "../controllers/financeFlux.controller";
 const financeFluxRouter = Router();
 
 financeFluxRouter.get("/", fluxController.getFinanceFluxes);
@@ -20,5 +20,7 @@ financeFluxRouter.get("/sellerInf/:id", fluxController.getSellerInfo);
 financeFluxRouter.get("/stats/", fluxController.getStatsController);
 
 financeFluxRouter.get("/financial-summary", getFinancialSummaryController);
+
+financeFluxRouter.get("/commission", getCommissionController);
 
 export default financeFluxRouter;
