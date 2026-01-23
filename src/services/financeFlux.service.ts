@@ -10,6 +10,7 @@ import { IVendedor } from "../entities/IVendedor";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingService } from "./shipping.service";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { ExternalSaleRepository } from "../repositories/external.repository";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -112,6 +113,91 @@ const updateFinanceFlux = async (
   return updatedFlux;
 };
 
+type CommissionRange = {
+  range?: string;
+  from?: string;
+  to?: string;
+};
+
+const parseRangeToDates = ({ range, from, to }: CommissionRange): { fromDate?: Date; toDate?: Date } => {
+  const now = new Date();
+  let fromDate: Date | undefined;
+  let toDate: Date | undefined;
+
+  const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+
+  const norm = (range || '').toLowerCase();
+  if (norm === 'all' || norm === 'todo' || norm === 'alltime') {
+    return { fromDate: undefined, toDate: undefined };
+  }
+  const daysMap: Record<string, number> = { '7': 7, '7d': 7, '30': 30, '30d': 30, '90': 90, '90d': 90 };
+  if (norm in daysMap) {
+    toDate = endOfDay(now);
+    const d = new Date(now);
+    d.setDate(d.getDate() - daysMap[norm]);
+    fromDate = startOfDay(d);
+    return { fromDate, toDate };
+  }
+
+  if (norm === 'custom' || (from || to)) {
+    if (from) {
+      const f = new Date(from);
+      if (!isNaN(f.getTime())) fromDate = startOfDay(f);
+    }
+    if (to) {
+      const t = new Date(to);
+      if (!isNaN(t.getTime())) toDate = endOfDay(t);
+    }
+    return { fromDate, toDate };
+  }
+
+  // Default: all time
+  return { fromDate: undefined, toDate: undefined };
+};
+
+const getCommissionTotal = async (opts: CommissionRange) => {
+  const { fromDate, toDate } = parseRangeToDates(opts);
+  const sales = await SaleRepository.findByPedidoDateRange(fromDate, toDate);
+
+  let total = 0;
+  for (const v of sales) {
+    let comisionVenta = (v as any).comision as number | undefined;
+    if (!comisionVenta) {
+      const vendedor = (v as any).vendedor || (await VendedorModel.findById((v as any).id_vendedor));
+      const precioUnitario = (v as any).precio_unitario || 0;
+      const cantidad = (v as any).cantidad || 1;
+      const totalVenta = precioUnitario * cantidad;
+      comisionVenta = 0;
+      if (vendedor) {
+        if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
+          comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
+        }
+        if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
+          comisionVenta += vendedor.comision_fija;
+        }
+      }
+    }
+    total += comisionVenta || 0;
+  }
+
+  return { comision: total };
+};
+
+const getMerchandiseSoldTotal = async (opts: CommissionRange) => {
+  const { fromDate, toDate } = parseRangeToDates(opts);
+  const sales = await SaleRepository.findByPedidoDateRange(fromDate, toDate);
+
+  let total = 0;
+  for (const v of sales) {
+    const cantidad = (v as any).cantidad || 0;
+    const precio = (v as any).precio_unitario || 0;
+    total += cantidad * precio;
+  }
+
+  return { mercaderiaVendida: total };
+};
+
 const getFinancialSummary = async () => {
   const fluxes = await FinanceFluxRepository.findAll();
 
@@ -119,16 +205,18 @@ const getFinancialSummary = async () => {
 
   const sales = await SaleRepository.findAll();
 
-  let ingresos = 0;
+  const externalSales = await ExternalSaleRepository.getAllExternalSales();
+
+  let ingresosFluxes = 0;
   let gastos = 0;
   let inversiones = 0;
   let montoCobradoDelivery = 0;
   let costoDelivery = 0;
   let comision = 0;
-  let mercaderiaVendida = 0;
+  let ingresosEntregasExternas = 0;
 
   for (const f of fluxes) {
-    if (f.tipo === "INGRESO") ingresos += f.monto || 0;
+    if (f.tipo === "INGRESO") ingresosFluxes += f.monto || 0;
     else if (f.tipo === "GASTO") gastos += f.monto || 0;
     else if (f.tipo === "INVERSION") inversiones += f.monto || 0;
   }
@@ -158,10 +246,20 @@ const getFinancialSummary = async () => {
       }
     }
     comision += comisionVenta || 0;
-    mercaderiaVendida += (v.cantidad || 1) * (v.precio_unitario || 0);
   }
 
+  // Suma ingresos por entregas externas
+  for (const e of externalSales) {
+    ingresosEntregasExternas += e.precio_total || 0;
+  }
+
+  // Ingresos = Flujos INGRESO + Comisiones + Ingresos por entregas externas
+  const ingresos = ingresosFluxes + comision + ingresosEntregasExternas;
+
+  // Utilidad = Ingresos - Gastos + Balance Delivery
   const utilidad = ingresos - gastos + balanceDelivery;
+
+  // Caja = Inversión + Utilidad
   const caja = inversiones + utilidad;
 
   return {
@@ -170,9 +268,7 @@ const getFinancialSummary = async () => {
     inversiones,
     balanceDelivery,
     utilidad,
-    caja,
-    comision,
-    mercaderiaVendida
+    caja
   };
 };
 
@@ -187,4 +283,6 @@ export const FinanceFluxService = {
   updateFinanceFlux,
   getFinancialSummary,
   getDebts,
+  getCommissionTotal,
+  getMerchandiseSoldTotal,
 };

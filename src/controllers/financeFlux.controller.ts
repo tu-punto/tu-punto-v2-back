@@ -92,3 +92,31 @@ export const getFinancialSummaryController = async (_: Request, res: Response) =
     res.status(500).json({ msg: "Error calculando resumen financiero", err });
   }
 };
+
+export const getCommissionController = async (req: Request, res: Response) => {
+  try {
+    const { range, from, to } = req.query as any;
+    const result = await FinanceFluxService.getCommissionTotal({
+      range: typeof range === 'string' ? range : undefined,
+      from: typeof from === 'string' ? from : undefined,
+      to: typeof to === 'string' ? to : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ msg: "Error calculando comisión", err });
+  }
+};
+
+export const getMerchandiseSoldController = async (req: Request, res: Response) => {
+  try {
+    const { range, from, to } = req.query as any;
+    const result = await FinanceFluxService.getMerchandiseSoldTotal({
+      range: typeof range === 'string' ? range : undefined,
+      from: typeof from === 'string' ? from : undefined,
+      to: typeof to === 'string' ? to : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ msg: "Error calculando mercadería vendida", err });
+  }
+};
