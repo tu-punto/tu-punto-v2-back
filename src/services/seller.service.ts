@@ -263,12 +263,20 @@ const getServicesSummary = async () => {
   const sellers = await SellerRepository.findAll();
 
   const resumen: Record<string, Record<string, number>> = {};
-  const today = dayjs();
+
+  // Comparación por día (evita que un vendedor “caduque” por la hora)
+  const today = dayjs().startOf("day");
 
   for (const seller of sellers) {
+    // ✅ NUEVO: validar vigencia del vendedor
+    const vigencia = seller.fecha_vigencia ? dayjs(seller.fecha_vigencia).endOf("day") : null;
+
+    // Si no tiene fecha_vigencia o ya venció, no cuenta en el resumen
+    if (!vigencia || vigencia.isBefore(today)) continue;
+
     for (const pago of seller.pago_sucursales || []) {
-      const start = pago.fecha_ingreso ? dayjs(pago.fecha_ingreso) : null;
-      const end = pago.fecha_salida ? dayjs(pago.fecha_salida) : null;
+      const start = pago.fecha_ingreso ? dayjs(pago.fecha_ingreso).startOf("day") : null;
+      const end = pago.fecha_salida ? dayjs(pago.fecha_salida).endOf("day") : null;
 
       const fueraDeRango =
         (start && start.isAfter(today)) ||
@@ -276,9 +284,9 @@ const getServicesSummary = async () => {
 
       if (pago.activo === false || fueraDeRango) continue;
 
-      const sucursal = pago.sucursalName;
+      const sucursal = pago.sucursalName || "Sin sucursal";
 
-      if (!resumen[sucursal])
+      if (!resumen[sucursal]) {
         resumen[sucursal] = {
           Almacenamiento: 0,
           Exhibición: 0,
@@ -286,6 +294,7 @@ const getServicesSummary = async () => {
           Delivery: 0,
           TOTAL: 0,
         };
+      }
 
       const montoAlmacenamiento = pago.alquiler || 0;
       const montoExhibicion = pago.exhibicion || 0;
@@ -299,10 +308,10 @@ const getServicesSummary = async () => {
 
       const totalSucursal =
         montoAlmacenamiento + montoExhibicion + montoEntrega + montoDelivery;
+
       resumen[sucursal].TOTAL += totalSucursal;
 
-      // Acumular en TOTAL general
-      if (!resumen.TOTAL)
+      if (!resumen.TOTAL) {
         resumen.TOTAL = {
           Almacenamiento: 0,
           Exhibición: 0,
@@ -310,6 +319,7 @@ const getServicesSummary = async () => {
           Delivery: 0,
           TOTAL: 0,
         };
+      }
 
       resumen.TOTAL.Almacenamiento += montoAlmacenamiento;
       resumen.TOTAL.Exhibición += montoExhibicion;
@@ -321,6 +331,7 @@ const getServicesSummary = async () => {
 
   return resumen;
 };
+
 
 const getSellerPaymentProofs = async (sellerId: string) => {
   try {
