@@ -17,9 +17,11 @@ import whatsRouter from "./routes/whatsapp.route";
 import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";
 import externalSaleRouter from "./routes/external.routes";
-import dashboardRouter from "./routes/dashboard.routes";
 import financeFluxCategoryRouter from "./routes/financeFluxCategory.routes";
 import qr from "./routes/qr.routes";
+
+import shippingGuideRouter from "./routes/shippingGuide.routes";
+import reportsRouter from "./routes/reports.routes";
 
 const router = Router();
 
@@ -42,7 +44,11 @@ router.use("/whats", whatsRouter);
 router.use("/boxClose", boxCloseRouter);
 router.use("/dailyEffective", dailyEffectiveRouter);
 router.use("/external", externalSaleRouter)
-router.use("/dashboard", dashboardRouter);
+
 router.use("/qr", qr);
+
+router.use("/shippingGuide", shippingGuideRouter);
+router.use("/reports", reportsRouter);
+
 
 export default router;

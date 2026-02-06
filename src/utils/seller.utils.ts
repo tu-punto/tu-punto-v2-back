@@ -12,6 +12,7 @@ export interface PagoSucursal {
   exhibicion?: number;
   delivery?: number;
   entrega_simple?: number;
+  activo?: boolean;
 }
 
 export const calcSucursalSubtotal = (p: PagoSucursal): number =>
@@ -23,62 +24,70 @@ export const calcSucursalSubtotal = (p: PagoSucursal): number =>
 export const calcSellerDebt = (sellerLike: {
   pago_sucursales: PagoSucursal[];
 }): number =>
-  sellerLike.pago_sucursales.reduce(
-    (tot, p) => tot + calcSucursalSubtotal(p),
-    0
-  );
+  sellerLike.pago_sucursales
+    .filter((p) => p.activo)
+    .reduce((tot, p) => tot + calcSucursalSubtotal(p), 0);
 
 export const calcPagoMensual = (seller: {
   pago_sucursales: PagoSucursal[];
 }): number =>
-  seller.pago_sucursales.reduce(
-    (tot, p) =>
-      tot +
-      Number(p.alquiler ?? 0) +
-      Number(p.exhibicion ?? 0) +
-      Number(p.delivery ?? 0) +
-      Number(p.entrega_simple ?? 0),
-    0
-  );
+  seller.pago_sucursales
+    .filter((p) => p.activo)
+    .reduce(
+      (tot, p) =>
+        tot +
+        Number(p.alquiler ?? 0) +
+        Number(p.exhibicion ?? 0) +
+        Number(p.delivery ?? 0) +
+        Number(p.entrega_simple ?? 0),
+      0
+    );
 
-export const calcPagoPendiente = (sales: any, debts: IFinanceFlux[]) => {
+export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
   const pedidosProcesados = new Set();
-  const saldoPendiente = sales.reduce((acc: number, sale: any) => {
-    if (
-      sale.deposito_realizado ||
-      sale.pedido.estado_pedido === "En Espera"
-    ) {
+  const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {
+    if (!sale) {
+      console.warn('[calcPagoPendiente] Sale vacío', { index: i });
       return acc;
     }
-    const subtotal = sale.cantidad * sale.precio_unitario;
 
-    let subtotalDeuda = 0;
-
-    if (sale.pedido.pagado_al_vendedor) {
-      subtotalDeuda = -sale.utilidad;
-    } else {
-      subtotalDeuda = subtotal - sale.utilidad;
+    if (!sale.pedido) {
+      console.warn('[calcPagoPendiente] Venta sin pedido', {
+        index: i,
+        saleId: sale?._id,
+        pedidoId: sale?.pedido?._id,
+      });
+      return acc; // evita que truene
     }
 
-    if (!pedidosProcesados.has(sale.pedido._id)) {
+    if (sale.deposito_realizado || sale.pedido.estado_pedido === 'En Espera') {
+      return acc;
+    }
+
+    // resto de tu lógica…
+    const subtotal = sale.cantidad * sale.precio_unitario;
+    let subtotalDeuda = sale.pedido.pagado_al_vendedor
+      ? -sale.utilidad
+      : subtotal - sale.utilidad;
+
+    if (!pedidosProcesados.has(sale.pedido._id.toString())) {
       subtotalDeuda -=
-        sale.pedido.adelanto_cliente + sale.pedido.cargo_delivery;
-      pedidosProcesados.add(sale.pedido._id);
+        (sale.pedido.adelanto_cliente ?? 0) +
+        (sale.pedido.cargo_delivery ?? 0);
+      pedidosProcesados.add(sale.pedido._id.toString());
     }
 
     return acc + subtotalDeuda;
   }, 0);
 
-  const deuda = debts.reduce((acc, debt) => {
-    if (debt.esDeuda) {
-      return acc + debt.monto;
-    }
-    return acc;
+  const deuda = (debts || []).reduce((acc, debt) => {
+    return debt.esDeuda ? acc + debt.monto : acc;
   }, 0);
 
   return {
     saldo_pendiente: saldoPendiente,
-    deuda: deuda,
+    deuda,
     pago_pendiente: saldoPendiente - deuda,
   };
 };
+

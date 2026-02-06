@@ -111,3 +111,20 @@ export const getServicesSummary = async (_: Request, res: Response) => {
     res.status(500).json({ msg: "Error generando resumen", err });
   }
 };
+
+export const getSellerPaymentProofs = async (req: Request, res: Response) => {
+  try {
+    console.log("Obteniendo comprobantes de pago para el vendedor...");
+    const { id } = req.params;
+
+    const result = await SellerService.getSellerPaymentProofs(id);
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error obteniendo comprobantes de pago:", err);
+    res.status(500).json({
+      msg: "Error obteniendo comprobantes de pago",
+      error: err,
+    });
+  }
+};

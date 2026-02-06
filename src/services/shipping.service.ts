@@ -85,12 +85,12 @@ const actualizarSaldoVendedor = async (
       console.log(`→ No pagado: saldoPendiente = subtotal - utilidad (${subtotal} - ${utilidad} = ${saldoPendiente})`);
     }
 
-    if (!pedidosProcesados.has(id_pedido)) {
+    if (!pedidosProcesados.has(id_pedido.toString())) {
       const adelanto = pedido.adelanto_cliente || 0;
       const delivery = pedido.cargo_delivery || 0;
       saldoPendiente -= adelanto;
       saldoPendiente -= delivery;
-      pedidosProcesados.add(id_pedido);
+      pedidosProcesados.add(id_pedido.toString());
     }
 
     const currentSaldo = vendedoresMap.get(id_vendedor) || 0;
@@ -169,6 +169,12 @@ const updateShipping = async (newData: any, shippingId: string) => {
   if (newData.hora_entrega_acordada) {
     newData.hora_entrega_acordada = moment
       .tz(newData.hora_entrega_acordada, "America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
+
+  if (newData.hora_entrega_rango_final) {
+    newData.hora_entrega_rango_final = moment
+      .tz(newData.hora_entrega_rango_final, "America/La_Paz")
       .format("YYYY-MM-DD HH:mm:ss");
   }
 

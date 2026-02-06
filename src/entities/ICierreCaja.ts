@@ -24,6 +24,13 @@ export interface ICierreCaja {
     corte: number;
     cantidad: number;
   }[];
+  operaciones_adicionales: {
+    tipo: "delivery" | "gasto_profit" | "pago_cliente";
+    descripcion: string;
+    cliente?: string;
+    metodo: "efectivo" | "qr";
+    monto: number;
+  }[];
 
   id_sucursal: Types.ObjectId;
 }

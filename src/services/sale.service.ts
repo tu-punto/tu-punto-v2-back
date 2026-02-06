@@ -6,9 +6,10 @@ import { SellerService } from "./seller.service";
 import { ProductService } from './product.service';
 import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
 import { VentaModel } from '../entities/implements/VentaSchema';
+import { IVenta } from '../entities/IVenta';
 
-const getAllSales = async () => {
-    return await SaleRepository.findAll();
+const getAllSales = async ()=> {
+    return await SaleRepository.findAll()
 };
 
 const registerSale = async (sale: any) => {
@@ -413,6 +414,15 @@ const deleteSaleById = async (id: string, id_sucursal: string) => {
     return res;
 };
 
+const getRawSalesBySellerId = async (sellerId: string) => {
+    const sales = await SaleRepository.findBySellerId(sellerId);
+    if (!sales || sales.length === 0) {
+        return [];
+    }
+    return sales
+}
+
+
 export const SaleService = {
     getAllSales,
     registerSale,
@@ -430,5 +440,6 @@ export const SaleService = {
     updateSaleById,
     deleteSaleById,
     deleteSalesByIdsAndPullFromPedido,
+    getRawSalesBySellerId
 
 }

@@ -256,10 +256,29 @@ export const generateIngressPDF = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Error al generar PDF" });
   }
 };
+
+
+
+
 export const getFlatProductList = async (req: Request, res: Response) => {
+
+
+
+
+
+
+
+
+
+
+
+
   try {
     const sucursalId = req.query.sucursalId as string | undefined;
     const products = await ProductService.getFlatProductList(sucursalId);
+
+
+
     res.json(products);
   } catch (error) {
     console.error("Error en getFlatProductList:", error);

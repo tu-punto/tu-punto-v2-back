@@ -15,4 +15,6 @@ export interface IVentaExterna {
     nombre_flota?: string;
     precio_servicio?: number;
     precio_total: number;
+
+    delivered: boolean;
 }

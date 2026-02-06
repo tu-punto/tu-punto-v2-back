@@ -4,12 +4,17 @@ import { SaleService } from "./sale.service";
 import { SellerService } from "./seller.service";
 import { FinanceFluxService } from "./financeFlux.service";
 import { SucursalsService } from "./sucursals.service";
+import { uploadPdfToAws } from "./bucket.service";
+import { ComprobantePagoModel } from "../entities/implements/ComprobantePagoSchema";
+import mongoose from "mongoose";
+import { PaymentProofService } from "./paymentProof.service";
 
 const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const sucursales = await SucursalsService.getAllSucursals();
   const deudas = await FinanceFluxService.getSellerInfoById(sellerId);
   const filteredDeudas = deudas.filter((deuda) => deuda.esDeuda);
   const sales = await SaleService.getProductsBySellerId(sellerId);
+  const seller = await SellerService.getSeller(sellerId);
   const filteredSales = sales.filter(
     (sale) =>
       !sale.deposito_realizado && sale.id_pedido.estado_pedido !== "En Espera"
@@ -106,7 +111,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     .filter((pedido) => pedido.adelanto_cliente > 0)
     .map((pedido) => [
       new Date(pedido.fecha_pedido).toLocaleDateString("es-BO"),
-      pedido.adelanto_cliente,
+      pedido.adelanto_cliente.toFixed(2),
     ]);
 
   const totalAdelantos = pedidos.reduce(
@@ -139,7 +144,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     .filter((pedido) => pedido.cargo_delivery > 0)
     .map((pedido) => [
       new Date(pedido.fecha_pedido).toLocaleDateString("es-BO"),
-      pedido.cargo_delivery,
+      pedido.cargo_delivery.toFixed(2),
     ]);
 
   const totalDeliverys = pedidos.reduce(
@@ -204,6 +209,22 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   );
 
   const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+
+  const filename = `comprobante_pago_${seller?.nombre}_${
+    seller?.apellido
+  }_${new Date().toISOString()}.pdf`;
+  const pdfUrl = await uploadPdfToAws(pdfBuffer, filename);
+
+  const savedUrl = await PaymentProofService.createComprobante({
+    vendedor: sellerId,
+    comprobante_entrada_pdf: pdfUrl.url,
+    monto_pagado: montoPagado,
+    total_ventas: totalVentasComision,
+    total_adelantos: totalAdelantos,
+    total_deliverys: totalDeliverys,
+    total_mensualidades: totalMensualidades,
+  });
+  console.log("Comprobante de pago guardado con URL:", savedUrl);
 
   return pdfBuffer;
 };

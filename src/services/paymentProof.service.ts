@@ -1,12 +1,36 @@
-import * as paymentProofRepository from '../repositories/paymentProof.repository'
+import { PaymentProofRepository } from "../repositories/paymentProof.repository";
 
-export const getPaymentProofsBySellerId = async (sellerId:number)=>{
-    const paymentProofs = await paymentProofRepository.getPaymentProofsBySellerId(sellerId);
+const getComprobantesByVendedor = async (vendedorId: string) => {
+  try {
+    const comprobantes = await PaymentProofRepository.findByVendedor(
+      vendedorId
+    );
 
-    if (!paymentProofs.length) {
-        // throw new Error(`No payment proofs found for seller with id ${id}`);
-        return []
-    }
+    return comprobantes;
+  } catch (error) {
+    console.error("Error en getComprobantesByVendedor:", error);
+    throw error;
+  }
+};
 
-    return paymentProofs
-}   
+const createComprobante = async (comprobanteData: {
+  vendedor: string;
+  comprobante_entrada_pdf: string;
+  monto_pagado: number;
+  total_ventas: number;
+  total_adelantos: number;
+  total_deliverys: number;
+  total_mensualidades: number;
+}) => {
+  try {
+    return await PaymentProofRepository.create(comprobanteData);
+  } catch (error) {
+    console.error("Error en createComprobante:", error);
+    throw error;
+  }
+};
+
+export const PaymentProofService = {
+  getComprobantesByVendedor,
+  createComprobante,
+};

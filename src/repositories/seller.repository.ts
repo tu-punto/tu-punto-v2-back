@@ -97,6 +97,60 @@ const markSalesAsDeposited = async (sellerId: string): Promise<void> => {
   );
 };
 
+const findWithDebtsAndSales = async () => {
+  return await VendedorModel.aggregate([
+    {
+      $lookup: {
+        from: "Venta",
+        let: { vendedor_id: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$vendedor", "$$vendedor_id"] }
+            }
+          },
+          {
+            $lookup: {
+              from: "Pedido",
+              let: { pedido_id: "$pedido" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$_id", "$$pedido_id"] }
+                  }
+                }
+              ],
+              as: "pedido"
+            }
+          },
+          {
+            $unwind: {
+              path: "$pedido",
+              preserveNullAndEmptyArrays: true
+            }
+          }
+        ],
+        as: "sales"
+      }
+    },
+    {
+      $lookup: {
+        from: "Flujo_Financiero",
+        let: { vendedor_id: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+              esDeuda: true
+            }
+          }
+        ],
+        as: "debts"
+      }
+    }
+  ]).exec();
+};
+
 export const SellerRepository = {
   findAll,
   registerSeller,
@@ -105,4 +159,5 @@ export const SellerRepository = {
   incrementDebt,
   findDebtsBySeller,
   markSalesAsDeposited,
+  findWithDebtsAndSales,
 };
