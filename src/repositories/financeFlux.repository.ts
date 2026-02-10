@@ -3,11 +3,31 @@ import { FlujoFinancieroModel } from "../entities/implements/FlujoFinancieroSche
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { IFlujoFinancieroDocument } from "../entities/documents/IFlujoFinancieroDocument";
 
+const financeFluxPopulate = [
+  { path: "id_vendedor", select: "nombre apellido" },
+  { path: "id_trabajador", select: "nombre" },
+  { path: "id_sucursal", select: "nombre" },
+];
+
 const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
   return await FlujoFinancieroModel.find()
-    .populate("id_vendedor", "nombre apellido") // <-- solo estos campos
-    .populate("id_trabajador", "nombre") // <-- solo este campo
-    .populate("id_sucursal", "nombre")
+    .populate(financeFluxPopulate)
+    .exec();
+};
+
+const findByDateRange = async (
+  from?: Date,
+  to?: Date
+): Promise<IFlujoFinancieroDocument[]> => {
+  if (!from && !to) return await findAll();
+
+  const match: any = {};
+  match.fecha = {};
+  if (from) match.fecha.$gte = from;
+  if (to) match.fecha.$lte = to;
+
+  return await FlujoFinancieroModel.find(match)
+    .populate(financeFluxPopulate)
     .exec();
 };
 
@@ -78,6 +98,7 @@ const markFinanceFluxAsPaid = async (sellerId: string): Promise<void> => {
 
 export const FinanceFluxRepository = {
   findAll,
+  findByDateRange,
   registerFinanceFlux,
   findWorkerById,
   findSellerById,

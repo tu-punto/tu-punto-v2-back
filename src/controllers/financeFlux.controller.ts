@@ -84,9 +84,23 @@ export const getStatsController = async (_: Request, res: Response) => {
   }
 };
 
-export const getFinancialSummaryController = async (_: Request, res: Response) => {
+export const getFinancialSummaryController = async (req: Request, res: Response) => {
   try {
-    const summary = await FinanceFluxService.getFinancialSummary();
+    const { range, from, to, mode } = req.query as any;
+    if (mode === 'ranges' || mode === 'all') {
+      const summaries = await FinanceFluxService.getFinancialSummaryRanges({
+        from: typeof from === 'string' ? from : undefined,
+        to: typeof to === 'string' ? to : undefined,
+      });
+      res.json(summaries);
+      return;
+    }
+
+    const summary = await FinanceFluxService.getFinancialSummary({
+      range: typeof range === 'string' ? range : undefined,
+      from: typeof from === 'string' ? from : undefined,
+      to: typeof to === 'string' ? to : undefined,
+    });
     res.json(summary);
   } catch (err) {
     res.status(500).json({ msg: "Error calculando resumen financiero", err });
