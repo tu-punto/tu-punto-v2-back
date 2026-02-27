@@ -112,6 +112,16 @@ export const getServicesSummary = async (_: Request, res: Response) => {
   }
 };
 
+export const getClientsStatusList = async (_: Request, res: Response) => {
+  try {
+    const rows = await SellerService.getClientsStatusList();
+    res.json({ ok: true, rows });
+  } catch (err) {
+    console.error("Error obteniendo clientes activos:", err);
+    res.status(500).json({ ok: false, msg: "Error obteniendo clientes", err });
+  }
+};
+
 export const getSellerPaymentProofs = async (req: Request, res: Response) => {
   try {
     console.log("Obteniendo comprobantes de pago para el vendedor...");

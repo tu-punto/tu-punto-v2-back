@@ -332,6 +332,48 @@ const getServicesSummary = async () => {
   return resumen;
 };
 
+const getClientsStatusList = async () => {
+  const sellers = await SellerRepository.findAllForClientStatus();
+  const today = dayjs().startOf("day");
+
+  const rows: any[] = [];
+
+  for (const seller of sellers as any[]) {
+    const vigencia = seller.fecha_vigencia
+      ? dayjs(seller.fecha_vigencia).endOf("day")
+      : null;
+    const vendedorActivo = !!vigencia && !vigencia.isBefore(today);
+
+    const pagos = Array.isArray(seller.pago_sucursales) ? seller.pago_sucursales : [];
+
+    for (const pago of pagos) {
+      const start = pago?.fecha_ingreso ? dayjs(pago.fecha_ingreso).startOf("day") : null;
+      const end = pago?.fecha_salida ? dayjs(pago.fecha_salida).endOf("day") : null;
+
+      const fueraDeRango =
+        (start && start.isAfter(today)) ||
+        (end && end.isBefore(today));
+
+      const activoSucursal = vendedorActivo && pago?.activo !== false && !fueraDeRango;
+
+      rows.push({
+        id_vendedor: String(seller._id || ""),
+        vendedor: `${seller.nombre || ""} ${seller.apellido || ""}`.trim(),
+        mail: seller.mail || "",
+        telefono: seller.telefono || "",
+        fecha_vigencia: seller.fecha_vigencia || null,
+        id_sucursal: pago?.id_sucursal ? String(pago.id_sucursal) : "",
+        sucursal: pago?.sucursalName || "",
+        fecha_ingreso: pago?.fecha_ingreso || null,
+        fecha_salida: pago?.fecha_salida || null,
+        activo: !!activoSucursal,
+      });
+    }
+  }
+
+  return rows;
+};
+
 
 const getSellerPaymentProofs = async (sellerId: string) => {
   try {
@@ -355,5 +397,6 @@ export const SellerService = {
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,
+  getClientsStatusList,
   getSellerPaymentProofs,
 };

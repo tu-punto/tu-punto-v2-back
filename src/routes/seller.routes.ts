@@ -4,6 +4,7 @@ import * as SellerController from '../controllers/seller.controller'
 const sellerRouter = Router();
 
 sellerRouter.get('/summary/services', SellerController.getServicesSummary);
+sellerRouter.get('/clients/status', SellerController.getClientsStatusList);
 sellerRouter.get('/', SellerController.getSellers);
 sellerRouter.post('/register', SellerController.registerSeller);
 sellerRouter.put('/update/:id', SellerController.updateSeller);

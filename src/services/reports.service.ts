@@ -7,6 +7,18 @@ import { ReportsRepository } from "../repositories/reports.repository";
 
 const TZ = "America/La_Paz";
 
+type VentasQrParams = {
+  meses: string[];        // ["2025-11","2025-12",...]
+  sucursalIds?: string[]; // opcional
+};
+
+function normalizeMesesList(meses: string[]) {
+  const filtered = (meses || []).filter(m => /^\d{4}-\d{2}$/.test(m));
+  const unique = Array.from(new Set(filtered)).sort();
+  if (!unique.length) throw new Error("meses es requerido (YYYY-MM[])");
+  return unique;
+}
+
 type Params = {
   mes?: string; // YYYY-MM
   meses?: string[]; // YYYY-MM[]
@@ -120,7 +132,12 @@ function getSucursalFromPedido(p: any) {
 }
 
 function safeNum(n: any) {
-  return typeof n === "number" && !isNaN(n) ? n : 0;
+  if (typeof n === "number" && !isNaN(n)) return n;
+  if (typeof n === "string" && n.trim() !== "") {
+    const v = Number(n);
+    return Number.isFinite(v) ? v : 0;
+  }
+  return 0;
 }
 type ExportIngresos3MParams = {
   mesFin: string; 
@@ -128,6 +145,7 @@ type ExportIngresos3MParams = {
 };
 
 type ExportClientesActivosParams = { mesFin: string };
+type ExportClientesStatusParams = {};
 function rangeOctToToday() {
   const hoy = moment.tz(TZ).endOf("day").toDate();
   const start = moment.tz("2025-10-01 00:00:00", TZ).toDate(); // Oct 1, 2025
@@ -165,6 +183,10 @@ export const ReportsService = {
     const ventas: VentaLike[] = [];
     const pedidosFlat: any[] = [];
     const clientesPorPedido: { sucursalId: string; clave: string }[] = [];
+    const ventasPorSucursalAcc = new Map<
+      string,
+      { sucursalId: string; sucursalNombre: string; ventas_directas: number; entregas_entregadas: number }
+    >();
 
     for (const p of pedidos as any[]) {
       const fechaBase = p.hora_entrega_real || p.fecha_pedido;
@@ -174,15 +196,45 @@ export const ReportsService = {
       const { id: sucursalId, nombre: sucursalNombre } = getSucursalFromPedido(p);
       pushSucursal(sucursalId, sucursalNombre);
 
+      // conteo de ventas por sucursal (ventas directas vs entregadas)
+      {
+        const estado = String(p.estado_pedido || "").trim().toLowerCase();
+        const obs = String(p.observaciones || "").toLowerCase();
+        const esVentaDirecta =
+          estado === "interno" ||
+          obs.includes("pedido generado automáticamente desde una venta directa") ||
+          obs.includes("pedido generado automaticamente desde una venta directa");
+        const esEntregaEntregada = estado === "entregado";
+
+        if (esVentaDirecta || esEntregaEntregada) {
+          const key = sucursalId || "sin_sucursal";
+          const nombre = sucursalId ? sucursalNombre : "Sin Sucursal";
+          const got =
+            ventasPorSucursalAcc.get(key) || {
+              sucursalId: key,
+              sucursalNombre: nombre,
+              ventas_directas: 0,
+              entregas_entregadas: 0,
+            };
+
+          if (esVentaDirecta) got.ventas_directas += 1;
+          else if (esEntregaEntregada) got.entregas_entregadas += 1;
+
+          ventasPorSucursalAcc.set(key, got);
+        }
+      }
+
       // totales por pedido
       const totalCobrado =
         safeNum(p.subtotal_qr) + safeNum(p.subtotal_efectivo) + safeNum(p.cargo_delivery);
 
       pedidosFlat.push({
+        _id: String(p._id || ""),
         sucursalId,
         sucursalNombre,
         fecha: fechaBase,
         mes: mesPedido,
+        estado_pedido: p.estado_pedido || "",
         cliente: p.cliente || "",
         telefono_cliente: p.telefono_cliente || "",
         totalCobrado,
@@ -480,36 +532,120 @@ export const ReportsService = {
       clientesPorHoraMensual.sort((a, b) => a.sucursal.localeCompare(b.sucursal) || (a.hora - b.hora));
     }
 
-    // ------------- 5) Ticket promedio por sucursal y global -------------
-    let ticketPromedioPorSucursal: any[] = [];
-    let ticketPromedioGlobal: any = {};
+    // ------------- 4B) Ventas por hora (todos los dias) por sucursal -------------
+    const ventasPorHoraPorSucursal: any[] = [];
+    const ventasPorHoraEntregasPorSucursal: any[] = [];
+    const ventasPorHoraVentasPorSucursal: any[] = [];
+    const ventasPorHoraDetalle: any[] = [];
     {
-      const acc = new Map<string, { sum: number; n: number }>();
-      let sumG = 0;
-      let nG = 0;
+      const accTotal = new Map<string, number>(); // sucursalId|hora
+      const accEntregas = new Map<string, number>(); // sucursalId|hora
+      const accVentas = new Map<string, number>(); // sucursalId|hora
 
       for (const p of pedidosFlat) {
-        const total = p.totalCobrado;
-        const got = acc.get(p.sucursalId) || { sum: 0, n: 0 };
-        got.sum += total;
-        got.n += 1;
-        acc.set(p.sucursalId, got);
-        sumG += total;
-        nG += 1;
-      }
+        // Usa la hora UTC tal cual viene en la BD (sin ajustar a zona local del servidor)
+        const base = p.fecha ? moment.utc(p.fecha) : null;
+        if (!base) continue;
+        const hora = base.hour();
+        const key = `${p.sucursalId}|${hora}`;
+        accTotal.set(key, (accTotal.get(key) || 0) + 1);
 
-      for (const [sId, a] of acc.entries()) {
-        ticketPromedioPorSucursal.push({
-          id_sucursal: sId,
-          sucursal: sucMap.get(sId) || "",
-          ticket_promedio_bs: +(a.sum / (a.n || 1)).toFixed(2),
+        const estado = String(p.estado_pedido || "").trim().toLowerCase();
+        if (estado === "entregado") {
+          accEntregas.set(key, (accEntregas.get(key) || 0) + 1);
+        } else if (estado === "interno") {
+          accVentas.set(key, (accVentas.get(key) || 0) + 1);
+        }
+
+        ventasPorHoraDetalle.push({
+          id_pedido: String(p._id || ""),
+          hora,
         });
       }
 
-      ticketPromedioPorSucursal.sort((a, b) => a.sucursal.localeCompare(b.sucursal));
+      for (const [sucId, sucNombre] of sucMap.entries()) {
+        const rowsTotal: any[] = [];
+        const rowsEntregas: any[] = [];
+        const rowsVentas: any[] = [];
+        for (let h = 0; h < 24; h++) {
+          const key = `${sucId}|${h}`;
+          rowsTotal.push({
+            id_sucursal: sucId,
+            sucursal: sucNombre,
+            hora: h,
+            ventas: accTotal.get(key) || 0,
+          });
+          rowsEntregas.push({
+            id_sucursal: sucId,
+            sucursal: sucNombre,
+            hora: h,
+            ventas: accEntregas.get(key) || 0,
+          });
+          rowsVentas.push({
+            id_sucursal: sucId,
+            sucursal: sucNombre,
+            hora: h,
+            ventas: accVentas.get(key) || 0,
+          });
+        }
+
+        rowsTotal.sort((a, b) => b.ventas - a.ventas || a.hora - b.hora);
+        rowsEntregas.sort((a, b) => b.ventas - a.ventas || a.hora - b.hora);
+        rowsVentas.sort((a, b) => b.ventas - a.ventas || a.hora - b.hora);
+
+        rowsTotal.forEach((r, idx) => {
+          ventasPorHoraPorSucursal.push({ ...r, rank: idx + 1 });
+        });
+        rowsEntregas.forEach((r, idx) => {
+          ventasPorHoraEntregasPorSucursal.push({ ...r, rank: idx + 1 });
+        });
+        rowsVentas.forEach((r, idx) => {
+          ventasPorHoraVentasPorSucursal.push({ ...r, rank: idx + 1 });
+        });
+      }
+
+      ventasPorHoraPorSucursal.sort(
+        (a, b) => a.sucursal.localeCompare(b.sucursal) || a.rank - b.rank,
+      );
+      ventasPorHoraEntregasPorSucursal.sort(
+        (a, b) => a.sucursal.localeCompare(b.sucursal) || a.rank - b.rank,
+      );
+      ventasPorHoraVentasPorSucursal.sort(
+        (a, b) => a.sucursal.localeCompare(b.sucursal) || a.rank - b.rank,
+      );
+
+      ventasPorHoraDetalle.sort((a, b) => a.hora - b.hora || a.id_pedido.localeCompare(b.id_pedido));
+    }
+
+    // ------------- 5) Ticket promedio por sucursal (servicios) -------------
+    let ticketPromedioPorSucursal: any[] = [];
+    let ticketPromedioGlobal: any = {};
+    {
+      const rows = await ReportsRepository.fetchTicketPromedioServiciosPorSucursalEnRango({
+        start,
+        end,
+        sucursalIds,
+      });
+
+      ticketPromedioPorSucursal = (rows as any[]).map((r) => ({
+        id_sucursal: r.id_sucursal || "",
+        sucursal: r.sucursal || sucMap.get(String(r.id_sucursal || "")) || "",
+        vendedores_activos: typeof r.vendedores_activos === "number" ? r.vendedores_activos : 0,
+        total_servicios_bs: typeof r.total_servicios_bs === "number" ? r.total_servicios_bs : 0,
+        ticket_promedio_bs: typeof r.ticket_promedio_bs === "number" ? r.ticket_promedio_bs : 0,
+      }));
+
+      ticketPromedioPorSucursal.sort(
+        (a, b) => a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal),
+      );
+
+      const totalVendedores = ticketPromedioPorSucursal.reduce((s, r) => s + safeNum(r.vendedores_activos), 0);
+      const totalServicios = ticketPromedioPorSucursal.reduce((s, r) => s + safeNum(r.total_servicios_bs), 0);
+
       ticketPromedioGlobal = {
-        pedidos: nG,
-        ticket_promedio_bs: +(sumG / (nG || 1)).toFixed(2),
+        vendedores_activos: totalVendedores,
+        total_servicios_bs: +totalServicios.toFixed(2),
+        ticket_promedio_bs: totalVendedores ? +(totalServicios / totalVendedores).toFixed(2) : 0,
       };
     }
 
@@ -540,7 +676,49 @@ export const ReportsService = {
       clientesActivosGlobal = { clientes_activos: global.size };
     }
 
-    // ------------- 7) Monto vendido (mensual y por sucursal) -------------
+    // ------------- 7) Vendedores activos (por sucursal) -------------
+    let vendedoresActivosPorSucursal: any[] = [];
+    {
+      const rows = await ReportsRepository.fetchVendedoresActivosPorSucursalEnRango({
+        start,
+        end,
+        sucursalIds,
+      });
+
+      vendedoresActivosPorSucursal = (rows as any[]).map((r) => ({
+        id_sucursal: r.id_sucursal || "",
+        sucursal: r.sucursal || sucMap.get(String(r.id_sucursal || "")) || "",
+        vendedores_activos: typeof r.vendedores_activos === "number" ? r.vendedores_activos : 0,
+      }));
+
+      vendedoresActivosPorSucursal.sort(
+        (a, b) => a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal),
+      );
+    }
+
+    // ------------- 8) Numero de ventas por sucursal (detalle y total) -------------
+    let numeroVentasPorSucursal: any[] = [];
+    let numeroVentasTotalPorSucursal: any[] = [];
+    {
+      numeroVentasPorSucursal = Array.from(ventasPorSucursalAcc.values()).map((r) => ({
+        id_sucursal: r.sucursalId,
+        sucursal: r.sucursalNombre || "",
+        ventas_directas: r.ventas_directas,
+        entregas_entregadas: r.entregas_entregadas,
+      }));
+
+      numeroVentasPorSucursal.sort((a, b) => a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal));
+
+      numeroVentasTotalPorSucursal = numeroVentasPorSucursal.map((r) => ({
+        id_sucursal: r.id_sucursal,
+        sucursal: r.sucursal,
+        ventas_totales: safeNum(r.ventas_directas) + safeNum(r.entregas_entregadas),
+      }));
+
+      numeroVentasTotalPorSucursal.sort((a, b) => a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal));
+    }
+
+    // ------------- 9) Monto vendido (mensual y por sucursal) -------------
     const ventasMensualPorSucursal: any[] = [];
     {
       const acc = new Map<string, { sucursalId: string; mes: string; monto: number; ventas: number }>();
@@ -574,12 +752,77 @@ export const ReportsService = {
       costoEntregaPromedioPorSucursal,
       costoEntregaPromedioGlobal,
       clientesPorHoraMensual,
+      ventasPorHoraPorSucursal,
+      ventasPorHoraEntregasPorSucursal,
+      ventasPorHoraVentasPorSucursal,
+      ventasPorHoraDetalle,
       ticketPromedioPorSucursal,
       ticketPromedioGlobal,
       clientesActivosPorSucursal,
       clientesActivosGlobal,
+      vendedoresActivosPorSucursal,
+      numeroVentasPorSucursal,
+      numeroVentasTotalPorSucursal,
       ventasMensualPorSucursal,
     };
+  },
+
+  async exportClientesStatusXlsx(_: ExportClientesStatusParams) {
+    const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
+    const today = moment.tz(TZ).startOf("day");
+
+    const rows: any[] = [];
+
+    for (const v of vendedores as any[]) {
+      const vigencia = v.fecha_vigencia ? moment.tz(v.fecha_vigencia, TZ).endOf("day") : null;
+      const vendedorActivo = !!vigencia && !vigencia.isBefore(today);
+
+      const pagos = Array.isArray(v.pago_sucursales) ? v.pago_sucursales : [];
+      for (const p of pagos) {
+        const start = p?.fecha_ingreso ? moment.tz(p.fecha_ingreso, TZ).startOf("day") : null;
+        const end = p?.fecha_salida ? moment.tz(p.fecha_salida, TZ).endOf("day") : null;
+
+        const fueraDeRango =
+          (start && start.isAfter(today)) ||
+          (end && end.isBefore(today));
+
+        const estadoSucursal = p?.activo !== false && !fueraDeRango;
+        const activo = vendedorActivo && estadoSucursal;
+
+        rows.push({
+          id_vendedor: String(v._id || ""),
+          vendedor: `${v.nombre || ""} ${v.apellido || ""}`.trim(),
+          mail: v.mail || "",
+          telefono: v.telefono || "",
+          fecha_vigencia: v.fecha_vigencia || null,
+          id_sucursal: p?.id_sucursal ? String(p.id_sucursal) : "",
+          sucursal: p?.sucursalName || "",
+          fecha_ingreso: p?.fecha_ingreso || null,
+          fecha_salida: p?.fecha_salida || null,
+          estado_sucursal: estadoSucursal ? "activo" : "inactivo",
+          activo: !!activo,
+        });
+      }
+    }
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet("Clientes_Status");
+    if (rows.length) {
+      ws.columns = Object.keys(rows[0]).map((k) => ({ header: k, key: k, width: 24 }));
+      ws.getRow(1).font = { bold: true };
+      rows.forEach((r) => ws.addRow(r));
+    }
+
+    const filename = `clientes_status.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const filePath = path.join(outDir, filename);
+
+    await wb.xlsx.writeFile(filePath);
+    return { filePath, filename };
   },
 
   async exportOperacionMensualXlsx(params: Params) {
@@ -591,6 +834,13 @@ export const ReportsService = {
 
     const reportesSet = params.reportes && params.reportes.length ? new Set(params.reportes) : null;
     if (reportesSet?.has("ticketPromedioPorSucursal")) reportesSet.add("ticketPromedioGlobal");
+    if (
+      reportesSet?.has("ventasPorHoraPorSucursal") ||
+      reportesSet?.has("ventasPorHoraEntregasPorSucursal") ||
+      reportesSet?.has("ventasPorHoraVentasPorSucursal")
+    ) {
+      reportesSet.add("ventasPorHoraDetalle");
+    }
     if (reportesSet?.has("clientesActivosPorSucursal")) reportesSet.add("clientesActivosGlobal");
     if (reportesSet?.has("costoEntregaPromedioPorSucursal")) reportesSet.add("costoEntregaPromedioGlobal");
     const colsMap = params.columnas;
@@ -622,10 +872,17 @@ export const ReportsService = {
     addSheet("Costo_Entrega_Promedio", "costoEntregaPromedioPorSucursal", data.costoEntregaPromedioPorSucursal);
     addSheet("Costo_Entrega_Global", "costoEntregaPromedioGlobal", [data.costoEntregaPromedioGlobal]);
     addSheet("Clientes_por_Hora_(Mes)", "clientesPorHoraMensual", data.clientesPorHoraMensual);
+    addSheet("Ventas_Por_Hora", "ventasPorHoraPorSucursal", data.ventasPorHoraPorSucursal);
+    addSheet("Ventas_Por_Hora_Entregas", "ventasPorHoraEntregasPorSucursal", data.ventasPorHoraEntregasPorSucursal);
+    addSheet("Ventas_Por_Hora_Ventas", "ventasPorHoraVentasPorSucursal", data.ventasPorHoraVentasPorSucursal);
+    addSheet("Ventas_Por_Hora_Detalle", "ventasPorHoraDetalle", data.ventasPorHoraDetalle);
     addSheet("Ticket_Promedio_Por_Sucursal", "ticketPromedioPorSucursal", data.ticketPromedioPorSucursal);
     addSheet("Ticket_Promedio_Global", "ticketPromedioGlobal", [data.ticketPromedioGlobal]);
     addSheet("Clientes_Activos_Por_Sucursal", "clientesActivosPorSucursal", data.clientesActivosPorSucursal);
     addSheet("Clientes_Activos_Global", "clientesActivosGlobal", [data.clientesActivosGlobal]);
+    addSheet("Vendedores_Activos_Por_Sucursal", "vendedoresActivosPorSucursal", data.vendedoresActivosPorSucursal);
+    addSheet("Numero_Ventas_Por_Sucursal", "numeroVentasPorSucursal", data.numeroVentasPorSucursal);
+    addSheet("Numero_Ventas_Total_Por_Sucursal", "numeroVentasTotalPorSucursal", data.numeroVentasTotalPorSucursal);
     addSheet("Ventas_Mensual_Por_Sucursal", "ventasMensualPorSucursal", data.ventasMensualPorSucursal);
 
     const meses = data.meses || [];
@@ -1160,5 +1417,222 @@ if (resumen.length) {
   return { filePath, filename };
 },
 
+async getVentasQr({ mes, meses, sucursalIds }: Params) {
+  const mesesSeleccionados = normalizeMeses(mes, meses);
+  const { start, end } = rangeMeses(mesesSeleccionados);
+  const mesSet = new Set(mesesSeleccionados);
+
+  const pedidos = await ReportsRepository.fetchPedidosQrEnRango({
+    start,
+    end,
+    sucursalIds,
+  });
+
+  // Map sucursalId -> nombre
+  const sucMap = new Map<string, string>();
+
+  // ===== DETALLE (por item de venta) =====
+  const detalle: any[] = [];
+  for (const p of pedidos as any[]) {
+    const fechaBase = p.hora_entrega_real || p.fecha_pedido;
+    const mesPedido = fechaBase ? moment.tz(fechaBase, TZ).format("YYYY-MM") : "";
+    if (!mesPedido || !mesSet.has(mesPedido)) continue;
+
+    const { id: sucursalId, nombre: sucursalNombre } = getSucursalFromPedido(p);
+    if (sucursalId) sucMap.set(sucursalId, sucursalNombre);
+
+    const subtotalQr = safeNum(p.subtotal_qr);
+    const cargoDelivery = safeNum(p.cargo_delivery);
+    const totalCobradoQr = subtotalQr + cargoDelivery;
+
+    const ventas = Array.isArray(p.venta) ? p.venta : [];
+    for (const v of ventas) {
+      const cantidad = safeNum(v?.cantidad);
+      const precio = safeNum(v?.precio_unitario);
+      const totalLinea = +(cantidad * precio).toFixed(2);
+
+      const prodId = v?.producto?._id ? String(v.producto._id) : (v?.producto ? String(v.producto) : "");
+      const prodNom = v?.producto?.nombre_producto || v?.nombre_variante || "Producto";
+
+      // sucursal preferida: venta.sucursal si existe, sino la del pedido
+      const sIdRaw = typeof v.sucursal === "string" ? v.sucursal : (v.sucursal?._id ?? sucursalId);
+      const sId = String(sIdRaw || "");
+      const sNom =
+        typeof v.sucursal === "string"
+          ? (sucMap.get(sId) || sucursalNombre)
+          : (v.sucursal?.nombre || sucursalNombre);
+
+      detalle.push({
+        mes: mesPedido,
+        fecha: fechaBase,
+        id_pedido: String(p._id),
+        id_sucursal: sId || sucursalId || "",
+        sucursal: sNom || sucursalNombre || "",
+        cliente: p.cliente || "",
+        telefono_cliente: p.telefono_cliente || "",
+
+        subtotal_qr_bs: +subtotalQr.toFixed(2),
+        cargo_delivery_bs: +cargoDelivery.toFixed(2),
+        total_qr_bs: +totalCobradoQr.toFixed(2),
+
+        id_venta: v?._id ? String(v._id) : "",
+        id_producto: prodId,
+        producto: prodNom,
+        nombre_variante: v?.nombre_variante || "",
+        cantidad,
+        precio_unitario: +precio.toFixed(2),
+        total_linea_bs: totalLinea,
+
+        id_vendedor: v?.vendedor ? String(v.vendedor._id || v.vendedor) : "",
+        vendedor:
+          v?.vendedor?.nombre && v?.vendedor?.apellido
+            ? `${v.vendedor.nombre} ${v.vendedor.apellido}`
+            : "",
+      });
+    }
+  }
+
+  // ===== TOTALES por MES + SUCURSAL =====
+  // clave: mes|sucursalId
+  const accMesSuc = new Map<string, { mes: string; id_sucursal: string; sucursal: string; pedidos: number; unidades: number; total_qr_bs: number }>();
+
+  // para contar pedidos sin duplicar por cada item: usamos set por (mes|sucursal|pedido)
+  const seenPedido = new Set<string>();
+
+  for (const r of detalle) {
+    const key = `${r.mes}|${r.id_sucursal}`;
+    const got = accMesSuc.get(key) || {
+      mes: r.mes,
+      id_sucursal: r.id_sucursal,
+      sucursal: r.sucursal,
+      pedidos: 0,
+      unidades: 0,
+      total_qr_bs: 0,
+    };
+
+    // pedidos (sin duplicar)
+    const pedKey = `${r.mes}|${r.id_sucursal}|${r.id_pedido}`;
+    if (!seenPedido.has(pedKey)) {
+      seenPedido.add(pedKey);
+      got.pedidos += 1;
+      // total_qr_bs es por pedido, pero viene repetido en cada item => sumamos UNA vez
+      got.total_qr_bs += safeNum(r.total_qr_bs);
+    }
+
+    got.unidades += safeNum(r.cantidad);
+
+    accMesSuc.set(key, got);
+  }
+
+  const totalesPorMesYSucursal = Array.from(accMesSuc.values())
+    .map(x => ({ ...x, total_qr_bs: +x.total_qr_bs.toFixed(2) }))
+    .sort((a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal));
+
+  // ===== Totales por MES (global) =====
+  const accMes = new Map<string, { mes: string; pedidos: number; unidades: number; total_qr_bs: number }>();
+  for (const r of totalesPorMesYSucursal) {
+    const got = accMes.get(r.mes) || { mes: r.mes, pedidos: 0, unidades: 0, total_qr_bs: 0 };
+    got.pedidos += r.pedidos;
+    got.unidades += r.unidades;
+    got.total_qr_bs += r.total_qr_bs;
+    accMes.set(r.mes, got);
+  }
+
+  const totalesPorMes = Array.from(accMes.values())
+    .map(x => ({ ...x, total_qr_bs: +x.total_qr_bs.toFixed(2) }))
+    .sort((a, b) => a.mes.localeCompare(b.mes));
+
+  // ===== Global =====
+  const totalGlobal = {
+    pedidos: totalesPorMes.reduce((s, r) => s + safeNum(r.pedidos), 0),
+    unidades: totalesPorMes.reduce((s, r) => s + safeNum(r.unidades), 0),
+    total_qr_bs: +totalesPorMes.reduce((s, r) => s + safeNum(r.total_qr_bs), 0).toFixed(2),
+  };
+
+  return {
+    meses: mesesSeleccionados,
+    detalle,                 // (items)
+    totalesPorMesYSucursal,  // pivot (mes+sucursal)
+    totalesPorMes,           // pivot (mes)
+    totalGlobal,
+  };
+},
+async exportVentasQrXlsx({ meses, sucursalIds }: VentasQrParams) {
+  // OJO: getVentasQr espera (mes, meses, sucursalIds) con Params
+  const data = await this.getVentasQr({ meses, sucursalIds } as any);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "TuPunto Reports";
+  wb.created = new Date();
+
+  // ✅ Hoja 1: Resumen por Mes y Sucursal
+  const ws1 = wb.addWorksheet("Resumen_Mes_Sucursal");
+  const rows1 = data.totalesPorMesYSucursal as Array<{
+    mes: string;
+    id_sucursal: string;
+    sucursal: string;
+    pedidos: number;
+    unidades: number;
+    total_qr_bs: number;
+  }>;
+
+  if (rows1.length) {
+    const headers = Object.keys(rows1[0]);
+    ws1.addRow(headers);
+    ws1.getRow(1).font = { bold: true };
+    rows1.forEach((r) => ws1.addRow(headers.map((h) => (r as any)[h])));
+    ws1.columns.forEach((c) => (c.width = 22));
+  }
+
+  // ✅ Hoja 2: Totales por Mes (global)
+  const ws2 = wb.addWorksheet("Totales_Por_Mes");
+  const rows2 = data.totalesPorMes as Array<{
+    mes: string;
+    pedidos: number;
+    unidades: number;
+    total_qr_bs: number;
+  }>;
+
+  if (rows2.length) {
+    const headers = Object.keys(rows2[0]);
+    ws2.addRow(headers);
+    ws2.getRow(1).font = { bold: true };
+    rows2.forEach((r) => ws2.addRow(headers.map((h) => (r as any)[h])));
+
+    ws2.addRow([]);
+    ws2.addRow([
+      "TOTAL_GLOBAL",
+      data.totalGlobal.pedidos,
+      data.totalGlobal.unidades,
+      data.totalGlobal.total_qr_bs,
+    ]);
+    ws2.getRow(ws2.rowCount).font = { bold: true };
+    ws2.columns.forEach((c) => (c.width = 22));
+  }
+
+  // ✅ Hoja 3: Detalle (por item)
+  const ws3 = wb.addWorksheet("Detalle_QR");
+  const rows3 = data.detalle as any[];
+
+  if (rows3.length) {
+    const headers = Object.keys(rows3[0]);
+    ws3.addRow(headers);
+    ws3.getRow(1).font = { bold: true };
+    rows3.forEach((r: any) => ws3.addRow(headers.map((h) => r[h])));
+    ws3.columns.forEach((c) => (c.width = 24));
+  }
+
+  const filename =
+    data.meses.length === 1
+      ? `ventas_qr_${data.meses[0]}.xlsx`
+      : `ventas_qr_${data.meses[0]}_a_${data.meses[data.meses.length - 1]}.xlsx`;
+
+  const outDir = path.join(process.cwd(), "reports");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const filePath = path.join(outDir, filename);
+
+  await wb.xlsx.writeFile(filePath);
+  return { filePath, filename };
+},
 
 };
