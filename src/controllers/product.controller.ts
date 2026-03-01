@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
+import { ProductVariantQRService } from "../services/productVariantQR.service";
+import { ProductVariantKeyService } from "../services/productVariantKey.service";
 
 export const getProduct = async (req: Request, res: Response) => {
   try {
@@ -119,6 +121,172 @@ export const findProductByQR = async (req: Request, res: Response) => {
       success: false, 
       message: "Error al buscar producto por código QR", 
       error 
+    });
+  }
+};
+
+export const generateVariantQR = async (req: Request, res: Response) => {
+  const { productId, variantKey, forceRegenerate } = req.body || {};
+
+  if (!productId || !variantKey) {
+    return res.status(400).json({
+      success: false,
+      message: "productId y variantKey son requeridos"
+    });
+  }
+
+  try {
+    const qrData = await ProductVariantQRService.generateVariantQR({
+      productId,
+      variantKey,
+      forceRegenerate: Boolean(forceRegenerate)
+    });
+
+    res.json({
+      success: true,
+      qrData
+    });
+  } catch (error) {
+    console.error("Error generando QR de variante:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al generar QR de variante",
+      error
+    });
+  }
+};
+
+export const batchGenerateVariantQR = async (req: Request, res: Response) => {
+  const { sellerId, productIds, onlyMissing, forceRegenerate } = req.body || {};
+
+  try {
+    const result = await ProductVariantQRService.batchGenerateVariantQR({
+      sellerId,
+      productIds: Array.isArray(productIds) ? productIds : [],
+      onlyMissing: onlyMissing !== false,
+      forceRegenerate: Boolean(forceRegenerate)
+    });
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error("Error en generación masiva QR de variantes:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error en generación masiva de QRs de variantes",
+      error
+    });
+  }
+};
+
+export const listVariantQR = async (req: Request, res: Response) => {
+  const sellerId = req.query.sellerId as string | undefined;
+  const limitRaw = req.query.limit as string | undefined;
+  const productIdsRaw = req.query.productIds as string | undefined;
+  const productIds = productIdsRaw
+    ? productIdsRaw
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    : [];
+
+  try {
+    const result = await ProductVariantQRService.listVariantQRs({
+      sellerId,
+      productIds,
+      limit: limitRaw ? Number(limitRaw) : undefined
+    });
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error("Error listando QRs de variantes:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al listar QRs de variantes",
+      error
+    });
+  }
+};
+
+export const findVariantByQRCode = async (req: Request, res: Response) => {
+  const { qrCode } = req.params;
+  const sucursalId = req.query.sucursalId as string | undefined;
+
+  try {
+    const item = await ProductVariantQRService.findVariantByQRCode(qrCode, sucursalId);
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró variante con ese código QR"
+      });
+    }
+
+    res.json({
+      success: true,
+      item
+    });
+  } catch (error) {
+    console.error("Error buscando variante por QR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al buscar variante por código QR",
+      error
+    });
+  }
+};
+
+export const resolveVariantQRPayload = async (req: Request, res: Response) => {
+  const payload = req.query.payload as string | undefined;
+  const sucursalId = req.query.sucursalId as string | undefined;
+
+  if (!payload) {
+    return res.status(400).json({
+      success: false,
+      message: "payload es requerido"
+    });
+  }
+
+  try {
+    const item = await ProductVariantQRService.resolveVariantQRPayload(payload, sucursalId);
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "No se pudo resolver el QR escaneado"
+      });
+    }
+
+    res.json({
+      success: true,
+      item
+    });
+  } catch (error) {
+    console.error("Error resolviendo payload QR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al resolver payload QR",
+      error
+    });
+  }
+};
+
+export const migrateVariantKeys = async (_req: Request, res: Response) => {
+  try {
+    const result = await ProductVariantKeyService.migrateVariantKeysForAllProducts();
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error("Error migrando variantKey:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al migrar variantKey",
+      error
     });
   }
 };
@@ -306,6 +474,12 @@ export const ProductController = {
   getFlatProductList,
   getProductQR,
   regenerateProductQR,
-  findProductByQR
+  findProductByQR,
+  generateVariantQR,
+  batchGenerateVariantQR,
+  listVariantQR,
+  findVariantByQRCode,
+  resolveVariantQRPayload,
+  migrateVariantKeys
 
 };

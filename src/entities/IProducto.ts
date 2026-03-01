@@ -3,6 +3,7 @@ import { ICaracteristicas } from './ICaracteristicas';
 
 export interface ICombinacion {
   variantes: Record<string, string>; // ejemplo: { "Color": "Rojo", "Talla": "L" }
+  variantKey?: string;
   precio: number;
   stock: number;
 }

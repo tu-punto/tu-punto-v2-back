@@ -91,6 +91,18 @@ const PedidoSchema = new Schema({
     type: String,
     default: ""
   },
+  shipping_qr_code: {
+    type: String,
+    default: ""
+  },
+  shipping_qr_payload: {
+    type: String,
+    default: ""
+  },
+  shipping_qr_image_path: {
+    type: String,
+    default: ""
+  },
   venta: [{
     type: Types.ObjectId,
     ref: 'Venta'
@@ -108,5 +120,7 @@ const PedidoSchema = new Schema({
   collection: 'Pedido',
   timestamps: false
 });
+
+PedidoSchema.index({ shipping_qr_code: 1 }, { sparse: true });
 
 export const PedidoModel = model<IPedidoDocument>('Pedido', PedidoSchema);

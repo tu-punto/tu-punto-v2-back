@@ -8,6 +8,10 @@ const CombinacionSchema = new Schema({
     of: String, // ejemplo: { "Color": "Negro", "Talla": "M" }
     required: true
   },
+  variantKey: {
+    type: String,
+    required: false
+  },
   precio: { type: Number, required: true },
   stock: { type: Number, required: true }
 }, { _id: false });
@@ -44,7 +48,7 @@ const ProductoSchema = new Schema({
   qrProductURL: { type: String }
 }, { timestamps: true, collection: 'Producto' });
 
-// Índice para optimizar búsquedas por QR
-ProductoSchema.index({ qrCode: 1 });
+// Índice para búsquedas por variante
+ProductoSchema.index({ "sucursales.combinaciones.variantKey": 1 });
 
 export const ProductoModel = model<IProductoDocument>("Producto", ProductoSchema);

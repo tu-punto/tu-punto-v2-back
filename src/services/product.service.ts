@@ -12,6 +12,8 @@ import { Buffer } from "buffer";
 import { Types } from 'mongoose';
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { ProductVariantKeyService } from "./productVariantKey.service";
+import { createVariantKey } from "../utils/variantKey";
 
 interface Feature {
   feature: string;
@@ -34,6 +36,11 @@ const registerProduct = async (product: IProducto): Promise<any> => {
 
     const nuevoProducto = await ProductRepository.registerProduct(product);
     console.log("✅ Producto guardado en DB con _id:", nuevoProducto._id);
+
+    const variantKeysChanged = ProductVariantKeyService.applyVariantKeysToProduct(nuevoProducto);
+    if (variantKeysChanged) {
+      await nuevoProducto.save();
+    }
 
     // Generar QR
     try {
@@ -77,6 +84,7 @@ const registerProduct = async (product: IProducto): Promise<any> => {
             id_sucursal,
             combinaciones: combinacionesReferencia.map(c => ({
               variantes: c.variantes,
+              variantKey: c.variantKey || createVariantKey(nuevoProducto._id.toString(), c.variantes),
               precio: c.precio,
               stock: 0
             }))
@@ -278,6 +286,11 @@ const addVariantToProduct = async (
   // 🔧 casting correcto
   const sucursalesHabilitadas = (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId }[]) || [];
 
+  const normalizedCombinaciones = combinaciones.map((c) => ({
+    ...c,
+    variantKey: (c as any).variantKey || createVariantKey(productId, c.variantes)
+  }));
+
   for (const sucursalPago of sucursalesHabilitadas) {
     const id_sucursal = sucursalPago.id_sucursal.toString();
 
@@ -287,17 +300,18 @@ const addVariantToProduct = async (
 
     if (!sucursalProducto) {
       // Crear sucursal nueva
-      producto.sucursales.push({
-        id_sucursal: new Types.ObjectId(id_sucursal),
-        combinaciones: combinaciones.map(c => ({
-          variantes: c.variantes,
-          precio: c.precio,
-          stock: 0
-        }))
-      });
-    } else {
-      // Agregar combinaciones faltantes
-      for (const nueva of combinaciones) {
+        producto.sucursales.push({
+          id_sucursal: new Types.ObjectId(id_sucursal),
+          combinaciones: normalizedCombinaciones.map(c => ({
+            variantes: c.variantes,
+            variantKey: c.variantKey,
+            precio: c.precio,
+            stock: 0
+          }))
+        });
+      } else {
+        // Agregar combinaciones faltantes
+      for (const nueva of normalizedCombinaciones) {
         const yaExiste = sucursalProducto.combinaciones.some(c =>
           Object.keys(c.variantes).length === Object.keys(nueva.variantes).length &&
           Object.keys(nueva.variantes).every(
@@ -308,6 +322,7 @@ const addVariantToProduct = async (
         if (!yaExiste) {
           sucursalProducto.combinaciones.push({
             variantes: nueva.variantes,
+            variantKey: nueva.variantKey,
             precio: nueva.precio,
             stock: sucursalId.toString() === id_sucursal ? nueva.stock : 0
           });

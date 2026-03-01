@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { ShippingService } from "../services/shipping.service";
-import QRCode from 'qrcode';
 
 export const getShipping = async (req: Request, res: Response) => {
   try {
@@ -132,26 +131,13 @@ export const getSalesHistory = async (req: Request, res: Response) => {
 };
 export const generateQRForShipping = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const forceRegenerate = req.query.forceRegenerate === "true";
 
   try {
-    const shipping = await ShippingService.getShippingById(id);
-    if (!shipping) {
-      return res.status(404).json({ error: "Pedido no encontrado" });
-    }
-
-    // Generar URL para el QR (ajusta según tu dominio)
-    const qrUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/shipping/qr/${id}`;
-
-    // Generar el código QR
-    const qrCode = await QRCode.toDataURL(qrUrl);
-
-    // Guardar el código QR en el pedido
-    await ShippingService.saveQRCode(id, qrCode);
-
+    const qrData = await ShippingService.generateShippingQR(id, forceRegenerate);
     res.json({
       success: true,
-      qrCode: qrCode,
-      shippingId: id
+      qrData
     });
   } catch (error) {
     console.error(error);
@@ -160,10 +146,10 @@ export const generateQRForShipping = async (req: Request, res: Response) => {
 };
 
 export const getShippingByQR = async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const { id: codeOrId } = req.params;
 
   try {
-    const shipping = await ShippingService.getShippingDetailsForQR(id);
+    const shipping = await ShippingService.getShippingDetailsForQR(codeOrId);
     if (!shipping) {
       return res.status(404).json({ error: "Pedido no encontrado" });
     }
@@ -172,6 +158,91 @@ export const getShippingByQR = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al obtener información del pedido" });
+  }
+};
+
+export const resolveShippingByQRPayload = async (req: Request, res: Response) => {
+  const payload = req.query.payload as string | undefined;
+
+  if (!payload) {
+    return res.status(400).json({
+      success: false,
+      message: "payload es requerido"
+    });
+  }
+
+  try {
+    const shipping = await ShippingService.resolveShippingByQRPayload(payload);
+    if (!shipping) {
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró pedido para ese QR"
+      });
+    }
+
+    res.json({
+      success: true,
+      shipping
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Error al resolver QR de envío",
+      error
+    });
+  }
+};
+
+export const transitionShippingStatusByQRController = async (req: Request, res: Response) => {
+  const { payload, shippingCode, shippingId, toStatus, changedBy, note } = req.body || {};
+
+  if (!toStatus) {
+    return res.status(400).json({
+      success: false,
+      message: "toStatus es requerido"
+    });
+  }
+
+  try {
+    const result = await ShippingService.transitionShippingStatusByQR({
+      payload,
+      shippingCode,
+      shippingId,
+      toStatus,
+      changedBy,
+      note
+    });
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Error al cambiar estado por QR",
+      error
+    });
+  }
+};
+
+export const getShippingStatusHistoryController = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const history = await ShippingService.getShippingStatusHistory(id);
+    res.json({
+      success: true,
+      history
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener historial de estados",
+      error
+    });
   }
 };
 

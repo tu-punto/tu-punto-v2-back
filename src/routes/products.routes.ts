@@ -15,6 +15,9 @@ productRouter.get("/temporales", ProductController.getTemporaryProducts);
 
 productRouter.get("/:id/qr", ProductController.getProductQR); 
 productRouter.get("/qr/:qrCode", ProductController.findProductByQR);
+productRouter.get("/variant-qr/code/:qrCode", ProductController.findVariantByQRCode);
+productRouter.get("/variant-qr/resolve", ProductController.resolveVariantQRPayload);
+productRouter.get("/variant-qr/list", ProductController.listVariantQR);
 
 productRouter.get("/:id", ProductController.getProductById);
 
@@ -26,6 +29,9 @@ productRouter.post("/add-variant", ProductController.addVariantToProduct);
 productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF);
 
 productRouter.post("/:id/regenerate-qr", ProductController.regenerateProductQR); // Regenerar QR
+productRouter.post("/variant-qr/generate", ProductController.generateVariantQR);
+productRouter.post("/variant-qr/batch-generate", ProductController.batchGenerateVariantQR);
+productRouter.post("/variant-qr/migrate-variant-keys", ProductController.migrateVariantKeys);
 
 // PUT
 productRouter.put("/update-price", ProductController.updatePrice);

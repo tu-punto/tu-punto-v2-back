@@ -4,6 +4,7 @@ import { IProducto } from '../entities/IProducto';
 import { IProductoDocument } from '../entities/documents/IProductoDocument';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
+import { createVariantKey } from '../utils/variantKey';
 
 const findAll = async (): Promise<IProductoDocument[]> => {
   return await ProductoModel.find({ esTemporal: { $ne: true } }) // excluye temporales
@@ -124,6 +125,7 @@ const updatePriceInSucursal = async (
     // Si no existe, la creamos con precio y stock inicial 0
     combinacion = {
       variantes: variante,
+      variantKey: createVariantKey(productId, variante),
       precio: nuevoPrecio,
       stock: 0
     };
@@ -237,7 +239,10 @@ const addVariantToProduct = async (
       )
     );
     if (!yaExiste) {
-      sucursal.combinaciones.push(nueva);
+      sucursal.combinaciones.push({
+        ...nueva,
+        variantKey: (nueva as any).variantKey || createVariantKey(productId, nueva.variantes)
+      });
     }
   }
 
@@ -315,7 +320,8 @@ const findFlatProductList = async (sucursalId?: string) => {
         },
         qrCode: "$qrCode",
         qrImagePath: "$qrImagePath",
-        qrProductURL: "$qrProductURL"
+        qrProductURL: "$qrProductURL",
+        variantKey: "$sucursales.combinaciones.variantKey"
       }
     }
   );

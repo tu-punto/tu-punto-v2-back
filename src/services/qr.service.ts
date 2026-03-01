@@ -11,6 +11,53 @@ AWS.config.update({
 export const s3 = new AWS.S3();
 
 export class QRService {
+  private static async generateBufferFromContent(content: string): Promise<Buffer> {
+    return QRCode.toBuffer(content, {
+      type: 'png',
+      width: 300,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+  }
+
+  static async uploadQRBuffer(qrBuffer: Buffer, fileNamePrefix = 'qr-codes'): Promise<string> {
+    const fileName = `${fileNamePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
+    const s3Key = `qr-codes/${fileName}`;
+
+    await s3
+      .putObject({
+        Bucket: bucketName,
+        Key: s3Key,
+        Body: qrBuffer,
+        ContentType: 'image/png'
+      })
+      .promise();
+
+    return `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+  }
+
+  static async generatePayloadQRToS3(payload: string, fileNamePrefix = 'qr-payload'): Promise<{
+    qrPath: string;
+    payload: string;
+  }> {
+    const qrBuffer = await this.generateBufferFromContent(payload);
+    const qrPath = await this.uploadQRBuffer(qrBuffer, fileNamePrefix);
+
+    return {
+      qrPath,
+      payload
+    };
+  }
+
+  static async generatePayloadQRBase64(payload: string): Promise<string> {
+    const qrBuffer = await this.generateBufferFromContent(payload);
+    return `data:image/png;base64,${qrBuffer.toString('base64')}`;
+  }
+
   // Genera un código único para el producto
   static generateUniqueProductCode(productId: string): string {
     const uuid = uuidv4();
@@ -31,16 +78,7 @@ export class QRService {
   }> {
     const code = productCode || this.generateUniqueProductCode(productId);
     const productURL = this.generateProductURL(code, productId);
-
-    const qrBuffer = await QRCode.toBuffer(productURL, {
-      type: 'png',
-      width: 300,
-      margin: 2,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      }
-    });
+    const qrBuffer = await this.generateBufferFromContent(productURL);
 
     return {
       qrBuffer,
@@ -56,25 +94,9 @@ export class QRService {
     productURL: string;
   }> {
     const { qrBuffer, productCode: code, productURL } = await this.generateQRBuffer(productId, productCode);
-
-    const fileName = `qr-${productId}-${Date.now()}.png`;
-    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
-    const s3Key = `qr-codes/${fileName}`;
-
-    // Subir a S3
-    await s3
-      .putObject({
-        Bucket: bucketName,
-        Key: s3Key,
-        Body: qrBuffer,
-        ContentType: 'image/png' 
-      })
-      .promise();
-
-
-    // URL pública del archivo en S3
-    const qrPath = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+    const qrPath = await this.uploadQRBuffer(qrBuffer, `qr-${productId}`);
     console.log(`QR code uploaded to S3: ${qrPath}`);
+
     return {
       qrPath,
       productCode: code,
