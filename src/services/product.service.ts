@@ -3,6 +3,7 @@ import { FeatureRepository } from "../repositories/feature.repository";
 import { ICaracteristicas } from "../entities/ICaracteristicas";
 import { IProducto } from "../entities/IProducto";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { QRService } from "./qr.service"; 
 import puppeteer from "puppeteer";
 import ejs from "ejs";
 import path from "path";
@@ -11,6 +12,8 @@ import { Buffer } from "buffer";
 import { Types } from 'mongoose';
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { ProductVariantKeyService } from "./productVariantKey.service";
+import { createVariantKey } from "../utils/variantKey";
 
 interface Feature {
   feature: string;
@@ -26,51 +29,134 @@ const getAllTemporaryProducts = async () => {
 
 
 const registerProduct = async (product: IProducto): Promise<any> => {
-  const nuevoProducto = await ProductRepository.registerProduct(product);
+  console.log("🛠 Entrando a ProductService.registerProduct");
+  
+  try {
+    console.log("📦 Datos de producto recibidos:", JSON.stringify(product, null, 2));
 
-  if (nuevoProducto.id_vendedor) {
-    await VendedorModel.findByIdAndUpdate(
-      nuevoProducto.id_vendedor,
-      { $push: { producto: nuevoProducto._id } }
-    );
+    const nuevoProducto = await ProductRepository.registerProduct(product);
+    console.log("✅ Producto guardado en DB con _id:", nuevoProducto._id);
 
-    const rawVendedor = await VendedorModel.findById(nuevoProducto.id_vendedor).lean();
-    if (!rawVendedor) throw new Error("Vendedor no encontrado");
-
-    const vendedor = rawVendedor as unknown as {
-      pago_sucursales: { id_sucursal: string | Types.ObjectId }[]
-    };
-
-    const sucursalesHabilitadas = vendedor.pago_sucursales || [];
-
-    // Si el producto NO es temporal, clona combinaciones a otras sucursales del vendedor
-    if (!nuevoProducto.esTemporal && sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
-      const combinacionesReferencia = nuevoProducto.sucursales[0]?.combinaciones || [];
-
-      for (const sucursal of sucursalesHabilitadas) {
-        const id_sucursal = new Types.ObjectId(sucursal.id_sucursal.toString());
-
-        const yaExiste = nuevoProducto.sucursales.some(
-          s => s.id_sucursal.toString() === id_sucursal.toString()
-        );
-        if (yaExiste) continue;
-
-        nuevoProducto.sucursales.push({
-          id_sucursal,
-          combinaciones: combinacionesReferencia.map(c => ({
-            variantes: c.variantes,
-            precio: c.precio,
-            stock: 0
-          }))
-        });
-      }
-
+    const variantKeysChanged = ProductVariantKeyService.applyVariantKeysToProduct(nuevoProducto);
+    if (variantKeysChanged) {
       await nuevoProducto.save();
     }
 
+    // Generar QR
+    try {
+      const { qrPath, productCode, productURL } = await QRService.generateAndSaveQR(
+        nuevoProducto._id.toString()
+      );
+      nuevoProducto.qrCode = productCode;
+      nuevoProducto.qrImagePath = qrPath;
+      nuevoProducto.qrProductURL = productURL;
+      await nuevoProducto.save();
+      console.log(`✅ QR generado: ${productCode}`);
+    } catch (qrError) {
+      console.error('⚠️ Error generando QR para producto:', qrError);
+    }
+
+    // Asociar a vendedor
+    if (nuevoProducto.id_vendedor) {
+      console.log("🔍 Buscando vendedor con ID:", nuevoProducto.id_vendedor);
+      await VendedorModel.findByIdAndUpdate(
+        nuevoProducto.id_vendedor,
+        { $push: { producto: nuevoProducto._id } }
+      );
+
+      const rawVendedor = await VendedorModel.findById(nuevoProducto.id_vendedor).lean();
+      if (!rawVendedor) throw new Error("Vendedor no encontrado");
+
+      console.log("✅ Vendedor encontrado:", rawVendedor);
+
+      const vendedor = rawVendedor as unknown as { pago_sucursales: { id_sucursal: string | Types.ObjectId }[] };
+      const sucursalesHabilitadas = vendedor.pago_sucursales || [];
+
+      if (!nuevoProducto.esTemporal && sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
+        const combinacionesReferencia = nuevoProducto.sucursales[0]?.combinaciones || [];
+        for (const sucursal of sucursalesHabilitadas) {
+          const id_sucursal = new Types.ObjectId(sucursal.id_sucursal.toString());
+          const yaExiste = nuevoProducto.sucursales.some(
+            s => s.id_sucursal.toString() === id_sucursal.toString()
+          );
+          if (yaExiste) continue;
+          nuevoProducto.sucursales.push({
+            id_sucursal,
+            combinaciones: combinacionesReferencia.map(c => ({
+              variantes: c.variantes,
+              variantKey: c.variantKey || createVariantKey(nuevoProducto._id.toString(), c.variantes),
+              precio: c.precio,
+              stock: 0
+            }))
+          });
+        }
+        await nuevoProducto.save();
+      }
+    }
+
+    return nuevoProducto;
+  } catch (err: any) {
+    console.error("❌ Error exacto en ProductService.registerProduct:", err?.message || err);
+    throw err;
+  }
+};
+
+const regenerateProductQR = async (productId: string): Promise<{
+  qrCode: string;
+  qrImagePath: string;
+  qrProductURL: string;
+  qrBase64?: string;
+}> => {
+  const producto = await ProductRepository.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
+
+  // Generar nuevo QR
+  const { qrPath, productCode, productURL } = await QRService.generateAndSaveQR(productId);
+  const { qrBase64 } = await QRService.generateQRBase64(productId, productCode);
+
+  // Actualizar producto
+  await ProductRepository.updateProduct(productId, {
+    qrCode: productCode,
+    qrImagePath: qrPath,
+    qrProductURL: productURL
+  });
+
+  return {
+    qrCode: productCode,
+    qrImagePath: qrPath,
+    qrProductURL: productURL,
+    qrBase64
+  };
+};
+
+const getProductQR = async (productId: string, format: 'path' | 'base64' = 'path') => {
+  const producto = await ProductRepository.findById(productId);
+  if (!producto) throw new Error("Producto no encontrado");
+
+  if (!producto.qrCode) {
+    // Si no tiene QR, generarlo
+    return await regenerateProductQR(productId);
   }
 
-  return nuevoProducto;
+  if (format === 'base64') {
+    const { qrBase64 } = await QRService.generateQRBase64(productId, producto.qrCode);
+    return {
+      qrCode: producto.qrCode,
+      qrImagePath: producto.qrImagePath,
+      qrProductURL: producto.qrProductURL,
+      qrBase64
+    };
+  }
+
+  return {
+    qrCode: producto.qrCode,
+    qrImagePath: producto.qrImagePath,
+    qrProductURL: producto.qrProductURL
+  };
+};
+
+const findProductByQRCode = async (qrCode: string) => {
+  return await ProductRepository.findByQRCode(qrCode);
 };
 
 const getFeaturesById = async (productId: string) => {
@@ -200,6 +286,11 @@ const addVariantToProduct = async (
   // 🔧 casting correcto
   const sucursalesHabilitadas = (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId }[]) || [];
 
+  const normalizedCombinaciones = combinaciones.map((c) => ({
+    ...c,
+    variantKey: (c as any).variantKey || createVariantKey(productId, c.variantes)
+  }));
+
   for (const sucursalPago of sucursalesHabilitadas) {
     const id_sucursal = sucursalPago.id_sucursal.toString();
 
@@ -209,17 +300,18 @@ const addVariantToProduct = async (
 
     if (!sucursalProducto) {
       // Crear sucursal nueva
-      producto.sucursales.push({
-        id_sucursal: new Types.ObjectId(id_sucursal),
-        combinaciones: combinaciones.map(c => ({
-          variantes: c.variantes,
-          precio: c.precio,
-          stock: 0
-        }))
-      });
-    } else {
-      // Agregar combinaciones faltantes
-      for (const nueva of combinaciones) {
+        producto.sucursales.push({
+          id_sucursal: new Types.ObjectId(id_sucursal),
+          combinaciones: normalizedCombinaciones.map(c => ({
+            variantes: c.variantes,
+            variantKey: c.variantKey,
+            precio: c.precio,
+            stock: 0
+          }))
+        });
+      } else {
+        // Agregar combinaciones faltantes
+      for (const nueva of normalizedCombinaciones) {
         const yaExiste = sucursalProducto.combinaciones.some(c =>
           Object.keys(c.variantes).length === Object.keys(nueva.variantes).length &&
           Object.keys(nueva.variantes).every(
@@ -230,6 +322,7 @@ const addVariantToProduct = async (
         if (!yaExiste) {
           sucursalProducto.combinaciones.push({
             variantes: nueva.variantes,
+            variantKey: nueva.variantKey,
             precio: nueva.precio,
             stock: sucursalId.toString() === id_sucursal ? nueva.stock : 0
           });
@@ -324,5 +417,8 @@ export const ProductService = {
   updateProduct,
   generateIngressPDF,
   getAllTemporaryProducts,
-  getFlatProductList
+  getFlatProductList,
+  regenerateProductQR,
+  getProductQR,
+  findProductByQRCode
 };

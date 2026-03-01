@@ -4,6 +4,7 @@ import { IProducto } from '../entities/IProducto';
 import { IProductoDocument } from '../entities/documents/IProductoDocument';
 import { Types } from 'mongoose';
 import mongoose from 'mongoose';
+import { createVariantKey } from '../utils/variantKey';
 
 const findAll = async (): Promise<IProductoDocument[]> => {
   return await ProductoModel.find({ esTemporal: { $ne: true } }) // excluye temporales
@@ -25,17 +26,36 @@ const findById = async (productoId: string): Promise<IProductoDocument | null> =
   return await ProductoModel.findById(productoId).exec();
 };
 
+// Buscar producto por código QR
+const findByQRCode = async (qrCode: string): Promise<IProductoDocument | null> => {
+  return await ProductoModel.findOne({ qrCode })
+    .populate('features')
+    .populate('categoria')
+    .populate('group')
+    .exec();
+};
+
 const findBySellerId = async (sellerId: string): Promise<IProductoDocument[]> => {
   return await ProductoModel.find({ id_vendedor: sellerId }).populate('ingreso').exec();
 };
 
 const registerProduct = async (product: IProducto): Promise<IProductoDocument> => {
-  if (product._id && !mongoose.isValidObjectId(product._id)) {
-  delete product._id; 
-}
+  console.log("🛠 Intentando registrar producto en Mongo:", product);
 
-  const newProduct = new ProductoModel(product);
-  return await newProduct.save();
+  if (product._id && !mongoose.isValidObjectId(product._id)) {
+    console.warn("⚠️ _id inválido recibido, eliminando del objeto");
+    delete product._id;
+  }
+
+  try {
+    const newProduct = new ProductoModel(product);
+    const saved = await newProduct.save();
+    console.log("✅ Producto guardado correctamente en Mongo");
+    return saved;
+  } catch (err: any) {
+    console.error("❌ Error al guardar producto en Mongo:", err?.message || err);
+    throw err;
+  }
 };
 
 const getProductsBySales = async (sales: IVentaDocument[]) => {
@@ -105,6 +125,7 @@ const updatePriceInSucursal = async (
     // Si no existe, la creamos con precio y stock inicial 0
     combinacion = {
       variantes: variante,
+      variantKey: createVariantKey(productId, variante),
       precio: nuevoPrecio,
       stock: 0
     };
@@ -167,31 +188,24 @@ const updateStockByVariantCombination = async (
     console.log(`🧪 Combinación #${i + 1}:`, c.variantes);
   });
   const combinacion = sucursal.combinaciones.find((c, index) => {
-  const variantesPlanas = Object.fromEntries(c.variantes instanceof Map ? c.variantes : Object.entries(c.variantes || {}));
-  const combKeys = Object.keys(variantesPlanas);
-  const inputKeys = Object.keys(variantes);
+    const variantesPlanas = Object.fromEntries(c.variantes instanceof Map ? c.variantes : Object.entries(c.variantes || {}));
+    const combKeys = Object.keys(variantesPlanas);
+    const inputKeys = Object.keys(variantes);
 
-  //console.log(`\n🧪 Combinación #${index + 1}:`, variantesPlanas);
-  //console.log(`📥 Entrada esperada:`, variantes);
+    if (combKeys.length !== inputKeys.length) {
+      return false;
+    }
 
-  if (combKeys.length !== inputKeys.length) {
-    //console.log(`❌ Diferente número de claves: combinacion (${combKeys.length}) vs entrada (${inputKeys.length})`);
-    return false;
-  }
+    const match = inputKeys.every(key => {
+      const combVal = variantesPlanas[key]?.toLowerCase?.();
+      const inputVal = variantes[key]?.toLowerCase?.();
+      return combVal === inputVal;
+    });
 
-  const match = inputKeys.every(key => {
-    const combVal = variantesPlanas[key]?.toLowerCase?.();
-    const inputVal = variantes[key]?.toLowerCase?.();
-    const igual = combVal === inputVal;
-
-    //console.log(`🔍 Comparando '${key}': ${combVal} vs ${inputVal} => ${igual ? '✅' : '❌'}`);
-    return igual;
+    if (match) console.log(`¡MATCH encontrado con combinación #${index + 1}!`);
+    return match;
   });
 
-  if (match) console.log(`¡MATCH encontrado con combinación #${index + 1}!`);
-
-  return match;
-});
   if (!combinacion) {
     console.error("❌ No se encontró la combinación correspondiente.");
     throw new Error("No se encontró la combinación");
@@ -225,7 +239,10 @@ const addVariantToProduct = async (
       )
     );
     if (!yaExiste) {
-      sucursal.combinaciones.push(nueva);
+      sucursal.combinaciones.push({
+        ...nueva,
+        variantKey: (nueva as any).variantKey || createVariantKey(productId, nueva.variantes)
+      });
     }
   }
 
@@ -300,7 +317,11 @@ const findFlatProductList = async (sucursalId?: string) => {
             " ",
             { $arrayElemAt: ["$vendedor_info.apellido", 0] }
           ]
-        }
+        },
+        qrCode: "$qrCode",
+        qrImagePath: "$qrImagePath",
+        qrProductURL: "$qrProductURL",
+        variantKey: "$sucursales.combinaciones.variantKey"
       }
     }
   );
@@ -324,6 +345,6 @@ export const ProductRepository = {
   updateStockByVariantCombination,
   addVariantToProduct,
   findAllTemporales,
-  findFlatProductList
-
+  findFlatProductList,
+  findByQRCode
 };

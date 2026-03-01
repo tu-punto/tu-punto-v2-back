@@ -9,6 +9,9 @@ import { SaleService } from "./sale.service";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import dayjs from 'dayjs';
 import moment from 'moment-timezone';
+import { v4 as uuidv4 } from "uuid";
+import { QRService } from "./qr.service";
+import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatusHistorySchema";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -45,6 +48,58 @@ const registerShipping = async (shipping: any) => {
 };
 const getShippingById = async (id: string) => {
   return await ShippingRepository.findById(id);
+};
+
+const SHIPPING_QR_PREFIX = "TP|v1|SHIP|";
+
+const buildShippingQRCode = (shippingId: string): string => {
+  const suffix = uuidv4().replace(/-/g, "").slice(0, 10).toUpperCase();
+  return `SHIP-${shippingId.slice(-6)}-${suffix}`;
+};
+
+const buildShippingQRPayload = (shippingCode: string): string => {
+  return `${SHIPPING_QR_PREFIX}${shippingCode}`;
+};
+
+const extractShippingCodeFromPayload = (payload: string): string | null => {
+  const value = payload?.trim();
+  if (!value) return null;
+
+  if (value.startsWith(SHIPPING_QR_PREFIX)) {
+    return value.replace(SHIPPING_QR_PREFIX, "");
+  }
+
+  try {
+    const url = new URL(value);
+    const pathMatch = url.pathname.match(/\/shipping\/qr\/([^/?#]+)/i);
+    if (pathMatch?.[1]) return decodeURIComponent(pathMatch[1]);
+
+    const codeInQuery = url.searchParams.get("ship") || url.searchParams.get("shipping");
+    if (codeInQuery) return codeInQuery;
+  } catch {
+    // no-op
+  }
+
+  return value;
+};
+
+const resolveShippingByCodeOrId = async (codeOrId: string) => {
+  const byCode = await PedidoModel.findOne({ shipping_qr_code: codeOrId });
+  if (byCode) return byCode;
+
+  if (Types.ObjectId.isValid(codeOrId)) {
+    return PedidoModel.findById(codeOrId);
+  }
+
+  return null;
+};
+
+const allowedShippingTransitions: Record<string, string[]> = {
+  "En Espera": ["En camino", "Entregado", "No entregado", "Cancelado"],
+  "En camino": ["Entregado", "No entregado", "Cancelado"],
+  "No entregado": ["En camino", "Cancelado"],
+  "Cancelado": [],
+  "Entregado": []
 };
 
 const actualizarSaldoVendedor = async (
@@ -188,7 +243,10 @@ const updateShipping = async (newData: any, shippingId: string) => {
       .format("YYYY-MM-DD HH:mm:ss");
   }
 
-  if (newData.estado_pedido === "Entregado") {
+  const wasDelivered = shipping.estado_pedido === "Entregado";
+  const willBeDelivered = newData.estado_pedido === "Entregado";
+
+  if (willBeDelivered && !wasDelivered) {
     const sales = await SaleService.getSalesByShippingId(shippingId);
     const salesToUpdateSaldo: any = [];
 
@@ -390,6 +448,161 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
   return { resumen, totales };
 };
 
+const saveQRCode = async (shippingId: string, qrCode: string) => {
+  return await PedidoModel.findByIdAndUpdate(
+    shippingId,
+    { $set: { qr_code: qrCode } },
+    { new: true }
+  );
+};
+
+const generateShippingQR = async (shippingId: string, forceRegenerate = false) => {
+  const shipping = await ShippingRepository.findById(shippingId);
+  if (!shipping) {
+    throw new Error("Pedido no encontrado");
+  }
+
+  if (
+    !forceRegenerate &&
+    shipping.shipping_qr_code &&
+    shipping.shipping_qr_payload &&
+    shipping.shipping_qr_image_path
+  ) {
+    return {
+      shippingId,
+      shippingQrCode: shipping.shipping_qr_code,
+      shippingQrPayload: shipping.shipping_qr_payload,
+      shippingQrImagePath: shipping.shipping_qr_image_path
+    };
+  }
+
+  const shippingQrCode = buildShippingQRCode(shippingId);
+  const shippingQrPayload = buildShippingQRPayload(shippingQrCode);
+  const { qrPath } = await QRService.generatePayloadQRToS3(
+    shippingQrPayload,
+    `shipping-${shippingId}`
+  );
+
+  await PedidoModel.findByIdAndUpdate(shippingId, {
+    $set: {
+      shipping_qr_code: shippingQrCode,
+      shipping_qr_payload: shippingQrPayload,
+      shipping_qr_image_path: qrPath,
+      qr_code: shippingQrPayload
+    }
+  });
+
+  return {
+    shippingId,
+    shippingQrCode,
+    shippingQrPayload,
+    shippingQrImagePath: qrPath
+  };
+};
+
+const getShippingDetailsForQR = async (shippingCodeOrId: string) => {
+  const shipping = await resolveShippingByCodeOrId(shippingCodeOrId);
+  if (!shipping) return null;
+
+  return await PedidoModel.findById(shipping._id)
+    .populate([
+      {
+        path: 'venta',
+        populate: [
+          {
+            path: 'vendedor',
+            select: 'nombre apellido',
+          },
+          {
+            path: 'producto',
+            select: 'nombre_producto precio'
+          }
+        ]
+      },
+      'sucursal',
+      'trabajador'
+    ])
+    .lean();
+};
+
+const resolveShippingByQRPayload = async (payload: string) => {
+  const code = extractShippingCodeFromPayload(payload);
+  if (!code) return null;
+  return getShippingDetailsForQR(code);
+};
+
+const transitionShippingStatusByQR = async (params: {
+  payload?: string;
+  shippingCode?: string;
+  shippingId?: string;
+  toStatus: string;
+  changedBy?: string;
+  note?: string;
+}) => {
+  const resolvedCode =
+    (params.payload && extractShippingCodeFromPayload(params.payload)) ||
+    params.shippingCode ||
+    params.shippingId;
+
+  if (!resolvedCode) {
+    throw new Error("No se recibió payload/código/id para resolver el pedido");
+  }
+
+  const shipping = await resolveShippingByCodeOrId(resolvedCode);
+  if (!shipping) {
+    throw new Error("Pedido no encontrado para el QR proporcionado");
+  }
+
+  const fromStatus = shipping.estado_pedido || "En Espera";
+  const toStatus = params.toStatus;
+
+  if (fromStatus === toStatus) {
+    return {
+      changed: false,
+      shipping: await getShippingDetailsForQR(String(shipping._id))
+    };
+  }
+
+  const allowed = allowedShippingTransitions[fromStatus] || [];
+  if (allowed.length > 0 && !allowed.includes(toStatus)) {
+    throw new Error(`Transición inválida: ${fromStatus} -> ${toStatus}`);
+  }
+
+  const updateData: Record<string, unknown> = {
+    estado_pedido: toStatus
+  };
+
+  if (toStatus === "Entregado") {
+    updateData.hora_entrega_real = moment()
+      .tz("America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
+
+  await updateShipping(updateData, String(shipping._id));
+
+  await ShippingStatusHistoryModel.create({
+    shippingId: shipping._id,
+    fromStatus,
+    toStatus,
+    changedBy: params.changedBy,
+    note: params.note,
+    source: "qr"
+  });
+
+  return {
+    changed: true,
+    shipping: await getShippingDetailsForQR(String(shipping._id))
+  };
+};
+
+const getShippingStatusHistory = async (shippingId: string) => {
+  return await ShippingStatusHistoryModel.find({
+    shippingId: new Types.ObjectId(shippingId)
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+};
+
 export const ShippingService = {
   getAllShippings,
   getShippingByIds,
@@ -401,5 +614,11 @@ export const ShippingService = {
   addTemporaryProductsToShipping,
   deleteShippingById,
   processSalesForShipping,
-  getDailySalesHistory
+  getDailySalesHistory,
+  saveQRCode,
+  getShippingDetailsForQR,
+  generateShippingQR,
+  resolveShippingByQRPayload,
+  transitionShippingStatusByQR,
+  getShippingStatusHistory
 };

@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "ts-node-dev --poll src/index.ts",
+    "dev": "node --max-old-space-size=4096 ./node_modules/ts-node-dev/lib/bin.js --poll src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "migrate:variant-keys": "ts-node src/scripts/migrateVariantKeys.ts"
   },
   "author": "",
   "license": "ISC",
@@ -15,6 +16,7 @@
     "@aws-sdk/client-s3": "^3.899.0",
     "@aws-sdk/s3-request-presigner": "^3.872.0",
     "@vercel/postgres": "^0.9.0",
+    "aws-sdk": "^2.1692.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -32,8 +34,10 @@
     "multer": "^2.0.2",
     "pg": "^8.12.0",
     "puppeteer": "^24.10.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
-    "typeorm": "^0.3.20"
+    "typeorm": "^0.3.20",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/axios": "^0.14.4",
@@ -48,6 +52,8 @@
     "@types/moment-timezone": "^0.5.13",
     "@types/multer": "^2.0.0",
     "@types/node": "^20.17.30",
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

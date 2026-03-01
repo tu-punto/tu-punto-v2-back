@@ -8,6 +8,10 @@ const CombinacionSchema = new Schema({
     of: String, // ejemplo: { "Color": "Negro", "Talla": "M" }
     required: true
   },
+  variantKey: {
+    type: String,
+    required: false
+  },
   precio: { type: Number, required: true },
   stock: { type: Number, required: true }
 }, { _id: false });
@@ -33,7 +37,18 @@ const ProductoSchema = new Schema({
   esTemporal: { type: Boolean, default: false },
   group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' },
   groupId: { type: Number },
-  sucursales: [SucursalProductoSchema] // ACTUALIZADO
+  sucursales: [SucursalProductoSchema],
+  
+  qrCode: { 
+    type: String, 
+    unique: true, 
+    sparse: true 
+  },
+  qrImagePath: { type: String },
+  qrProductURL: { type: String }
 }, { timestamps: true, collection: 'Producto' });
+
+// Índice para búsquedas por variante
+ProductoSchema.index({ "sucursales.combinaciones.variantKey": 1 });
 
 export const ProductoModel = model<IProductoDocument>("Producto", ProductoSchema);

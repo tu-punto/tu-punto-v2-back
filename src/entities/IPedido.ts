@@ -29,6 +29,10 @@ export interface IPedido {
 
   trabajador?: Types.ObjectId;
   sucursal?: Types.ObjectId;
+  qr_code?: string;
+  shipping_qr_code?: string;
+  shipping_qr_payload?: string;
+  shipping_qr_image_path?: string;
 
   venta: Types.ObjectId[];
 

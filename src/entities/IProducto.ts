@@ -3,6 +3,7 @@ import { ICaracteristicas } from './ICaracteristicas';
 
 export interface ICombinacion {
   variantes: Record<string, string>; // ejemplo: { "Color": "Rojo", "Talla": "L" }
+  variantKey?: string;
   precio: number;
   stock: number;
 }
@@ -28,5 +29,9 @@ export interface IProducto {
   group: Types.ObjectId;
   sucursales: ISucursalProducto[];
   esTemporal?: boolean;
+  
+  qrCode?: string;          
+  qrImagePath?: string;     
+  qrProductURL?: string;    
 }
 
