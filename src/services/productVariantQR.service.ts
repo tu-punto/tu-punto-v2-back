@@ -29,6 +29,7 @@ interface VariantResolutionItem {
 interface VariantQRListItem {
   productId: string;
   productName: string;
+  sellerId: string;
   variantKey: string;
   variantLabel: string;
   qrCode: string;
@@ -218,6 +219,7 @@ const generateVariantQR = async (params: {
 
 const batchGenerateVariantQR = async (params: {
   sellerId?: string;
+  sucursalId?: string;
   productIds?: string[];
   onlyMissing?: boolean;
   forceRegenerate?: boolean;
@@ -229,6 +231,7 @@ const batchGenerateVariantQR = async (params: {
   generatedItems: {
     productId: string;
     productName: string;
+    sellerId: string;
     variantKey: string;
     variantLabel: string;
     qrCode: string;
@@ -236,7 +239,13 @@ const batchGenerateVariantQR = async (params: {
   }[];
   errors: { productId: string; variantKey: string; message: string }[];
 }> => {
-  const { sellerId, productIds = [], onlyMissing = true, forceRegenerate = false } = params;
+  const {
+    sellerId,
+    sucursalId,
+    productIds = [],
+    onlyMissing = true,
+    forceRegenerate = false
+  } = params;
   const query: Record<string, unknown> = { esTemporal: { $ne: true } };
 
   if (sellerId) {
@@ -251,6 +260,13 @@ const batchGenerateVariantQR = async (params: {
     query._id = { $in: validIds.map((id) => new Types.ObjectId(id)) };
   }
 
+  if (sucursalId) {
+    if (!Types.ObjectId.isValid(sucursalId)) {
+      throw new Error("sucursalId inválido");
+    }
+    query["sucursales.id_sucursal"] = new Types.ObjectId(sucursalId);
+  }
+
   const products = await ProductoModel.find(query);
   let variantsProcessed = 0;
   let generated = 0;
@@ -258,6 +274,7 @@ const batchGenerateVariantQR = async (params: {
   const generatedItems: {
     productId: string;
     productName: string;
+    sellerId: string;
     variantKey: string;
     variantLabel: string;
     qrCode: string;
@@ -274,7 +291,14 @@ const batchGenerateVariantQR = async (params: {
     }
 
     const variantKeys = new Set<string>();
-    for (const sucursal of product.sucursales || []) {
+    const sucursalesToProcess =
+      sucursalId
+        ? (product.sucursales || []).filter(
+            (sucursal) => String(sucursal.id_sucursal) === String(sucursalId)
+          )
+        : product.sucursales || [];
+
+    for (const sucursal of sucursalesToProcess) {
       for (const combinacion of sucursal.combinaciones || []) {
         if (combinacion.variantKey) {
           variantKeys.add(combinacion.variantKey);
@@ -307,6 +331,7 @@ const batchGenerateVariantQR = async (params: {
           generatedItems.push({
             productId: result.productId,
             productName: result.productName || product.nombre_producto,
+            sellerId: String(product.id_vendedor),
             variantKey: result.variantKey,
             variantLabel: result.variantLabel,
             qrCode: result.qrCode,
@@ -434,17 +459,19 @@ const resolveVariantQRPayload = async (
 
 const listVariantQRs = async (params: {
   sellerId?: string;
+  sucursalId?: string;
   productIds?: string[];
   limit?: number;
 }): Promise<{ count: number; items: VariantQRListItem[] }> => {
-  const { sellerId, productIds = [], limit = 300 } = params;
+  const { sellerId, sucursalId, productIds = [], limit = 300 } = params;
   const qrQuery: Record<string, unknown> = { active: true };
   let filteredProductIds: Types.ObjectId[] | null = null;
 
   const hasSellerFilter = Boolean(sellerId);
+  const hasSucursalFilter = Boolean(sucursalId);
   const hasProductFilter = productIds.length > 0;
 
-  if (hasSellerFilter || hasProductFilter) {
+  if (hasSellerFilter || hasSucursalFilter || hasProductFilter) {
     const productQuery: Record<string, unknown> = { esTemporal: { $ne: true } };
 
     if (sellerId) {
@@ -457,6 +484,13 @@ const listVariantQRs = async (params: {
     if (hasProductFilter) {
       const validIds = productIds.filter((id) => Types.ObjectId.isValid(id));
       productQuery._id = { $in: validIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    if (sucursalId) {
+      if (!Types.ObjectId.isValid(sucursalId)) {
+        throw new Error("sucursalId inválido");
+      }
+      productQuery["sucursales.id_sucursal"] = new Types.ObjectId(sucursalId);
     }
 
     const filteredProducts = await ProductoModel.find(productQuery).select("_id");
@@ -486,15 +520,22 @@ const listVariantQRs = async (params: {
     .map((id) => new Types.ObjectId(id));
 
   const products = await ProductoModel.find({ _id: { $in: productIdsForMap } }).select(
-    "_id nombre_producto"
+    "_id nombre_producto id_vendedor"
   );
-  const productNameById = new Map<string, string>(
-    products.map((product) => [String(product._id), product.nombre_producto])
+  const productMetaById = new Map<string, { name: string; sellerId: string }>(
+    products.map((product) => [
+      String(product._id),
+      {
+        name: product.nombre_producto,
+        sellerId: String(product.id_vendedor)
+      }
+    ])
   );
 
   const items: VariantQRListItem[] = qrDocs.map((doc) => ({
     productId: String(doc.productId),
-    productName: productNameById.get(String(doc.productId)) || "Producto",
+    productName: productMetaById.get(String(doc.productId))?.name || "Producto",
+    sellerId: productMetaById.get(String(doc.productId))?.sellerId || "",
     variantKey: doc.variantKey,
     variantLabel: doc.variantLabel,
     qrCode: doc.qrCode,
