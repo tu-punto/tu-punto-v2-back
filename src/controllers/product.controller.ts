@@ -157,11 +157,12 @@ export const generateVariantQR = async (req: Request, res: Response) => {
 };
 
 export const batchGenerateVariantQR = async (req: Request, res: Response) => {
-  const { sellerId, productIds, onlyMissing, forceRegenerate } = req.body || {};
+  const { sellerId, sucursalId, productIds, onlyMissing, forceRegenerate } = req.body || {};
 
   try {
     const result = await ProductVariantQRService.batchGenerateVariantQR({
       sellerId,
+      sucursalId,
       productIds: Array.isArray(productIds) ? productIds : [],
       onlyMissing: onlyMissing !== false,
       forceRegenerate: Boolean(forceRegenerate)
@@ -183,6 +184,7 @@ export const batchGenerateVariantQR = async (req: Request, res: Response) => {
 
 export const listVariantQR = async (req: Request, res: Response) => {
   const sellerId = req.query.sellerId as string | undefined;
+  const sucursalId = req.query.sucursalId as string | undefined;
   const limitRaw = req.query.limit as string | undefined;
   const productIdsRaw = req.query.productIds as string | undefined;
   const productIds = productIdsRaw
@@ -195,6 +197,7 @@ export const listVariantQR = async (req: Request, res: Response) => {
   try {
     const result = await ProductVariantQRService.listVariantQRs({
       sellerId,
+      sucursalId,
       productIds,
       limit: limitRaw ? Number(limitRaw) : undefined
     });
