@@ -131,7 +131,7 @@ const parseRangeToDates = ({ range, from, to }: CommissionRange): { fromDate?: D
   if (norm === 'all' || norm === 'todo' || norm === 'alltime') {
     return { fromDate: undefined, toDate: undefined };
   }
-  const daysMap: Record<string, number> = { '7': 7, '7d': 7, '30': 30, '30d': 30, '90': 90, '90d': 90 };
+  const daysMap: Record<string, number> = { '7': 7, '7d': 7, '30': 30, '30d': 30, '90': 90, '90d': 90, '365': 365, '365d': 365, '1y': 365, '1yr': 365, '12m': 365 };
   if (norm in daysMap) {
     toDate = endOfDay(now);
     const d = new Date(now);
@@ -198,14 +198,18 @@ const getMerchandiseSoldTotal = async (opts: CommissionRange) => {
   return { mercaderiaVendida: total };
 };
 
-const getFinancialSummary = async () => {
-  const fluxes = await FinanceFluxRepository.findAll();
-
-  const shippings = await ShippingService.getAllShippings();
-
-  const sales = await SaleRepository.findAll();
-
-  const externalSales = await ExternalSaleRepository.getAllExternalSales();
+const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date) => {
+  const [
+    fluxes,
+    shippings,
+    sales,
+    externalSales
+  ] = await Promise.all([
+    FinanceFluxRepository.findByDateRange(fromDate, toDate),
+    ShippingService.getShippingsByDateRange(fromDate, toDate),
+    SaleRepository.findByPedidoDateRange(fromDate, toDate),
+    ExternalSaleRepository.getExternalSalesByDateRange(fromDate, toDate)
+  ]);
 
   let ingresosFluxes = 0;
   let gastos = 0;
@@ -272,6 +276,46 @@ const getFinancialSummary = async () => {
   };
 };
 
+const getFinancialSummary = async (opts: CommissionRange = {}) => {
+  const { fromDate, toDate } = parseRangeToDates(opts);
+  return await getFinancialSummaryForDates(fromDate, toDate);
+};
+
+const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
+  const last7 = parseRangeToDates({ range: '7d' });
+  const last30 = parseRangeToDates({ range: '30d' });
+  const last90 = parseRangeToDates({ range: '90d' });
+  const last365 = parseRangeToDates({ range: '365d' });
+  const custom = parseRangeToDates({ range: 'custom', from: opts.from, to: opts.to });
+
+  const [
+    allSummary,
+    last7Summary,
+    last30Summary,
+    last90Summary,
+    last365Summary,
+    customSummary
+  ] = await Promise.all([
+    getFinancialSummaryForDates(),
+    getFinancialSummaryForDates(last7.fromDate, last7.toDate),
+    getFinancialSummaryForDates(last30.fromDate, last30.toDate),
+    getFinancialSummaryForDates(last90.fromDate, last90.toDate),
+    getFinancialSummaryForDates(last365.fromDate, last365.toDate),
+    custom.fromDate || custom.toDate
+      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate)
+      : Promise.resolve(null)
+  ]);
+
+  return {
+    all: allSummary,
+    last7: last7Summary,
+    last30: last30Summary,
+    last90: last90Summary,
+    last365: last365Summary,
+    custom: customSummary
+  };
+};
+
 export const FinanceFluxService = {
   getAllFinanceFluxes,
   registerFinanceFlux,
@@ -282,6 +326,7 @@ export const FinanceFluxService = {
   getStatsService,
   updateFinanceFlux,
   getFinancialSummary,
+  getFinancialSummaryRanges,
   getDebts,
   getCommissionTotal,
   getMerchandiseSoldTotal,
