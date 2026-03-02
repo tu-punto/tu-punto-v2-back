@@ -153,6 +153,21 @@ const findWithDebtsAndSales = async () => {
 
 export const SellerRepository = {
   findAll,
+  findAllForClientStatus: async () => {
+    return await VendedorModel.find(
+      {},
+      {
+        nombre: 1,
+        apellido: 1,
+        mail: 1,
+        telefono: 1,
+        fecha_vigencia: 1,
+        pago_sucursales: 1,
+      },
+    )
+      .lean()
+      .exec();
+  },
   registerSeller,
   updateSeller,
   findById,

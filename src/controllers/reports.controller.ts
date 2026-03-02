@@ -153,6 +153,58 @@ export const exportVentasVendedores4mXlsx = async (req: Request, res: Response) 
     return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
+export const getVentasQr = async (req: Request, res: Response) => {
+  try {
+    const { meses, mes, sucursales } = req.body || {};
+    const mesesArr = Array.isArray(meses)
+      ? meses
+      : (typeof meses === "string" ? meses.split(",").map((m: string) => m.trim()).filter(Boolean) : undefined);
+
+    const sucursalIds = Array.isArray(sucursales) ? sucursales : undefined;
+
+    const data = await ReportsService.getVentasQr({
+      mes,
+      meses: mesesArr,
+      sucursalIds,
+    });
+
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getVentasQr error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+export const exportVentasQrXlsx = async (req: Request, res: Response) => {
+  try {
+    const mesesParam = typeof req.query.meses === "string" ? String(req.query.meses) : "";
+    const sucursalesParam = typeof req.query.sucursales === "string" ? String(req.query.sucursales) : "";
+
+    const meses = mesesParam.split(",").map(s => s.trim()).filter(Boolean);
+    const sucursalIds = sucursalesParam
+      ? sucursalesParam.split(",").map(s => s.trim()).filter(Boolean)
+      : undefined;
+
+    const { filePath, filename } = await ReportsService.exportVentasQrXlsx({
+      meses,
+      sucursalIds,
+    });
+
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportVentasQrXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+
+export const exportClientesStatusXlsx = async (_: Request, res: Response) => {
+  try {
+    const { filePath, filename } = await ReportsService.exportClientesStatusXlsx({});
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportClientesStatusXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
 
 
 

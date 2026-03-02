@@ -59,6 +59,7 @@ export const ReportsRepository = {
         cargo_delivery: 1,
         costo_delivery: 1,
         estado_pedido: 1,
+        observaciones: 1,
         sucursal: 1,
         lugar_origen: 1,
         productos_temporales: 1,
@@ -233,6 +234,166 @@ async fetchVendedoresActivosConPlanes(opts: { hoy: Date }) {
     .lean()
     .exec();
 },
+async fetchVendedoresActivosPorSucursalEnRango(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+  const { start, end, sucursalIds } = opts;
+
+  const matchPago: any = {
+    "pago_sucursales.activo": true,
+  };
+
+  if (sucursalIds?.length) {
+    matchPago["pago_sucursales.id_sucursal"] = {
+      $in: sucursalIds.map((id) => new Types.ObjectId(id)),
+    };
+  }
+
+  return await VendedorModel.aggregate([
+    // vigencia: debe estar vigente al menos desde el inicio del rango
+    { $match: { fecha_vigencia: { $gte: start } } },
+    { $unwind: "$pago_sucursales" },
+    { $match: matchPago },
+    // solapamiento del rango con (fecha_ingreso, fecha_salida)
+    {
+      $match: {
+        $and: [
+          {
+            $or: [
+              { "pago_sucursales.fecha_ingreso": { $exists: false } },
+              { "pago_sucursales.fecha_ingreso": null },
+              { "pago_sucursales.fecha_ingreso": { $lt: end } },
+            ],
+          },
+          {
+            $or: [
+              { "pago_sucursales.fecha_salida": { $exists: false } },
+              { "pago_sucursales.fecha_salida": null },
+              { "pago_sucursales.fecha_salida": { $gte: start } },
+            ],
+          },
+        ],
+      },
+    },
+    // unico vendedor por sucursal
+    {
+      $group: {
+        _id: { sucursal: "$pago_sucursales.id_sucursal", vendedor: "$_id" },
+        sucursalName: { $first: "$pago_sucursales.sucursalName" },
+      },
+    },
+    {
+      $group: {
+        _id: "$_id.sucursal",
+        sucursalName: { $first: "$sucursalName" },
+        vendedores_activos: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        id_sucursal: { $toString: "$_id" },
+        sucursal: { $ifNull: ["$sucursalName", ""] },
+        vendedores_activos: 1,
+      },
+    },
+    { $sort: { sucursal: 1, id_sucursal: 1 } },
+  ]).exec();
+},
+async fetchVendedoresConPagoSucursales() {
+  return await VendedorModel.find(
+    {},
+    {
+      nombre: 1,
+      apellido: 1,
+      mail: 1,
+      telefono: 1,
+      fecha_vigencia: 1,
+      pago_sucursales: 1,
+    },
+  )
+    .lean()
+    .exec();
+},
+async fetchTicketPromedioServiciosPorSucursalEnRango(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+  const { start, end, sucursalIds } = opts;
+
+  const matchPago: any = {
+    "pago_sucursales.activo": true,
+  };
+
+  if (sucursalIds?.length) {
+    matchPago["pago_sucursales.id_sucursal"] = {
+      $in: sucursalIds.map((id) => new Types.ObjectId(id)),
+    };
+  }
+
+  return await VendedorModel.aggregate([
+    // vigencia: debe estar vigente al menos desde el inicio del rango
+    { $match: { fecha_vigencia: { $gte: start } } },
+    { $unwind: "$pago_sucursales" },
+    { $match: matchPago },
+    // solapamiento del rango con (fecha_ingreso, fecha_salida)
+    {
+      $match: {
+        $and: [
+          {
+            $or: [
+              { "pago_sucursales.fecha_ingreso": { $exists: false } },
+              { "pago_sucursales.fecha_ingreso": null },
+              { "pago_sucursales.fecha_ingreso": { $lt: end } },
+            ],
+          },
+          {
+            $or: [
+              { "pago_sucursales.fecha_salida": { $exists: false } },
+              { "pago_sucursales.fecha_salida": null },
+              { "pago_sucursales.fecha_salida": { $gte: start } },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        servicios_total: {
+          $add: [
+            { $ifNull: ["$pago_sucursales.alquiler", 0] },
+            { $ifNull: ["$pago_sucursales.exhibicion", 0] },
+            { $ifNull: ["$pago_sucursales.delivery", 0] },
+            { $ifNull: ["$pago_sucursales.entrega_simple", 0] },
+          ],
+        },
+      },
+    },
+    // unico vendedor por sucursal (evita duplicados)
+    {
+      $group: {
+        _id: { sucursal: "$pago_sucursales.id_sucursal", vendedor: "$_id" },
+        sucursalName: { $first: "$pago_sucursales.sucursalName" },
+        servicios_total: { $first: "$servicios_total" },
+      },
+    },
+    {
+      $group: {
+        _id: "$_id.sucursal",
+        sucursalName: { $first: "$sucursalName" },
+        vendedores_activos: { $sum: 1 },
+        total_servicios_bs: { $sum: "$servicios_total" },
+        ticket_promedio_bs: { $avg: "$servicios_total" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        id_sucursal: { $toString: "$_id" },
+        sucursal: { $ifNull: ["$sucursalName", ""] },
+        vendedores_activos: 1,
+        total_servicios_bs: { $round: ["$total_servicios_bs", 2] },
+        ticket_promedio_bs: { $round: ["$ticket_promedio_bs", 2] },
+      },
+    },
+    { $sort: { sucursal: 1, id_sucursal: 1 } },
+  ]).exec();
+},
 async fetchVentas3MPorVendedor(opts: { start: Date; end: Date }) {
   const { start, end } = opts;
 
@@ -383,6 +544,62 @@ async fetchVentasDetalleEnRango(opts: { start: Date; end: Date }) {
   ]).exec();
 },
 
+  async fetchPedidosQrEnRango(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+  const { start, end, sucursalIds } = opts;
+
+  const filter: any = {
+    fecha_pedido: { $gte: start, $lt: end },
+    estado_pedido: { $ne: "En Espera" },
+    // SOLO QR: monto QR > 0 (estricto)
+    $expr: {
+      $gt: [
+        {
+          $convert: {
+            input: "$subtotal_qr",
+            to: "double",
+            onError: 0,
+            onNull: 0,
+          },
+        },
+        0,
+      ],
+    },
+  };
+
+  if (sucursalIds?.length) {
+    const _ids = sucursalIds.map((id) => new Types.ObjectId(id));
+    filter.$or = [{ sucursal: { $in: _ids } }, { lugar_origen: { $in: _ids } }];
+  }
+
+  return await PedidoModel.find(
+    filter,
+      {
+        _id: 1,
+        cliente: 1,
+        telefono_cliente: 1,
+        fecha_pedido: 1,
+        hora_entrega_real: 1,
+        subtotal_qr: 1,
+        sucursal: 1,
+        lugar_origen: 1,
+        estado_pedido: 1,
+        venta: 1,
+      }
+  )
+    .populate([
+      { path: "sucursal", select: "nombre" },
+      { path: "lugar_origen", select: "nombre" },
+      {
+        path: "venta",
+        populate: [
+          { path: "vendedor", select: "nombre apellido" },
+          { path: "producto", select: "nombre_producto" },
+        ],
+      },
+    ])
+    .lean()
+    .exec();
+},
 
 
 
