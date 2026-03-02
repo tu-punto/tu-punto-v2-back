@@ -45,6 +45,15 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: String,
     default: "",
   },
+  variantes: {
+    type: Map,
+    of: String,
+    required: false
+  },
+  variantKey: {
+    type: String,
+    required: false
+  },
 
 }, {
   collection: 'Venta',

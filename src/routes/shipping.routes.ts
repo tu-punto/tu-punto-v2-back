@@ -15,6 +15,7 @@ import {
   transitionShippingStatusByQRController,
   getShippingStatusHistoryController
 } from "../controllers/shipping.controller";
+import { requireSellerOwnership } from "../middlewares/auth.middleware";
 
 const shippingRouter = Router();
 //rutas
@@ -28,7 +29,7 @@ shippingRouter.post("/register/sales", registerSaleToShipping);
 
 shippingRouter.put("/:id", ShippingController.updateShipping);
 
-shippingRouter.get("/seller/:id", getShippingsBySellerController);
+shippingRouter.get("/seller/:id", requireSellerOwnership("id"), getShippingsBySellerController);
 
 shippingRouter.put("/:id/temporales", addTemporaryProductsToShipping);
 

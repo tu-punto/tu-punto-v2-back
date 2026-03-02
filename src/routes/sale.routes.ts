@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { deleteSalesOfProducts, deleteProducts, getProductsByShippingId, getProductDetailsByProductId, getProductsBySellerId, getSale, registerSale, updateProducts, updateSales, deleteSales, getDataPaymentProof, updateSalesOfProducts, updateSaleById, deleteSaleById } from "../controllers/sale.controller";
+import { requireSellerOwnership } from "../middlewares/auth.middleware";
 
 const saleRouter = Router();
 
@@ -7,7 +8,7 @@ saleRouter.get('/', getSale)
 
 saleRouter.get('/products/:id', getProductsByShippingId)
 
-saleRouter.get('/products/seller/:id', getProductsBySellerId)
+saleRouter.get('/products/seller/:id', requireSellerOwnership("id"), getProductsBySellerId)
 
 saleRouter.get('/product/:id', getProductDetailsByProductId)
 
@@ -25,7 +26,7 @@ saleRouter.delete('/', deleteSales)
 
 saleRouter.delete('/products/', deleteSalesOfProducts)
 
-saleRouter.get('/payment/:id', getDataPaymentProof )
+saleRouter.get('/payment/:id', requireSellerOwnership("id"), getDataPaymentProof )
 
 saleRouter.put('/:id', updateSaleById);
 

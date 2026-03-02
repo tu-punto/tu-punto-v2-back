@@ -6,6 +6,7 @@ import { comparePassword, hashPassword } from "../helpers/auth";
 import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
+import { USER_ROLES } from "../constants/roles";
 
 dotenv.config();
 
@@ -15,6 +16,11 @@ export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   console.log("User:",user)
   try {
+    const normalizedRole = String(user?.role || "").toLowerCase();
+    if (!USER_ROLES.includes(normalizedRole as any)) {
+      return res.status(400).json({ error: "Rol inválido" });
+    }
+
     const checkEmail = await UserService.findByEmailService(user.email);
     if (checkEmail) {
       res.status(500).json({ error: "Email is already taken" });
@@ -25,6 +31,7 @@ export const registerUserController = async (req: Request, res: Response) => {
     console.log("Encriptado");
     const newUser = await UserService.registerUserService({
       ...user,
+      role: normalizedRole,
       password: encryptPassword,
     });
     res.json({
@@ -173,8 +180,13 @@ export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { email, role, password } = req.body;
+
+    const normalizedRole = String(role || "").toLowerCase();
+    if (!USER_ROLES.includes(normalizedRole as any)) {
+      return res.status(400).json({ success: false, msg: "Rol inválido" });
+    }
     
-    const updateData: any = { email, role };
+    const updateData: any = { email, role: normalizedRole };
     
     if (password) {
       updateData.password = await hashPassword(password);
