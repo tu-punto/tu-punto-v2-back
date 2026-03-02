@@ -1,6 +1,5 @@
 import { IPedidoDocument } from "../entities/documents/IPedidoDocument";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
-import { VentaModel } from "../entities/implements/VentaSchema";
 import { Types } from "mongoose";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
@@ -181,35 +180,14 @@ const registerSaleToShipping = async (
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
 
-  const { _id, ...rest } = saleWithoutShippingId;
-
-  const sale = new VentaModel({
-    ...rest,
-    pedido: new Types.ObjectId(shipping._id),
+  const payload = {
+    ...saleWithoutShippingId,
     id_pedido: shipping._id,
-    producto: new Types.ObjectId(saleWithoutShippingId.id_producto),
-    vendedor: new Types.ObjectId(saleWithoutShippingId.id_vendedor),
-    sucursal: new Types.ObjectId(saleWithoutShippingId.sucursal),
-  });
+    sucursal: saleWithoutShippingId.sucursal || saleWithoutShippingId.id_sucursal,
+  };
 
-
-  const nuevaVenta = await SaleRepository.registerSale(sale);
-
-  const yaExiste = shipping.venta?.some((ventaId: Types.ObjectId) =>
-    ventaId.equals(nuevaVenta._id)
-  );
-
-  if (!yaExiste) {
-    await PedidoModel.findByIdAndUpdate(shipping._id, {
-      $push: { venta: nuevaVenta._id },
-    });
-  }
-
-  await VendedorModel.findByIdAndUpdate(nuevaVenta.vendedor, {
-    $push: { venta: nuevaVenta._id },
-  });
-
-  return nuevaVenta;
+  const created = await SaleService.registerSale(payload);
+  return created[0];
 };
 
 const updateShipping = async (newData: any, shippingId: string) => {
@@ -309,16 +287,8 @@ const deleteShippingById = async (id: string) => {
   if (!pedido) throw new Error("Pedido no encontrado");
 
   if (pedido.venta && pedido.venta.length > 0) {
-    const ventas = await VentaModel.find({ _id: { $in: pedido.venta } });
-
-    for (const venta of ventas) {
-      if (venta.vendedor) {
-        await VendedorModel.findByIdAndUpdate(venta.vendedor, {
-          $pull: { venta: venta._id },
-        });
-      }
-
-      await VentaModel.findByIdAndDelete(venta._id);
+    for (const ventaId of pedido.venta) {
+      await SaleService.deleteSaleById(String(ventaId));
     }
   }
 

@@ -1,5 +1,6 @@
 import { Schema, model, Types } from 'mongoose';
 import { IUserDocument } from '../documents/IUserDocument';
+import { USER_ROLES } from '../../constants/roles';
 
 const UserSchema = new Schema<IUserDocument>({
   email: {
@@ -12,7 +13,8 @@ const UserSchema = new Schema<IUserDocument>({
   },
   role: {
     type: String,
-    required: true
+    required: true,
+    enum: USER_ROLES
   },
   sucursal: {
     type: Schema.Types.ObjectId,

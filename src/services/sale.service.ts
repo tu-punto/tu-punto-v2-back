@@ -1,445 +1,546 @@
-import { format } from 'date-fns';
-import { Types } from 'mongoose';
+import { format } from "date-fns";
+import { Types } from "mongoose";
 
 import { SaleRepository } from "../repositories/sale.repository";
 import { SellerService } from "./seller.service";
-import { ProductService } from './product.service';
-import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
-import { VentaModel } from '../entities/implements/VentaSchema';
-import { IVenta } from '../entities/IVenta';
+import { ProductService } from "./product.service";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { variantFingerprint, variantLabel } from "../utils/variantKey";
 
-const getAllSales = async ()=> {
-    return await SaleRepository.findAll()
+type VariantRecord = Record<string, string>;
+
+const getAllSales = async () => {
+  return await SaleRepository.findAll();
+};
+
+const normalizeText = (value: unknown): string => String(value ?? "").trim();
+
+const normalizeLabel = (value: string): string =>
+  normalizeText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const toVariantRecord = (variantes: unknown): VariantRecord | null => {
+  if (!variantes) return null;
+
+  const entries =
+    variantes instanceof Map
+      ? Array.from(variantes.entries())
+      : Object.entries(variantes as Record<string, unknown>);
+
+  const normalized = entries
+    .map(([key, value]) => [normalizeText(key), normalizeText(value)] as [string, string])
+    .filter(([key, value]) => key.length > 0 && value.length > 0);
+
+  if (!normalized.length) return null;
+  return Object.fromEntries(normalized);
+};
+
+const getSaleProductId = (sale: any): string => {
+  const raw = sale?.id_producto ?? sale?.producto?._id ?? sale?.producto;
+  if (!raw) throw new Error("No se pudo resolver id de producto para ajustar stock.");
+  return String(raw);
+};
+
+const getSaleSucursalId = (sale: any): string => {
+  const raw = sale?.sucursal ?? sale?.id_sucursal;
+  if (!raw) throw new Error("No se pudo resolver sucursal para ajustar stock.");
+  return String(raw);
+};
+
+const getSaleQuantity = (sale: any): number => {
+  const qty = Number(sale?.cantidad ?? 0);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw new Error("Cantidad invalida para la venta.");
+  }
+  return qty;
+};
+
+const buildVariantLabelCandidates = (
+  nombreVariante: string | undefined,
+  nombreProducto: string
+): string[] => {
+  const saleLabel = normalizeLabel(nombreVariante || "");
+  if (!saleLabel) return [];
+
+  const productLabel = normalizeLabel(nombreProducto || "");
+  const candidates = new Set<string>();
+
+  candidates.add(saleLabel);
+  if (productLabel && saleLabel.startsWith(productLabel)) {
+    const stripped = saleLabel.slice(productLabel.length).replace(/^[-:/\s]+/, "").trim();
+    if (stripped) candidates.add(stripped);
+  }
+
+  return Array.from(candidates);
+};
+
+const findVariantIndexForSale = (product: any, sale: any): number => {
+  const sucursalId = getSaleSucursalId(sale);
+  const sucursal = product.sucursales.find((s: any) => s.id_sucursal?.toString() === sucursalId);
+  if (!sucursal) {
+    throw new Error(
+      `Sucursal ${sucursalId} no encontrada en producto ${product.nombre_producto}`
+    );
+  }
+
+  const variantKey = normalizeText(sale?.variantKey);
+  if (variantKey) {
+    const indexByKey = sucursal.combinaciones.findIndex(
+      (c: any) => normalizeText(c.variantKey) === variantKey
+    );
+    if (indexByKey >= 0) return indexByKey;
+  }
+
+  const variantes = toVariantRecord(sale?.variantes);
+  if (variantes) {
+    const fingerprint = variantFingerprint(variantes);
+    const indexByVariants = sucursal.combinaciones.findIndex(
+      (c: any) => variantFingerprint(c.variantes as Record<string, string>) === fingerprint
+    );
+    if (indexByVariants >= 0) return indexByVariants;
+  }
+
+  const labelCandidates = buildVariantLabelCandidates(sale?.nombre_variante, product.nombre_producto);
+  if (labelCandidates.length) {
+    const indexByLabel = sucursal.combinaciones.findIndex((c: any) => {
+      const comboLabel = variantLabel(c.variantes as Record<string, string>);
+      const fullLabel = `${product.nombre_producto} - ${comboLabel}`;
+      const normalizedCombo = normalizeLabel(comboLabel);
+      const normalizedFull = normalizeLabel(fullLabel);
+
+      return labelCandidates.some(
+        (candidate) => candidate === normalizedCombo || candidate === normalizedFull
+      );
+    });
+    if (indexByLabel >= 0) return indexByLabel;
+  }
+
+  const salePrice = Number(sale?.precio_unitario);
+  if (Number.isFinite(salePrice)) {
+    const indexesByPrice = sucursal.combinaciones
+      .map((c: any, idx: number) => ({ idx, precio: Number(c.precio) }))
+      .filter((item: any) => item.precio === salePrice);
+    if (indexesByPrice.length === 1) return indexesByPrice[0].idx;
+  }
+
+  if (sucursal.combinaciones.length === 1) return 0;
+  return -1;
+};
+
+const adjustStockForSale = async (sale: any, delta: number) => {
+  if (!delta) return;
+
+  const productId = getSaleProductId(sale);
+  if (!Types.ObjectId.isValid(productId)) return;
+
+  const product = await ProductService.getProductById(productId);
+  if (product.esTemporal) return;
+
+  const sucursalId = getSaleSucursalId(sale);
+  const sucursal = product.sucursales.find((s: any) => s.id_sucursal?.toString() === sucursalId);
+  if (!sucursal) {
+    throw new Error(
+      `Sucursal ${sucursalId} no encontrada en producto ${product.nombre_producto}`
+    );
+  }
+
+  const index = findVariantIndexForSale(product, sale);
+  if (index < 0) {
+    throw new Error(
+      `No se encontro combinacion de variante para ${product.nombre_producto}`
+    );
+  }
+
+  const currentStock = Number(sucursal.combinaciones[index].stock || 0);
+  const nextStock = currentStock + delta;
+
+  if (nextStock < 0) {
+    throw new Error("No hay stock suficiente para completar la operacion.");
+  }
+
+  sucursal.combinaciones[index].stock = nextStock;
+  await (product as any).save();
 };
 
 const registerSale = async (sale: any) => {
-    const salesArray = Array.isArray(sale) ? sale : [sale];
+  const salesArray = Array.isArray(sale) ? sale : [sale];
+  const savedSales = [];
 
-    const transformedSales = salesArray.map(s => ({
-        ...s,
-        producto: new Types.ObjectId(s.id_producto),
-        pedido: new Types.ObjectId(s.id_pedido),
-        vendedor: new Types.ObjectId(s.id_vendedor),
-        quien_paga_delivery: s.quien_paga_delivery || 'comprador',
-        nombre_variante: s.nombre_variante || '',
-    }));
+  for (const rawSale of salesArray) {
+    const cantidad = getSaleQuantity(rawSale);
+    const idProducto = getSaleProductId(rawSale);
+    const idPedido = rawSale?.id_pedido ?? rawSale?.pedido;
+    const idVendedor = rawSale?.id_vendedor ?? rawSale?.vendedor;
+    const idSucursal = rawSale?.sucursal ?? rawSale?.id_sucursal;
 
-    const savedSales = [];
-    for (const saleData of transformedSales) {
-        const saved = await SaleRepository.registerSale(saleData);
-        savedSales.push(saved);
-
-        // Añadir ID al pedido (como vimos antes)
-        await PedidoModel.findByIdAndUpdate(
-            saleData.pedido,
-            { $addToSet: { venta: saved._id } }
-        );
+    if (!idPedido || !idVendedor || !idSucursal) {
+      throw new Error("Faltan campos requeridos para registrar la venta.");
     }
 
-    return savedSales;
+    const variantes = toVariantRecord(rawSale?.variantes);
+
+    const saleData: any = {
+      ...rawSale,
+      cantidad,
+      producto: new Types.ObjectId(String(idProducto)),
+      pedido: new Types.ObjectId(String(idPedido)),
+      vendedor: new Types.ObjectId(String(idVendedor)),
+      sucursal: new Types.ObjectId(String(idSucursal)),
+      quien_paga_delivery: rawSale.quien_paga_delivery || "comprador",
+      nombre_variante: rawSale.nombre_variante || "",
+      ...(variantes ? { variantes } : {}),
+      ...(rawSale.variantKey ? { variantKey: String(rawSale.variantKey) } : {}),
+    };
+
+    await adjustStockForSale(saleData, -cantidad);
+
+    try {
+      const saved = await SaleRepository.registerSale(saleData);
+      savedSales.push(saved);
+
+      await PedidoModel.findByIdAndUpdate(saleData.pedido, {
+        $addToSet: { venta: saved._id },
+      });
+      await VendedorModel.findByIdAndUpdate(saleData.vendedor, {
+        $addToSet: { venta: saved._id },
+      });
+    } catch (error) {
+      await adjustStockForSale(saleData, cantidad);
+      throw error;
+    }
+  }
+
+  return savedSales;
 };
+
 const registerMultipleSales = async (sales: any[]) => {
-    console.log("📥 [Service] Registro múltiple - ventas recibidas:", JSON.stringify(sales, null, 2));
-
-    const savedSales = [];
-
-    for (const sale of sales) {
-        const savedList = await SaleService.registerSale(sale);
-        for (const saved of savedList) {
-            savedSales.push(saved);
-            await PedidoModel.findByIdAndUpdate(
-                sale.id_pedido,
-                { $addToSet: { venta: saved._id } }
-            );
-        }
+  const savedSales = [];
+  for (const sale of sales) {
+    const savedList = await SaleService.registerSale(sale);
+    for (const saved of savedList) {
+      savedSales.push(saved);
     }
-
-    return savedSales;
+  }
+  return savedSales;
 };
-
 
 const getSalesByShippingId = async (pedidoId: string) => {
-    // Obtener las ventas asociadas
-    const sales = await SaleRepository.findByPedidoId(pedidoId);
+  const sales = await SaleRepository.findByPedidoId(pedidoId);
+  const pedido = await PedidoModel.findById(pedidoId);
 
-    // Obtener el pedido completo (para productos temporales)
-    const pedido = await PedidoModel.findById(pedidoId);
+  if (!pedido) throw new Error("No existe el pedido");
 
-    if (!pedido) throw new Error("No existe el pedido");
+  const ventas = sales.map((sale) => ({
+    key: sale.producto._id,
+    producto: sale.producto.nombre_producto,
+    nombre_variante: sale.nombre_variante,
+    precio_unitario: sale.precio_unitario,
+    cantidad: sale.cantidad,
+    utilidad: sale.utilidad,
+    id_venta: sale._id,
+    id_vendedor: sale.producto.id_vendedor,
+    id_pedido: pedidoId,
+    id_producto: sale.producto._id,
+    id_sucursal: sale.sucursal,
+  }));
 
-    const ventas = sales.map(sale => ({
-        key: sale.producto._id,
-        producto: sale.producto.nombre_producto,
-        nombre_variante: sale.nombre_variante,
-        precio_unitario: sale.precio_unitario,
-        cantidad: sale.cantidad,
-        utilidad: sale.utilidad,
-        id_venta: sale._id,
-        id_vendedor: sale.producto.id_vendedor,
-        id_pedido: pedidoId,
-        id_producto: sale.producto._id,
-        id_sucursal: sale.sucursal,
-    }));
+  const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
+    key: `temp-${i}`,
+    producto: prod.producto,
+    cantidad: prod.cantidad,
+    precio_unitario: prod.precio_unitario,
+    utilidad: prod.utilidad,
+    id_vendedor: prod.id_vendedor,
+    esTemporal: true,
+  }));
 
-    const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
-        key: `temp-${i}`,
-        producto: prod.producto,
-        cantidad: prod.cantidad,
-        precio_unitario: prod.precio_unitario,
-        utilidad: prod.utilidad,
-        id_vendedor: prod.id_vendedor,
-        esTemporal: true,
-    }));
-
-    return [...ventas, ...temporales];
+  return [...ventas, ...temporales];
 };
 
 const getProductDetailsByProductId = async (productId: number) => {
-    const sales = await SaleRepository.findByProductId(productId);
+  const sales = await SaleRepository.findByProductId(productId);
 
-    if (sales.length === 0) throw new Error("No existen ventas con ese ID de producto");
+  if (sales.length === 0) throw new Error("No existen ventas con ese ID de producto");
 
-    const products = sales.map(sale => {
-        const formattedDate = format(new Date(sale.pedido.fecha_pedido), 'dd/MM/yyyy:HH:mm:ss');
+  const products = sales.map((sale) => {
+    const formattedDate = format(new Date(sale.pedido.fecha_pedido), "dd/MM/yyyy:HH:mm:ss");
 
-        return {
-            key: `${sale.producto._id}-${formattedDate}`,
-            producto: sale.producto.nombre_producto,
-            precio_unitario: sale.precio_unitario,
-            cantidad: sale.cantidad,
-            utilidad: sale.utilidad,
-            id_venta: sale._id,
-            id_vendedor: sale.producto.id_vendedor,
-            id_pedido: sale.id_pedido,
-            id_producto: sale.producto._id,
-            id_sucursal: sale.sucursal,
-            deposito_realizado: sale.deposito_realizado,
-            cliente: sale.pedido.cliente,
-            fecha_pedido: sale.pedido.fecha_pedido,
-            nombre_vendedor: `${sale.vendedor.nombre} ${sale.vendedor.apellido} - ${sale.vendedor.marca}`,
-        };
-    });
+    return {
+      key: `${sale.producto._id}-${formattedDate}`,
+      producto: sale.producto.nombre_producto,
+      precio_unitario: sale.precio_unitario,
+      cantidad: sale.cantidad,
+      utilidad: sale.utilidad,
+      id_venta: sale._id,
+      id_vendedor: sale.producto.id_vendedor,
+      id_pedido: sale.id_pedido,
+      id_producto: sale.producto._id,
+      id_sucursal: sale.sucursal,
+      deposito_realizado: sale.deposito_realizado,
+      cliente: sale.pedido.cliente,
+      fecha_pedido: sale.pedido.fecha_pedido,
+      nombre_vendedor: `${sale.vendedor.nombre} ${sale.vendedor.apellido} - ${sale.vendedor.marca}`,
+    };
+  });
 
-    return products;
+  return products;
 };
+
 const getProductsBySellerId = async (sellerId: string) => {
-    const sales = await SaleRepository.findBySellerId(sellerId);
-    if (!sales || sales.length === 0) {
-        return [];
+  const sales = await SaleRepository.findBySellerId(sellerId);
+  if (!sales || sales.length === 0) {
+    return [];
+  }
+
+  const products = sales.map((sale) => {
+    let product;
+    if (sale.producto) {
+      product = {
+        key: sale.producto._id,
+        producto: sale.producto.nombre_producto,
+        id_producto: sale.producto._id,
+      };
     }
-    //throw new Error("No existen ventas con ese ID de vendedor");
-    const products = sales.map((sale) => {
-         if (!sale.pedido) {
-                console.warn(`⚠️ Venta sin pedido referenciado: ${sale._id}`);
-            } else if (!sale.pedido.cliente) {
-                console.warn(`⚠️ Pedido con cliente vacío en venta: ${sale._id}`);
-                console.log("🧾 Pedido completo:", JSON.stringify(sale.pedido, null, 2));
-        }
-        let product
-        if (sale.producto) {
-            product = {
-                key: sale.producto._id,
-                producto: sale.producto.nombre_producto,
-                id_producto: sale.producto._id,
-            }
-        }
-        let res = {
-            nombre_variante: sale.nombre_variante,
-            precio_unitario: sale.precio_unitario,
-            cantidad: sale.cantidad,
-            utilidad: sale.utilidad,
-            id_venta: sale._id,
-            id_vendedor: sellerId,
-            id_pedido: sale.pedido,
-            id_sucursal: sale.sucursal,
-            deposito_realizado: sale.deposito_realizado,
-            cliente: sale.pedido?.cliente ?? null,
-            fecha_pedido: sale.pedido?.fecha_pedido ?? null
-        }
-        if (product) {
-            return { ...product, ...res };
-        } else {
-            return {
-                product: 'No encontrado',
-                ...res
-            };
-        }
 
-    });
+    const base = {
+      nombre_variante: sale.nombre_variante,
+      precio_unitario: sale.precio_unitario,
+      cantidad: sale.cantidad,
+      utilidad: sale.utilidad,
+      id_venta: sale._id,
+      id_vendedor: sellerId,
+      id_pedido: sale.pedido,
+      id_sucursal: sale.sucursal,
+      deposito_realizado: sale.deposito_realizado,
+      cliente: sale.pedido?.cliente ?? null,
+      fecha_pedido: sale.pedido?.fecha_pedido ?? null,
+    };
 
+    if (product) {
+      return { ...product, ...base };
+    }
 
-    return products;
-}
+    return {
+      product: "No encontrado",
+      ...base,
+    };
+  });
 
+  return products;
+};
 
 const updateProducts = async (shippingId: any, prods: any[]) => {
-    const sale = await SaleRepository.findByPedidoId(shippingId)
-    if (!sale) throw new Error(`Shipping with id ${shippingId} doesn't exist`);
-    //console.log("🔍 Productos que se intentarán actualizar:", JSON.stringify(prods, null, 2));
+  const sales = await SaleRepository.findByPedidoId(shippingId);
+  if (!sales || sales.length === 0) {
+    throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  }
 
-    return await SaleRepository.updateProducts(sale, prods);
-}
+  const updated: any[] = [];
+
+  for (const prod of prods) {
+    const saleId = String(prod?._id || prod?.id_venta || "");
+    if (!saleId) continue;
+
+    const fieldsToUpdate: any = {};
+    if ("cantidad" in prod) fieldsToUpdate.cantidad = Number(prod.cantidad);
+    if ("precio_unitario" in prod) fieldsToUpdate.precio_unitario = Number(prod.precio_unitario);
+    if ("utilidad" in prod) fieldsToUpdate.utilidad = Number(prod.utilidad);
+    if ("deposito_realizado" in prod) {
+      fieldsToUpdate.deposito_realizado = prod.deposito_realizado;
+    }
+    if ("quien_paga_delivery" in prod) {
+      fieldsToUpdate.quien_paga_delivery = prod.quien_paga_delivery;
+    }
+    if ("id_producto" in prod) fieldsToUpdate.id_producto = prod.id_producto;
+
+    const updatedSale = await updateSaleById(saleId, fieldsToUpdate);
+    if (updatedSale) updated.push(updatedSale);
+  }
+
+  return updated;
+};
 
 const updateSales = async (sales: any[]) => {
-    const updatedSales = [];
-    for (const sale of sales) {
-        const isSale = await SaleRepository.findById(sale.id_venta);
-        if (isSale) {
-            const saleUpdate = {
-                id_venta: sale.id_venta,
-                cantidad: sale.cantidad,
-                precio_unitario: sale.precio_unitario,
-                utilidad: sale.utilidad,
-                deposito_realizado: sale.deposito_realizado,
-                ...(sale.id_producto && { id_producto: sale.id_producto }),
-            };
-            const updatedSale = await SaleRepository.updateSale(saleUpdate);
-            updatedSales.push(updatedSale);
-        }
-        else {
-            throw new Error(`No sale found with that saleId ${sale.id_venta}`)
-        }
+  const updatedSales = [];
+  for (const sale of sales) {
+    const isSale = await SaleRepository.findById(sale.id_venta);
+    if (isSale) {
+      const saleUpdate = {
+        id_venta: sale.id_venta,
+        cantidad: sale.cantidad,
+        precio_unitario: sale.precio_unitario,
+        utilidad: sale.utilidad,
+        deposito_realizado: sale.deposito_realizado,
+        ...(sale.id_producto && { id_producto: sale.id_producto }),
+      };
+      const updatedSale = await SaleRepository.updateSale(saleUpdate as any);
+      updatedSales.push(updatedSale);
+    } else {
+      throw new Error(`No sale found with that saleId ${sale.id_venta}`);
     }
-    return updatedSales;
+  }
+  return updatedSales;
 };
 
 const updateSalesOfProducts = async (stockData: any[]) => {
-    return await SaleRepository.updateSalesOfProducts(stockData);
+  return await SaleRepository.updateSalesOfProducts(stockData);
 };
 
 const deleteProducts = async (shippingId: any, prods: any[]) => {
-    const sale = await SaleRepository.findByPedidoId(shippingId)
-    if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
-    return await SaleRepository.deleteProducts(sale, prods);
-}
+  const sale = await SaleRepository.findByPedidoId(shippingId);
+  if (sale.length === 0) throw new Error(`No sales found for shippingId ${shippingId}`);
+  return await SaleRepository.deleteProducts(sale, prods);
+};
+
 const deleteSalesByIdsAndPullFromPedido = async (pedidoId: string, ventaIds: string[]) => {
-    await VentaModel.deleteMany({ _id: { $in: ventaIds } });
+  for (const ventaId of ventaIds) {
+    await deleteSaleById(String(ventaId));
+  }
 
-    await PedidoModel.findByIdAndUpdate(
-        pedidoId,
-        { $pull: { venta: { $in: ventaIds.map(id => new Types.ObjectId(id)) } } }
-    );
+  await PedidoModel.findByIdAndUpdate(pedidoId, {
+    $pull: { venta: { $in: ventaIds.map((id) => new Types.ObjectId(id)) } },
+  });
 
-    return ventaIds;
+  return ventaIds;
 };
 
 const deleteSalesByIds = async (saleIds: string[]): Promise<any> => {
-    const ventas = await VentaModel.find({ _id: { $in: saleIds } });
-
-    for (const venta of ventas) {
-        await PedidoModel.findByIdAndUpdate(
-            venta.pedido,
-            { $pull: { venta: venta._id } }
-        );
-    }
-
-    await VentaModel.deleteMany({ _id: { $in: saleIds } });
+  for (const saleId of saleIds) {
+    await deleteSaleById(String(saleId));
+  }
 };
 
 const deleteSalesOfProducts = async (stockData: any[]) => {
-    return await SaleRepository.deleteSalesOfProducts(stockData);
+  const ids = stockData
+    .map((item) => String(item?._id || item?.id_venta || ""))
+    .filter((id: string) => id.length > 0);
+
+  for (const id of ids) {
+    await deleteSaleById(id);
+  }
+
+  return ids;
 };
 
 const getDataPaymentProof = async (sellerId: number) => {
-    const data = await SaleRepository.getDataPaymentProof(sellerId)
+  const data = await SaleRepository.getDataPaymentProof(sellerId);
 
-    const products = data.map(venta => ({
-        producto: venta.producto.nombre_producto,
-        unitario: venta.precio_unitario,
-        cantidad: venta.cantidad,
-        total: venta.precio_unitario * venta.cantidad
-    }))
+  const products = data.map((venta) => ({
+    producto: venta.producto.nombre_producto,
+    unitario: venta.precio_unitario,
+    cantidad: venta.cantidad,
+    total: venta.precio_unitario * venta.cantidad,
+  }));
 
-    const payments = data.filter(venta => venta.pedido.adelanto_cliente !== 0)
-        .map(venta => ({
-            date: venta.pedido.fecha_pedido.toLocaleDateString(),
-            client: venta.pedido.adelanto_cliente
-        }))
+  const payments = data
+    .filter((venta) => venta.pedido.adelanto_cliente !== 0)
+    .map((venta) => ({
+      date: venta.pedido.fecha_pedido.toLocaleDateString(),
+      client: venta.pedido.adelanto_cliente,
+    }));
 
-    return { products, payments }
-}
-
-const updateSaleById = async (id: string, fields: any) => {
-    const venta = await SaleRepository.findById(id);
-    if (!venta) {
-        console.error(`Sale with id ${id} not found`);
-        return null;
-    }
-    const { id_sucursal, cantidad, precio_unitario, utilidad, ...others } = fields;
-
-    const cleanedNombreVariante = venta.nombre_variante
-        ?.trim()
-        .replace(/[\s/-]+/g, "");
-    const cleanedNombreProducto = venta.producto.nombre_producto
-        ?.trim()
-        .replace(/\s+/g, "")
-        .replace(/-+/g, "");
-
-    const producto = await ProductService.getProductById(
-        venta.producto._id!.toString()
-    );
-    const sucursal = producto.sucursales.find(
-        (s) => s.id_sucursal.toString() === venta.sucursal.toString()
-    );
-
-    if (!sucursal) {
-        console.error(
-            `Sucursal with id ${venta.sucursal} not found in product ${producto.nombre_producto}`
-        );
-        return null;
-    }
-
-    let indexToUpdate = -1;
-    const varianteToUpdate = sucursal.combinaciones.find((combinacion, index) => {
-        const variantes: any = combinacion.variantes;
-        let variantName = "";
-        for (const [key, value] of variantes.entries()) {
-            variantName += value.trim().replace(/[\s/-]+/g, "");
-        }
-        if (`${cleanedNombreProducto}${variantName}` === cleanedNombreVariante) {
-            indexToUpdate = index;
-            return combinacion;
-        }
-    });
-
-    if (!varianteToUpdate) {
-        console.error(
-            `Variante with name ${venta.nombre_variante} not found in product ${producto.nombre_producto}`
-        );
-        return null;
-    }
-
-    const oldStock = varianteToUpdate.stock;
-    const stockAdjustment = venta.cantidad - cantidad;
-    const newStock = oldStock + stockAdjustment;
-
-    if (newStock < 0) {
-        throw new Error(
-            "No hay suficiente stock disponible para realizar la operación."
-        );
-    }
-    let addPendingSaldo = 0
-    const oldSubtotal = venta.cantidad * venta.precio_unitario;
-    const newSubtotal = cantidad * precio_unitario;
-
-    if (venta.pedido.pagado_al_vendedor) {
-        addPendingSaldo = venta.utilidad - utilidad
-    } else {
-        addPendingSaldo = -(oldSubtotal - venta.utilidad) + (newSubtotal - utilidad);
-
-    }
-
-    sucursal.combinaciones[indexToUpdate].stock = newStock;
-
-    await ProductService.updateProduct(producto._id!.toString(), {
-        sucursales: producto.sucursales.map((s) =>
-            s.id_sucursal === venta.sucursal
-                ? { ...s, combinaciones: [...s.combinaciones] } : s)
-    });
-
-
-    const updatedSale = await SaleRepository.updateSale({
-        _id: id,
-        cantidad,
-        precio_unitario,
-        utilidad,
-        ...others
-    });
-    await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
-
-    return updatedSale;
+  return { products, payments };
 };
 
-const deleteSaleById = async (id: string, id_sucursal: string) => {
-    const venta = await SaleRepository.findById(id);
-    if (!venta) return null;
+const updateSaleById = async (id: string, fields: any) => {
+  const venta = await SaleRepository.findById(id);
+  if (!venta) {
+    return null;
+  }
 
-    const cleanedNombreVariante = venta.nombre_variante?.trim().replace(/[\s/-]+/g, '');
-    const cleanedNombreProducto = venta.producto.nombre_producto?.trim().replace(/\s+/g, '').replace(/-+/g, '');
+  const { id_sucursal, cantidad, precio_unitario, utilidad, ...others } = fields;
 
-    const producto = await ProductService.getProductById(venta.producto._id!.toString());
-    const sucursal = producto.sucursales.find(s => s.id_sucursal.toString() === venta.sucursal.toString());
-    if (!sucursal) {
-        console.error(`Sucursal with id ${id_sucursal} not found in product ${producto.nombre_producto}`);
-        return null;
-    }
+  const nextCantidad = cantidad !== undefined ? Number(cantidad) : Number(venta.cantidad);
+  const nextPrecioUnitario =
+    precio_unitario !== undefined ? Number(precio_unitario) : Number(venta.precio_unitario);
+  const nextUtilidad = utilidad !== undefined ? Number(utilidad) : Number(venta.utilidad);
 
-    let indexToUpdate = -1;
-    const varianteToUpdate = sucursal.combinaciones.find((combinacion, index) => {
-        const variantes: any = combinacion.variantes;
-        let variantName = '';
-        for (const [key, value] of variantes.entries()) {
-            variantName += value.trim().replace(/[\s/-]+/g, '');
-        }
-        if (`${cleanedNombreProducto}${variantName}` === cleanedNombreVariante) {
-            indexToUpdate = index;
-            return combinacion;
-        }
-    });
+  if (!Number.isFinite(nextCantidad) || nextCantidad <= 0) {
+    throw new Error("Cantidad invalida para actualizar la venta.");
+  }
 
-    if (!varianteToUpdate) {
-        console.error(`Variante with name ${venta.nombre_variante} not found in product ${producto.nombre_producto}`);
-        return null;
-    }
+  const stockAdjustment = Number(venta.cantidad) - nextCantidad;
+  await adjustStockForSale(venta, stockAdjustment);
 
-    sucursal.combinaciones[indexToUpdate].stock += venta.cantidad;
-    let addPendingSaldo = 0;
-    const subtotal = venta.cantidad * venta.precio_unitario;
+  const oldSubtotal = Number(venta.cantidad) * Number(venta.precio_unitario);
+  const newSubtotal = nextCantidad * nextPrecioUnitario;
 
-    if (venta.pedido.pagado_al_vendedor) {
-        addPendingSaldo = -venta.utilidad;
-    } else {
-        addPendingSaldo = subtotal - venta.utilidad;
-    }
+  let addPendingSaldo = 0;
+  if (venta.pedido.pagado_al_vendedor) {
+    addPendingSaldo = Number(venta.utilidad) - nextUtilidad;
+  } else {
+    addPendingSaldo =
+      -(oldSubtotal - Number(venta.utilidad)) + (newSubtotal - nextUtilidad);
+  }
 
-    const resProduct = await ProductService.updateProduct(producto._id!.toString(), {
-        sucursales: producto.sucursales.map(s => s.id_sucursal === venta.sucursal
-            ? { ...s, combinaciones: [...s.combinaciones] }
-            : s)
-    });
+  const updatedSale = await SaleRepository.updateSale({
+    _id: id as any,
+    cantidad: nextCantidad,
+    precio_unitario: nextPrecioUnitario,
+    utilidad: nextUtilidad,
+    ...others,
+  } as any);
 
-    if (!resProduct) {
-        console.error(`Error updating product ${producto.nombre_producto} stock after deleting sale ${id}`);
-        return null;
-    }
+  await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
+  return updatedSale;
+};
 
-    const resSaldo = await SellerService.updateSellerSaldo(venta.vendedor, -addPendingSaldo);
-    if (!resSaldo) {
-        console.error(`Error updating seller saldo for sale ${id}`);
-        return null;
+const deleteSaleById = async (id: string, id_sucursal?: string) => {
+  const venta = await SaleRepository.findById(id);
+  if (!venta) return null;
 
-    }
-    const res = await SaleRepository.deleteSaleById(id);
+  await adjustStockForSale(venta, Number(venta.cantidad));
 
-    return res;
+  const subtotal = Number(venta.cantidad) * Number(venta.precio_unitario);
+  const addPendingSaldo = venta.pedido.pagado_al_vendedor
+    ? -Number(venta.utilidad)
+    : subtotal - Number(venta.utilidad);
+
+  const resSaldo = await SellerService.updateSellerSaldo(venta.vendedor, -addPendingSaldo);
+  if (!resSaldo) {
+    return null;
+  }
+
+  await PedidoModel.findByIdAndUpdate(venta.pedido, {
+    $pull: { venta: venta._id },
+  });
+  await VendedorModel.findByIdAndUpdate(venta.vendedor, {
+    $pull: { venta: venta._id },
+  });
+
+  const deleted = await SaleRepository.deleteSaleById(id);
+  return deleted;
 };
 
 const getRawSalesBySellerId = async (sellerId: string) => {
-    const sales = await SaleRepository.findBySellerId(sellerId);
-    if (!sales || sales.length === 0) {
-        return [];
-    }
-    return sales
-}
-
+  const sales = await SaleRepository.findBySellerId(sellerId);
+  if (!sales || sales.length === 0) {
+    return [];
+  }
+  return sales;
+};
 
 export const SaleService = {
-    getAllSales,
-    registerSale,
-    registerMultipleSales,
-    getSalesByShippingId,
-    getProductDetailsByProductId,
-    updateProducts,
-    deleteProducts,
-    getProductsBySellerId,
-    updateSales,
-    deleteSalesByIds,
-    getDataPaymentProof,
-    updateSalesOfProducts,
-    deleteSalesOfProducts,
-    updateSaleById,
-    deleteSaleById,
-    deleteSalesByIdsAndPullFromPedido,
-    getRawSalesBySellerId
-
-}
+  getAllSales,
+  registerSale,
+  registerMultipleSales,
+  getSalesByShippingId,
+  getProductDetailsByProductId,
+  updateProducts,
+  deleteProducts,
+  getProductsBySellerId,
+  updateSales,
+  deleteSalesByIds,
+  getDataPaymentProof,
+  updateSalesOfProducts,
+  deleteSalesOfProducts,
+  updateSaleById,
+  deleteSaleById,
+  deleteSalesByIdsAndPullFromPedido,
+  getRawSalesBySellerId,
+};

@@ -1,9 +1,44 @@
 import { Request, Response } from "express";
 import { SellerService } from "../services/seller.service";
 import { SellerPdfService } from "../services/sellerPdf.service";
+import { UserModel } from "../entities/implements/UserSchema";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
 
-export const getSellers = async (_: Request, res: Response) => {
+const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null> => {
+  const user = await UserModel.findById(userId).select("role vendedor email").lean();
+  if (!user || String(user.role).toLowerCase() !== "seller") {
+    return null;
+  }
+
+  if (user.vendedor) {
+    return String(user.vendedor);
+  }
+
+  if (user.email) {
+    const seller = await VendedorModel.findOne({ mail: user.email }).select("_id").lean();
+    if (seller?._id) {
+      return String(seller._id);
+    }
+  }
+
+  return null;
+};
+
+export const getSellers = async (req: Request, res: Response) => {
   try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+
+    if (authRole === "seller" && authUserId) {
+      const sellerId = await resolveSellerIdByAuthUser(authUserId);
+      if (!sellerId) {
+        return res.json([]);
+      }
+
+      const seller = await SellerService.getSeller(sellerId);
+      return res.json(seller ? [seller] : []);
+    }
+
     const sellerList = await SellerService.getAllSellers();
     res.json(sellerList);
   } catch (err) {

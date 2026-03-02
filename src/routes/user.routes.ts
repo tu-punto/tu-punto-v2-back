@@ -9,19 +9,20 @@ import {
   deleteUserController,
   getAdminsController,
 } from "../controllers/user.controller";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 
 const userRouter = Router();
 
-userRouter.post("/register", registerUserController);
+userRouter.post("/register", requireAuth, requireRole("admin"), registerUserController);
 userRouter.post("/login", loginUserController);
-userRouter.get("/info", getUserInfoController);
-userRouter.post("/logout", logoutUserController);
+userRouter.get("/info", requireAuth, getUserInfoController);
+userRouter.post("/logout", requireAuth, logoutUserController);
 
-userRouter.get("/", getAllUsersController);
-userRouter.get("/admins", getAdminsController);
+userRouter.get("/", requireAuth, requireRole("admin"), getAllUsersController);
+userRouter.get("/admins", requireAuth, requireRole("admin", "operator"), getAdminsController);
 
-userRouter.put("/:id", updateUserController);
-userRouter.delete("/:id", deleteUserController);
+userRouter.put("/:id", requireAuth, requireRole("admin"), updateUserController);
+userRouter.delete("/:id", requireAuth, requireRole("admin"), deleteUserController);
 
 
 export default userRouter;

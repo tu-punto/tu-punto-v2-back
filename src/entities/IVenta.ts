@@ -19,6 +19,8 @@ export interface IVenta {
   sucursal: Types.ObjectId; // Referencia a la sucursal
   quien_paga_delivery?: 'comprador' | 'vendedor' | 'tupunto';
   nombre_variante?: string;
+  variantes?: Record<string, string>;
+  variantKey?: string;
 
   comision: number;
   fecha: Date;
