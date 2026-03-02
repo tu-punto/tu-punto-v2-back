@@ -11,6 +11,15 @@ export const uploadFileToAws = async (
   key: string,
   contentType: string = "application/pdf"
 ): Promise<string> => {
+  if (!awsConfig.bucketName) {
+    throw new Error(
+      "AWS bucket no configurado. Define AWS_S3_BUCKET_NAME (o AWS_BUCKET_NAME) en el .env."
+    );
+  }
+  if (!awsConfig.region) {
+    throw new Error("AWS region no configurada. Define AWS_REGION en el .env.");
+  }
+
   const command = new PutObjectCommand({
     Bucket: awsConfig.bucketName,
     Key: key,
@@ -31,6 +40,12 @@ export const getFileUrlFromAws = async (
   key: string,
   expiresIn: number = 3600
 ): Promise<string> => {
+  if (!awsConfig.bucketName) {
+    throw new Error(
+      "AWS bucket no configurado. Define AWS_S3_BUCKET_NAME (o AWS_BUCKET_NAME) en el .env."
+    );
+  }
+
   const command = new GetObjectCommand({
     Bucket: awsConfig.bucketName,
     Key: key,
@@ -45,6 +60,12 @@ export const getFileUrlFromAws = async (
 };
 
 export const deleteFileFromAws = async (key: string): Promise<boolean> => {
+  if (!awsConfig.bucketName) {
+    throw new Error(
+      "AWS bucket no configurado. Define AWS_S3_BUCKET_NAME (o AWS_BUCKET_NAME) en el .env."
+    );
+  }
+
   const command = new DeleteObjectCommand({
     Bucket: awsConfig.bucketName,
     Key: key,

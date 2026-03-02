@@ -17,6 +17,10 @@ export const SucursalSchema = new Schema({
     type: Number,
     required: true
   },
+  imagen_header: {
+    type: String,
+    default: ""
+  },
   pedido: [{
     type: Types.ObjectId,
     ref: 'Pedido'

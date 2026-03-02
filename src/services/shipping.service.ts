@@ -16,6 +16,10 @@ const getAllShippings = async () => {
   return await ShippingRepository.findAll();
 };
 
+const getShippingsByDateRange = async (from?: Date, to?: Date) => {
+  return await ShippingRepository.findByDateRange(from, to);
+};
+
 const getShippingByIds = async (shippingIds: string[]) => {
   const shippings = await ShippingRepository.findByIds(shippingIds);
   if (!shippings.length)
@@ -575,6 +579,7 @@ const getShippingStatusHistory = async (shippingId: string) => {
 
 export const ShippingService = {
   getAllShippings,
+  getShippingsByDateRange,
   getShippingByIds,
   registerShipping,
   registerSaleToShipping,
