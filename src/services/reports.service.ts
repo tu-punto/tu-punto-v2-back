@@ -414,6 +414,7 @@ export const ReportsService = {
 
     // ------------- 3) Delivery promedio por sucursal -------------
     const deliveryPromedioPorSucursal: any[] = [];
+    let deliveryPromedioGlobal: any = {};
     {
       const acc = new Map<string, { sucursalId: string; sum: number; sumPos: number; n: number; nPos: number }>();
 
@@ -440,6 +441,17 @@ export const ReportsService = {
       }
 
       deliveryPromedioPorSucursal.sort((a, b) => a.sucursal.localeCompare(b.sucursal));
+
+      const totalEnvios = Array.from(acc.values()).reduce((s, r) => s + safeNum(r.n), 0);
+      const sumaCostos = Array.from(acc.values()).reduce((s, r) => s + safeNum(r.sum), 0);
+      const totalEnviosPositivos = Array.from(acc.values()).reduce((s, r) => s + safeNum(r.nPos), 0);
+      const sumaCostosPositivos = Array.from(acc.values()).reduce((s, r) => s + safeNum(r.sumPos), 0);
+
+      deliveryPromedioGlobal = {
+        envios: totalEnvios,
+        promedio_bs: totalEnvios ? +(sumaCostos / totalEnvios).toFixed(2) : 0,
+        promedio_sin_ceros_bs: totalEnviosPositivos ? +(sumaCostosPositivos / totalEnviosPositivos).toFixed(2) : 0,
+      };
     }
 
     // ------------- 3B) Costo por entrega promedio (operativo) -------------
@@ -649,6 +661,49 @@ export const ReportsService = {
       };
     }
 
+
+    // ------------- 5B) Ticket promedio de clientes (por sucursal y global) -------------
+    let ticketPromedioClientesPorSucursal: any[] = [];
+    let ticketPromedioClientesGlobal: any = {};
+    {
+      const acc = new Map<string, { id_sucursal: string; sucursal: string; pedidos: number; monto_total_bs: number }>();
+
+      for (const p of pedidosFlat) {
+        const idSucursal = p.sucursalId ? String(p.sucursalId) : "sin_sucursal";
+        const sucursalNombre = p.sucursalNombre || sucMap.get(idSucursal) || "Sin Sucursal";
+        const totalCobrado = safeNum(p.totalCobrado);
+
+        const got = acc.get(idSucursal) || {
+          id_sucursal: idSucursal === "sin_sucursal" ? "" : idSucursal,
+          sucursal: sucursalNombre,
+          pedidos: 0,
+          monto_total_bs: 0,
+        };
+
+        got.pedidos += 1;
+        got.monto_total_bs += totalCobrado;
+        acc.set(idSucursal, got);
+      }
+
+      ticketPromedioClientesPorSucursal = Array.from(acc.values())
+        .map((r) => ({
+          id_sucursal: r.id_sucursal,
+          sucursal: r.sucursal,
+          pedidos: r.pedidos,
+          monto_total_bs: +r.monto_total_bs.toFixed(2),
+          ticket_promedio_bs: r.pedidos ? +(r.monto_total_bs / r.pedidos).toFixed(2) : 0,
+        }))
+        .sort((a, b) => a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal));
+
+      const pedidos = ticketPromedioClientesPorSucursal.reduce((s, r) => s + safeNum(r.pedidos), 0);
+      const montoTotal = ticketPromedioClientesPorSucursal.reduce((s, r) => s + safeNum(r.monto_total_bs), 0);
+
+      ticketPromedioClientesGlobal = {
+        pedidos,
+        monto_total_bs: +montoTotal.toFixed(2),
+        ticket_promedio_bs: pedidos ? +(montoTotal / pedidos).toFixed(2) : 0,
+      };
+    }
     // ------------- 6) Clientes activos (por sucursal y global) -------------
     let clientesActivosPorSucursal: any[] = [];
     let clientesActivosGlobal: any = {};
@@ -749,6 +804,7 @@ export const ReportsService = {
       topProductosPorSucursal,
       topGlobal,
       deliveryPromedioPorSucursal,
+      deliveryPromedioGlobal,
       costoEntregaPromedioPorSucursal,
       costoEntregaPromedioGlobal,
       clientesPorHoraMensual,
@@ -758,6 +814,8 @@ export const ReportsService = {
       ventasPorHoraDetalle,
       ticketPromedioPorSucursal,
       ticketPromedioGlobal,
+      ticketPromedioClientesPorSucursal,
+      ticketPromedioClientesGlobal,
       clientesActivosPorSucursal,
       clientesActivosGlobal,
       vendedoresActivosPorSucursal,
@@ -834,6 +892,7 @@ export const ReportsService = {
 
     const reportesSet = params.reportes && params.reportes.length ? new Set(params.reportes) : null;
     if (reportesSet?.has("ticketPromedioPorSucursal")) reportesSet.add("ticketPromedioGlobal");
+    if (reportesSet?.has("ticketPromedioClientesPorSucursal")) reportesSet.add("ticketPromedioClientesGlobal");
     if (
       reportesSet?.has("ventasPorHoraPorSucursal") ||
       reportesSet?.has("ventasPorHoraEntregasPorSucursal") ||
@@ -843,6 +902,7 @@ export const ReportsService = {
     }
     if (reportesSet?.has("clientesActivosPorSucursal")) reportesSet.add("clientesActivosGlobal");
     if (reportesSet?.has("costoEntregaPromedioPorSucursal")) reportesSet.add("costoEntregaPromedioGlobal");
+    if (reportesSet?.has("deliveryPromedioPorSucursal")) reportesSet.add("deliveryPromedioGlobal");
     const colsMap = params.columnas;
 
     const pickCols = (rows: any[], key: string) => {
@@ -869,6 +929,7 @@ export const ReportsService = {
     addSheet("Top10_Productos_por_Sucursal", "topProductosPorSucursal", data.topProductosPorSucursal);
     addSheet("Top10_Global", "topGlobal", data.topGlobal);
     addSheet("Delivery_Promedio", "deliveryPromedioPorSucursal", data.deliveryPromedioPorSucursal);
+    addSheet("Delivery_Promedio_Global", "deliveryPromedioGlobal", [data.deliveryPromedioGlobal]);
     addSheet("Costo_Entrega_Promedio", "costoEntregaPromedioPorSucursal", data.costoEntregaPromedioPorSucursal);
     addSheet("Costo_Entrega_Global", "costoEntregaPromedioGlobal", [data.costoEntregaPromedioGlobal]);
     addSheet("Clientes_por_Hora_(Mes)", "clientesPorHoraMensual", data.clientesPorHoraMensual);
@@ -878,6 +939,8 @@ export const ReportsService = {
     addSheet("Ventas_Por_Hora_Detalle", "ventasPorHoraDetalle", data.ventasPorHoraDetalle);
     addSheet("Ticket_Promedio_Por_Sucursal", "ticketPromedioPorSucursal", data.ticketPromedioPorSucursal);
     addSheet("Ticket_Promedio_Global", "ticketPromedioGlobal", [data.ticketPromedioGlobal]);
+    addSheet("Ticket_Clientes_Por_Sucursal", "ticketPromedioClientesPorSucursal", data.ticketPromedioClientesPorSucursal);
+    addSheet("Ticket_Clientes_Global", "ticketPromedioClientesGlobal", [data.ticketPromedioClientesGlobal]);
     addSheet("Clientes_Activos_Por_Sucursal", "clientesActivosPorSucursal", data.clientesActivosPorSucursal);
     addSheet("Clientes_Activos_Global", "clientesActivosGlobal", [data.clientesActivosGlobal]);
     addSheet("Vendedores_Activos_Por_Sucursal", "vendedoresActivosPorSucursal", data.vendedoresActivosPorSucursal);
@@ -1636,3 +1699,4 @@ async exportVentasQrXlsx({ meses, sucursalIds }: VentasQrParams) {
 },
 
 };
+
