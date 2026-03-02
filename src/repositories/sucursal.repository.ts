@@ -11,13 +11,17 @@ const getAllSucursals = async () => {
   return sucursales;
 };
 
-const getSucursalByID = async (id: number) => {
-  return await SucursalModel.findOne({ _id: id }).populate([
+const getSucursalByID = async (id: string) => {
+  return await SucursalModel.findById(id).populate([
     'pedido',
     'trabajador',
     'ingreso',
     'cierre_caja'
   ]);
+};
+
+const getSucursalHeaderInfoByID = async (id: string) => {
+  return await SucursalModel.findById(id).select("_id nombre imagen_header").lean();
 };
 
 const registerSucursal = async (sucursal: ISucursal) => {
@@ -37,10 +41,19 @@ const updateSucursal = async (
   return updated;
 };
 
+const updateSucursalByID = async (
+  id: string,
+  newData: Partial<ISucursal>
+) => {
+  return await SucursalModel.findByIdAndUpdate(id, newData, { new: true });
+};
+
 
 export const SucursalRepository = {
   getAllSucursals,
   updateSucursal,
+  updateSucursalByID,
   registerSucursal,
+  getSucursalHeaderInfoByID,
   getSucursalByID,
 };
