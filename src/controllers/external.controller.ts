@@ -11,6 +11,24 @@ export const getAllExternalSales = async (req: Request, res: Response) => {
     }
 }
 
+export const getExternalSaleByID = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const externalSale = await ExternalSaleService.getExternalSaleByID(id);
+        if (!externalSale) {
+            return res.status(404).json({
+                success: false,
+                message: "Venta externa no encontrada"
+            });
+        }
+
+        res.json(externalSale);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+}
+
 export const registerExternalSale = async (req: Request, res: Response) => {
     const externalSale = req.body;
     try {
@@ -22,6 +40,23 @@ export const registerExternalSale = async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({error: "Internal Server Error"});
+    }
+}
+
+export const registerExternalSalesByPackages = async (req: Request, res: Response) => {
+    try {
+        const createdSales = await ExternalSaleService.registerExternalSalesByPackages(req.body);
+        res.json({
+            success: true,
+            createdCount: createdSales.length,
+            data: createdSales
+        });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            message: error?.message || "Internal Server Error"
+        });
     }
 }
 

@@ -2,17 +2,34 @@ import { Schema, model, Types } from 'mongoose';
 import { IVentaExternaDocument } from '../documents/IVentaExternaDocument';
 
 const VentaExternaSchema = new Schema({
+    carnet_vendedor: {
+        type: String,
+        required: true,
+        trim: true
+    },
     vendedor: {
         type: String,
-        required: true
+        required: true,
+        trim: true
     },
     telefono_vendedor: {
         type: String,
         required: false
     },
+    numero_paquete: {
+        type: Number,
+        required: true,
+        default: 1
+    },
     comprador: {
         type: String,
-        required: true
+        required: true,
+        trim: true
+    },
+    descripcion_paquete: {
+        type: String,
+        required: true,
+        trim: true
     },
     telefono_comprador: {
         type: String,
@@ -44,10 +61,40 @@ const VentaExternaSchema = new Schema({
         required:false,
         default: 0
     },
+    precio_paquete: {
+        type: Number,
+        required: true,
+        default: 0
+    },
 
     precio_total: {
         type: Number,
         required: true
+    },
+    esta_pagado: {
+        type: String,
+        enum: ["si", "no"],
+        default: "no",
+    },
+    saldo_cobrar: {
+        type: Number,
+        default: 0,
+    },
+    estado_pedido: {
+        type: String,
+        default: "En Espera",
+    },
+    hora_entrega_real: {
+        type: Date,
+        required: false
+    },
+    lugar_entrega: {
+        type: String,
+        default: "Externo"
+    },
+    is_external: {
+        type: Boolean,
+        default: true
     },
 
     delivered: {

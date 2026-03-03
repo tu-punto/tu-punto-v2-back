@@ -5,15 +5,24 @@ import { IVentaExternaDocument } from "../entities/documents/IVentaExternaDocume
 const getAllExternalSales = async (): Promise<IVentaExternaDocument[]> => {
     return await VentaExternaModel.find().populate(
         'sucursal'
-    )
+    );
+}
+
+const getExternalSaleByID = async (id: string): Promise<IVentaExternaDocument | null> => {
+    return await VentaExternaModel.findById(id).populate('sucursal');
 }
 
 const registerExternalSale = async (externalSale: IVentaExterna): Promise<IVentaExternaDocument> => {
     const newSale = new VentaExternaModel(externalSale);
-    console.log(externalSale)
     const saved = await newSale.save();
-    
+
     return saved;
+}
+
+const registerExternalSales = async (externalSales: IVentaExterna[]): Promise<IVentaExternaDocument[]> => {
+    if (!externalSales.length) return [];
+    const created = await VentaExternaModel.insertMany(externalSales);
+    return created as IVentaExternaDocument[];
 }
 
 const deleteExternalSaleByID = async (externalSaleID: string) => {
@@ -30,7 +39,9 @@ const updateExternalSaleByID = async (id: string, externalSale: IVentaExterna): 
 
 export const ExternalSaleRepository = {
     getAllExternalSales,
+    getExternalSaleByID,
     registerExternalSale,
+    registerExternalSales,
     deleteExternalSaleByID,
     updateExternalSaleByID
 };
