@@ -1,6 +1,5 @@
 import { ISucursal } from "../entities/ISucursal";
 import { SucursalRepository } from "../repositories/sucursal.repository";
-import sucursalRouter from "../routes/sucursal.routes";
 
 const getAllSucursals = async () => {
   const sucursal = await SucursalRepository.getAllSucursals();
@@ -11,13 +10,19 @@ const registerSucursal = async (sucursal: ISucursal) => {
   return SucursalRepository.registerSucursal(sucursal);
 };
 
-const getSucursalByID = async (id: number) => {
+const getSucursalByID = async (id: string) => {
   const sucursal = await SucursalRepository.getSucursalByID(id);
   if (!sucursal) throw new Error("Doesn't exist a sucursal with such id");
   return sucursal;
 };
 
-const updateSucursal = async (sucursalID: any, newData: any) => {
+const getSucursalHeaderInfoByID = async (id: string) => {
+  const sucursal = await SucursalRepository.getSucursalHeaderInfoByID(id);
+  if (!sucursal) throw new Error("Doesn't exist a sucursal with such id");
+  return sucursal;
+};
+
+const updateSucursal = async (sucursalID: string, newData: Partial<ISucursal>) => {
   const sucursal = await SucursalRepository.getSucursalByID(sucursalID);
   if (!sucursal)
     throw new Error(`sucursal with id ${sucursalID} doesn't exist`);
@@ -28,5 +33,6 @@ export const SucursalsService = {
   getAllSucursals,
   registerSucursal,
   updateSucursal,
+  getSucursalHeaderInfoByID,
   getSucursalByID,
 };

@@ -1,5 +1,5 @@
+import "dotenv/config";
 import express, { Express } from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import connectToMongoDB from "./config/mongoConnection";
@@ -7,7 +7,6 @@ import routes from "./routes";
 import { seedSucursal } from "./seeds/seedSucursal";
 import { seedUser } from "./seeds/seedUser";
 import { seedFinanceFluxCategory } from "./seeds/seedFinanceFluxCategory";
-dotenv.config();
 
 const app: Express = express();
 const port = process.env.SERVER_PORT || 3000;

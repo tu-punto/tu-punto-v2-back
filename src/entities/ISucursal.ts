@@ -10,6 +10,7 @@ export interface ISucursal {
     direccion: string;
     ciudad: string;
     telefono: number;
+    imagen_header?: string;
      
     pedido?: Types.ObjectId[];  
     trabajador: Types.ObjectId[]; 
