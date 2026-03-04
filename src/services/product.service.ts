@@ -396,8 +396,27 @@ const generateIngressPDF = async (data: any): Promise<Buffer> => {
 
   return Buffer.from(pdfBuffer);
 };
-const getFlatProductList = async (sucursalId?: string) => {
-  return await ProductRepository.findFlatProductList(sucursalId);
+const getFlatProductList = async (params?: {
+  sucursalId?: string;
+  sellerId?: string;
+  sellerIds?: string[];
+  categoryId?: string;
+  inStock?: boolean;
+  q?: string;
+}) => {
+  return await ProductRepository.findFlatProductList(params);
+};
+
+const getFlatProductListPage = async (params?: {
+  sucursalId?: string;
+  sellerId?: string;
+  categoryId?: string;
+  inStock?: boolean;
+  q?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  return await ProductRepository.findFlatProductListPage(params);
 };
 
 export const ProductService = {
@@ -418,6 +437,7 @@ export const ProductService = {
   generateIngressPDF,
   getAllTemporaryProducts,
   getFlatProductList,
+  getFlatProductListPage,
   regenerateProductQR,
   getProductQR,
   findProductByQRCode

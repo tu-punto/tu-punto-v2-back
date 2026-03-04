@@ -11,6 +11,37 @@ export const getShipping = async (req: Request, res: Response) => {
   }
 };
 
+export const getShippingList = async (req: Request, res: Response) => {
+  try {
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 50);
+    const status = (req.query.status as string | undefined) || undefined;
+    const originId = (req.query.originId as string | undefined) || undefined;
+    const sellerId = (req.query.sellerId as string | undefined) || undefined;
+    const client = (req.query.client as string | undefined) || undefined;
+    const fromRaw = (req.query.from as string | undefined) || undefined;
+    const toRaw = (req.query.to as string | undefined) || undefined;
+
+    const from = fromRaw ? new Date(fromRaw) : undefined;
+    const to = toRaw ? new Date(toRaw) : undefined;
+
+    const result = await ShippingService.getShippingsList({
+      page,
+      limit,
+      status,
+      from,
+      to,
+      originId,
+      sellerId,
+      client
+    });
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export const getShippingByIds = async (req: Request, res: Response) => {
   const { ids } = req.params;
   try {

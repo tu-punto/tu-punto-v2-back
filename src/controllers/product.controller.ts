@@ -3,6 +3,28 @@ import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
 import { ProductVariantQRService } from "../services/productVariantQR.service";
 import { ProductVariantKeyService } from "../services/productVariantKey.service";
+import { UserModel } from "../entities/implements/UserSchema";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
+
+const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null> => {
+  const user = await UserModel.findById(userId).select("role vendedor email").lean();
+  if (!user || String(user.role).toLowerCase() !== "seller") {
+    return null;
+  }
+
+  if (user.vendedor) {
+    return String(user.vendedor);
+  }
+
+  if (user.email) {
+    const seller = await VendedorModel.findOne({ mail: user.email }).select("_id").lean();
+    if (seller?._id) {
+      return String(seller._id);
+    }
+  }
+
+  return null;
+};
 
 export const getProduct = async (req: Request, res: Response) => {
   try {
@@ -446,7 +468,27 @@ export const getFlatProductList = async (req: Request, res: Response) => {
 
   try {
     const sucursalId = req.query.sucursalId as string | undefined;
-    const products = await ProductService.getFlatProductList(sucursalId);
+    const sellerId = req.query.sellerId as string | undefined;
+    const sellerIdsRaw = req.query.sellerIds as string | undefined;
+    const sellerIds = sellerIdsRaw
+      ? sellerIdsRaw.split(",").map((id) => id.trim()).filter(Boolean)
+      : undefined;
+    const categoryId = req.query.categoryId as string | undefined;
+    const q = req.query.q as string | undefined;
+    const inStockRaw = req.query.inStock as string | undefined;
+    const inStock =
+      inStockRaw === undefined
+        ? undefined
+        : inStockRaw === "true" || inStockRaw === "1";
+
+    const products = await ProductService.getFlatProductList({
+      sucursalId,
+      sellerId,
+      sellerIds,
+      categoryId,
+      inStock,
+      q
+    });
 
 
 
@@ -454,6 +496,114 @@ export const getFlatProductList = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error en getFlatProductList:", error);
     res.status(500).json({ error: "Error al obtener productos optimizados" });
+  }
+};
+
+export const getSellerInventoryAll = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+
+    let sellerId = req.query.sellerId as string | undefined;
+    if (authRole === "seller" && authUserId) {
+      sellerId = (await resolveSellerIdByAuthUser(authUserId)) || undefined;
+    }
+
+    if (!sellerId) {
+      return res.status(400).json({ error: "sellerId no resuelto" });
+    }
+
+    const sucursalId = req.query.sucursalId as string | undefined;
+    const categoryId = req.query.categoryId as string | undefined;
+    const q = req.query.q as string | undefined;
+    const inStockRaw = req.query.inStock as string | undefined;
+    const inStock =
+      inStockRaw === undefined
+        ? undefined
+        : inStockRaw === "true" || inStockRaw === "1";
+
+    const rows = await ProductService.getFlatProductList({
+      sellerId,
+      sucursalId,
+      categoryId,
+      q,
+      inStock
+    });
+    res.json(rows);
+  } catch (error) {
+    console.error("Error en getSellerInventoryAll:", error);
+    res.status(500).json({ error: "Error al obtener inventario completo de vendedor" });
+  }
+};
+
+export const getFlatProductListPage = async (req: Request, res: Response) => {
+  try {
+    const sucursalId = req.query.sucursalId as string | undefined;
+    const sellerId = req.query.sellerId as string | undefined;
+    const categoryId = req.query.categoryId as string | undefined;
+    const q = req.query.q as string | undefined;
+    const inStockRaw = req.query.inStock as string | undefined;
+    const inStock =
+      inStockRaw === undefined
+        ? undefined
+        : inStockRaw === "true" || inStockRaw === "1";
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 10);
+
+    const result = await ProductService.getFlatProductListPage({
+      sucursalId,
+      sellerId,
+      categoryId,
+      inStock,
+      q,
+      page,
+      limit
+    });
+    res.json(result);
+  } catch (error) {
+    console.error("Error en getFlatProductListPage:", error);
+    res.status(500).json({ error: "Error al obtener productos optimizados paginados" });
+  }
+};
+
+export const getSellerInventoryList = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+
+    let sellerId = req.query.sellerId as string | undefined;
+    if (authRole === "seller" && authUserId) {
+      sellerId = (await resolveSellerIdByAuthUser(authUserId)) || undefined;
+    }
+
+    if (!sellerId) {
+      return res.status(400).json({ error: "sellerId no resuelto" });
+    }
+
+    const sucursalId = req.query.sucursalId as string | undefined;
+    const categoryId = req.query.categoryId as string | undefined;
+    const q = req.query.q as string | undefined;
+    const inStockRaw = req.query.inStock as string | undefined;
+    const inStock =
+      inStockRaw === undefined
+        ? undefined
+        : inStockRaw === "true" || inStockRaw === "1";
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 10);
+
+    const result = await ProductService.getFlatProductListPage({
+      sellerId,
+      sucursalId,
+      categoryId,
+      q,
+      inStock,
+      page,
+      limit
+    });
+    res.json(result);
+  } catch (error) {
+    console.error("Error en getSellerInventoryList:", error);
+    res.status(500).json({ error: "Error al obtener inventario de vendedor" });
   }
 };
 
@@ -475,6 +625,9 @@ export const ProductController = {
   generateIngressPDF,
   getTemporaryProducts,
   getFlatProductList,
+  getSellerInventoryAll,
+  getFlatProductListPage,
+  getSellerInventoryList,
   getProductQR,
   regenerateProductQR,
   findProductByQR,

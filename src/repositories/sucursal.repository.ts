@@ -11,6 +11,10 @@ const getAllSucursals = async () => {
   return sucursales;
 };
 
+const getAllSucursalsBasic = async () => {
+  return await SucursalModel.find({}, { _id: 1, nombre: 1, imagen_header: 1 }).lean();
+};
+
 const getSucursalByID = async (id: string) => {
   return await SucursalModel.findById(id).populate([
     'pedido',
@@ -51,6 +55,7 @@ const updateSucursalByID = async (
 
 export const SucursalRepository = {
   getAllSucursals,
+  getAllSucursalsBasic,
   updateSucursal,
   updateSucursalByID,
   registerSucursal,

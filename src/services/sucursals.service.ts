@@ -6,6 +6,10 @@ const getAllSucursals = async () => {
   return sucursal;
 };
 
+const getAllSucursalsBasic = async () => {
+  return await SucursalRepository.getAllSucursalsBasic();
+};
+
 const registerSucursal = async (sucursal: ISucursal) => {
   return SucursalRepository.registerSucursal(sucursal);
 };
@@ -31,6 +35,7 @@ const updateSucursal = async (sucursalID: string, newData: Partial<ISucursal>) =
 
 export const SucursalsService = {
   getAllSucursals,
+  getAllSucursalsBasic,
   registerSucursal,
   updateSucursal,
   getSucursalHeaderInfoByID,

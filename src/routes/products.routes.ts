@@ -7,6 +7,9 @@ const productRouter = Router();
 // GET
 productRouter.get("/", ProductController.getProduct);
 productRouter.get("/flat", ProductController.getFlatProductList);
+productRouter.get("/flat/list", ProductController.getFlatProductListPage);
+productRouter.get("/seller/inventory/all", ProductController.getSellerInventoryAll);
+productRouter.get("/seller/inventory", ProductController.getSellerInventoryList);
 productRouter.get("/features/:id", ProductController.getFeatures);
 productRouter.get("/category/:id", ProductController.getProductCategory);
 productRouter.get("/seller/:id", requireSellerOwnership("id"), ProductController.getAllProductsEntryAmountBySellerId);

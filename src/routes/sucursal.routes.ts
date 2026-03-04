@@ -7,6 +7,7 @@ import upload from "../config/multerConfig";
 const sucursalRouter = Router()
 
 sucursalRouter.get('/', SucursalController.getAllSucursals)
+sucursalRouter.get('/basic', SucursalController.getAllSucursalsBasic)
 sucursalRouter.post('/', requireAuth, requireRole("admin"), registerSucursalController)
 sucursalRouter.put('/:id', requireAuth, requireRole("admin"), updateSucursalController)
 sucursalRouter.post('/:id/header-image', requireAuth, requireRole("admin"), upload.single("imagen"), uploadSucursalHeaderImageController)

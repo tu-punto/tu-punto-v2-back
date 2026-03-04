@@ -35,6 +35,13 @@ const getAllSellers = async () => {
   return processedSellers;
 };
 
+const getAllSellersBasic = async (params?: {
+  sucursalId?: string;
+  sellerId?: string;
+}) => {
+  return await SellerRepository.findAllBasic(params);
+};
+
 const getSeller = async (sellerId: string) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) {
@@ -389,6 +396,7 @@ const getSellerPaymentProofs = async (sellerId: string) => {
 
 export const SellerService = {
   getAllSellers,
+  getAllSellersBasic,
   getSeller,
   registerSeller,
   updateSeller,

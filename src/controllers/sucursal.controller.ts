@@ -13,6 +13,16 @@ const getAllSucursals = async (req: Request, res: Response) => {
   }
 };
 
+const getAllSucursalsBasic = async (req: Request, res: Response) => {
+  try {
+    const sucursals = await SucursalsService.getAllSucursalsBasic();
+    res.json(sucursals);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: "Failed", error });
+  }
+};
+
 export const registerSucursalController = async (
   req: Request,
   res: Response
@@ -106,4 +116,5 @@ export const uploadSucursalHeaderImageController = async (req: Request, res: Res
 
 export const SucursalController = {
   getAllSucursals,
+  getAllSucursalsBasic,
 };

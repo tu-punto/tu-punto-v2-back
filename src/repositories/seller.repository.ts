@@ -16,6 +16,36 @@ const findAll = async (): Promise<IVendedor[]> => {
   return await VendedorModel.find().lean<IVendedor[]>().exec();
 };
 
+const findAllBasic = async (params?: {
+  sucursalId?: string;
+  sellerId?: string;
+}): Promise<IVendedor[]> => {
+  const filter: any = {};
+  if (params?.sellerId && Types.ObjectId.isValid(params.sellerId)) {
+    filter._id = new Types.ObjectId(params.sellerId);
+  }
+  if (params?.sucursalId && Types.ObjectId.isValid(params.sucursalId)) {
+    filter["pago_sucursales.id_sucursal"] = new Types.ObjectId(params.sucursalId);
+  }
+
+  return await VendedorModel.find(filter, {
+    nombre: 1,
+    apellido: 1,
+    marca: 1,
+    telefono: 1,
+    mail: 1,
+    comision_porcentual: 1,
+    comision_fija: 1,
+    fecha_vigencia: 1,
+    pago_sucursales: 1,
+    saldo_pendiente: 1,
+    deuda: 1,
+    emite_factura: 1
+  })
+    .lean<IVendedor[]>()
+    .exec();
+};
+
 const findById = async (sellerId: any): Promise<IVendedor | null> => {
   return await VendedorModel.findById(sellerId).lean<IVendedor>().exec();
 };
@@ -153,6 +183,7 @@ const findWithDebtsAndSales = async () => {
 
 export const SellerRepository = {
   findAll,
+  findAllBasic,
   findAllForClientStatus: async () => {
     return await VendedorModel.find(
       {},

@@ -6,6 +6,18 @@ const getAllExternalSales = async () => {
     return await ExternalSaleRepository.getAllExternalSales();
 }
 
+const getExternalSalesList = async (params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    from?: Date;
+    to?: Date;
+    sucursalId?: string;
+    client?: string;
+}) => {
+    return await ExternalSaleRepository.getExternalSalesList(params);
+}
+
 const getExternalSaleByID = async (id: string) => {
     return await ExternalSaleRepository.getExternalSaleByID(id);
 }
@@ -159,6 +171,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
 export const ExternalSaleService = {
     getAllExternalSales,
+    getExternalSalesList,
     getExternalSaleByID,
     registerExternalSale,
     registerExternalSalesByPackages,

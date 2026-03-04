@@ -16,6 +16,19 @@ const getAllShippings = async () => {
   return await ShippingRepository.findAll();
 };
 
+const getShippingsList = async (params: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  from?: Date;
+  to?: Date;
+  originId?: string;
+  sellerId?: string;
+  client?: string;
+}) => {
+  return await ShippingRepository.findList(params);
+};
+
 const getShippingsByDateRange = async (from?: Date, to?: Date) => {
   return await ShippingRepository.findByDateRange(from, to);
 };
@@ -579,6 +592,7 @@ const getShippingStatusHistory = async (shippingId: string) => {
 
 export const ShippingService = {
   getAllShippings,
+  getShippingsList,
   getShippingsByDateRange,
   getShippingByIds,
   registerShipping,

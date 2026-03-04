@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getShipping,
+  getShippingList,
   registerShipping,
   registerSaleToShipping,
   ShippingController,
@@ -20,6 +21,7 @@ import { requireSellerOwnership } from "../middlewares/auth.middleware";
 const shippingRouter = Router();
 //rutas
 shippingRouter.get("/", getShipping);
+shippingRouter.get("/list", getShippingList);
 
 shippingRouter.get("/:ids", getShippingByIds);
 

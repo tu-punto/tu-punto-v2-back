@@ -47,6 +47,29 @@ export const getSellers = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellersBasic = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+    const sucursalId = (req.query.sucursalId as string | undefined) || undefined;
+
+    if (authRole === "seller" && authUserId) {
+      const sellerId = await resolveSellerIdByAuthUser(authUserId);
+      if (!sellerId) {
+        return res.json([]);
+      }
+      const sellerList = await SellerService.getAllSellersBasic({ sellerId, sucursalId });
+      return res.json(sellerList);
+    }
+
+    const sellerList = await SellerService.getAllSellersBasic({ sucursalId });
+    return res.json(sellerList);
+  } catch (err) {
+    console.error("Error obteniendo vendedores basicos:", err);
+    return res.status(500).json({ msg: "Error obteniendo vendedores basicos", err });
+  }
+};
+
 export const getSeller = async (req: Request, res: Response) => {
   try {
     const sellerIdParam = req.params.id;

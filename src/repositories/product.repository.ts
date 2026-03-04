@@ -248,15 +248,52 @@ const addVariantToProduct = async (
 
   return await producto.save();
 };
-const findFlatProductList = async (sucursalId?: string) => {
-    console.log("📦 findFlatProductList recibido sucursalId:", sucursalId);
+type FlatInventoryParams = {
+  sucursalId?: string;
+  sellerId?: string;
+  sellerIds?: string[];
+  categoryId?: string;
+  inStock?: boolean;
+  q?: string;
+};
+
+type FlatInventoryPageParams = FlatInventoryParams & {
+  page?: number;
+  limit?: number;
+};
+
+const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
+  const sucursalId = params?.sucursalId;
+  const sellerId = params?.sellerId;
+  const sellerIds = Array.isArray(params?.sellerIds) ? params?.sellerIds : [];
+  const categoryId = params?.categoryId;
+  const inStock = params?.inStock;
+  const q = params?.q;
+  console.log("📦 findFlatProductList filtros:", {
+    sucursalId,
+    sellerId,
+    sellerIdsCount: sellerIds.length,
+    categoryId,
+    inStock,
+    q
+  });
 
   const match: any = { esTemporal: { $ne: true } };
+  if (sellerId && Types.ObjectId.isValid(sellerId)) {
+    match.id_vendedor = new Types.ObjectId(sellerId);
+  } else if (sellerIds.length > 0) {
+    const validSellerIds = sellerIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    if (validSellerIds.length > 0) {
+      match.id_vendedor = { $in: validSellerIds };
+    }
+  }
+  if (categoryId && Types.ObjectId.isValid(categoryId)) {
+    match.id_categoria = new Types.ObjectId(categoryId);
+  }
 
-  const pipeline: any[] = [
-    { $match: match },
-    { $unwind: "$sucursales" }
-  ];
+  const pipeline: any[] = [{ $match: match }, { $unwind: "$sucursales" }];
 
   if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
     pipeline.push({
@@ -268,9 +305,9 @@ const findFlatProductList = async (sucursalId?: string) => {
     console.warn("⚠️ sucursalId inválido recibido en findFlatProductList:", sucursalId);
   }
 
-
   pipeline.push(
     { $unwind: "$sucursales.combinaciones" },
+    ...(inStock ? [{ $match: { "sucursales.combinaciones.stock": { $gt: 0 } } }] : []),
     {
       $lookup: {
         from: "Categoria",
@@ -326,7 +363,50 @@ const findFlatProductList = async (sucursalId?: string) => {
     }
   );
 
+  if (q && q.trim()) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { nombre_producto: { $regex: q.trim(), $options: "i" } },
+          { variante: { $regex: q.trim(), $options: "i" } }
+        ]
+      }
+    });
+  }
+
+  return pipeline;
+};
+
+const findFlatProductList = async (params?: FlatInventoryParams) => {
+  const pipeline = buildFlatProductPipeline(params);
   return await ProductoModel.aggregate(pipeline);
+};
+
+const findFlatProductListPage = async (params?: FlatInventoryPageParams) => {
+  const safePage = Math.max(1, Number(params?.page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(params?.limit) || 10));
+  const pipeline = buildFlatProductPipeline(params);
+
+  const result = await ProductoModel.aggregate([
+    ...pipeline,
+    { $sort: { nombre_producto: 1, _id: 1 } },
+    {
+      $facet: {
+        rows: [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }],
+        total: [{ $count: "count" }]
+      }
+    }
+  ]);
+
+  const rows = result?.[0]?.rows || [];
+  const total = Number(result?.[0]?.total?.[0]?.count || 0);
+  return {
+    rows,
+    total,
+    page: safePage,
+    limit: safeLimit,
+    pages: Math.max(1, Math.ceil(total / safeLimit))
+  };
 };
 
 export const ProductRepository = {
@@ -346,5 +426,6 @@ export const ProductRepository = {
   addVariantToProduct,
   findAllTemporales,
   findFlatProductList,
+  findFlatProductListPage,
   findByQRCode
 };
