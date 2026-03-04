@@ -1,9 +1,17 @@
 import { CierreCajaModel } from "../entities/implements/CierreCajaSchema";
 import { ICierreCaja } from "../entities/ICierreCaja";
+import { Types } from "mongoose";
 
-const findAll = async (): Promise<ICierreCaja[]> => {
-  return await CierreCajaModel.find()
+const findAll = async (sucursalId?: string): Promise<ICierreCaja[]> => {
+  const filter: Record<string, unknown> = {};
+
+  if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
+    filter.id_sucursal = new Types.ObjectId(sucursalId);
+  }
+
+  return await CierreCajaModel.find(filter)
     .populate('id_sucursal')
+    .sort({ created_at: 1 })
     .lean() 
     .exec();
 };
@@ -22,10 +30,26 @@ const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
   return await CierreCajaModel.findByIdAndUpdate(id, updates, { new: true });
 };
 
+const findLatestBySucursalWithinRange = async (
+  sucursalId: string,
+  from: Date,
+  to: Date
+): Promise<ICierreCaja | null> => {
+  if (!Types.ObjectId.isValid(sucursalId)) return null;
+
+  return await CierreCajaModel.findOne({
+    id_sucursal: new Types.ObjectId(sucursalId),
+    created_at: { $gte: from, $lte: to },
+  })
+    .sort({ created_at: -1 })
+    .lean()
+    .exec();
+};
 
 export const BoxCloseRepository = {
   findAll,
   registerBoxClose,
   getBoxCloseById,
   updateBoxClose,
+  findLatestBySucursalWithinRange,
 };

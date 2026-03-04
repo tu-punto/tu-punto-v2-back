@@ -151,9 +151,14 @@ export const deleteShippingById = async (req: Request, res: Response) => {
 };
 
 export const getSalesHistory = async (req: Request, res: Response) => {
-  const { date, sucursalId } = req.query;
+  const { date, sucursalId, fromLastClose } = req.query;
+  const useLastClose = String(fromLastClose || "").toLowerCase() === "true";
   try {
-    const result = await ShippingService.getDailySalesHistory(date as string | undefined, sucursalId as string);
+    const result = await ShippingService.getDailySalesHistory(
+      date as string | undefined,
+      sucursalId as string,
+      useLastClose
+    );
     res.json(result);
   } catch (error) {
     console.error("Error al obtener historial de ventas:", error);

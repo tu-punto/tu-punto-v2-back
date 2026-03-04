@@ -11,6 +11,7 @@ import moment from 'moment-timezone';
 import { v4 as uuidv4 } from "uuid";
 import { QRService } from "./qr.service";
 import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatusHistorySchema";
+import { BoxCloseRepository } from "../repositories/boxClose.repository";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -368,9 +369,22 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
 
   return { success: true, ventas: savedSales };
 };
-const getDailySalesHistory = async (date: string | undefined, sucursalId: string) => {
-  const startOfDay = date ? dayjs(date).startOf('day').toDate() : null;
-  const endOfDay = date ? dayjs(date).endOf('day').toDate() : null;
+const getDailySalesHistory = async (
+  date: string | undefined,
+  sucursalId: string,
+  fromLastClose = false
+) => {
+  const nowLaPaz = moment.tz("America/La_Paz");
+  const baseMoment = date
+    ? moment.tz(date, "America/La_Paz")
+    : nowLaPaz.clone();
+  const startOfDay = baseMoment.clone().startOf("day").toDate();
+  const endOfSelectedDay = baseMoment.clone().endOf("day");
+  const isToday = baseMoment.isSame(nowLaPaz, "day");
+  const periodEnd = (date
+    ? (isToday ? nowLaPaz : endOfSelectedDay)
+    : nowLaPaz
+  ).toDate();
 
   const filter: any = {
     $or: [
@@ -380,8 +394,22 @@ const getDailySalesHistory = async (date: string | undefined, sucursalId: string
     estado_pedido: { $ne: "En Espera" }
   };
 
-  if (startOfDay && endOfDay) {
-    filter.hora_entrega_acordada = { $gte: startOfDay, $lte: endOfDay };
+  if (fromLastClose) {
+    let periodStart = startOfDay;
+
+    const lastClose = await BoxCloseRepository.findLatestBySucursalWithinRange(
+      sucursalId,
+      startOfDay,
+      periodEnd
+    );
+
+    if (lastClose?.created_at) {
+      periodStart = new Date(lastClose.created_at);
+    }
+
+    filter.hora_entrega_acordada = { $gt: periodStart, $lte: periodEnd };
+  } else if (date) {
+    filter.hora_entrega_acordada = { $gte: startOfDay, $lte: periodEnd };
   } else {
     filter.hora_entrega_acordada = { $lte: new Date() };
   }
