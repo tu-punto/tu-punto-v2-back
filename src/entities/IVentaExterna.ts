@@ -7,7 +7,7 @@ export interface IVentaExterna {
 
     carnet_vendedor: string;
     vendedor: string;
-    telefono_vendedor: string;
+    telefono_vendedor?: string;
     numero_paquete: number;
 
     comprador: string;
