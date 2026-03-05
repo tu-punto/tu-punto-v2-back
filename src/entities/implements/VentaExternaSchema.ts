@@ -23,7 +23,7 @@ const VentaExternaSchema = new Schema({
     },
     comprador: {
         type: String,
-        required: true,
+        required: false,
         trim: true
     },
     descripcion_paquete: {
@@ -73,8 +73,16 @@ const VentaExternaSchema = new Schema({
     },
     esta_pagado: {
         type: String,
-        enum: ["si", "no"],
+        enum: ["si", "no", "mixto"],
         default: "no",
+    },
+    monto_paga_vendedor: {
+        type: Number,
+        default: 0,
+    },
+    monto_paga_comprador: {
+        type: Number,
+        default: 0,
     },
     saldo_cobrar: {
         type: Number,

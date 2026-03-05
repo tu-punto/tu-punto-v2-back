@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 
-export type ExternalPaidStatus = "si" | "no";
+export type ExternalPaidStatus = "si" | "no" | "mixto";
 
 export interface IVentaExterna {
     _id?: Types.ObjectId;
@@ -10,14 +10,16 @@ export interface IVentaExterna {
     telefono_vendedor?: string;
     numero_paquete: number;
 
-    comprador: string;
+    comprador?: string;
     descripcion_paquete: string;
-    telefono_comprador: string;
+    telefono_comprador?: string;
     fecha_pedido: Date;
 
     precio_paquete: number;
     precio_total: number;
     esta_pagado: ExternalPaidStatus;
+    monto_paga_vendedor?: number;
+    monto_paga_comprador?: number;
     saldo_cobrar: number;
     estado_pedido: string;
     is_external?: boolean;

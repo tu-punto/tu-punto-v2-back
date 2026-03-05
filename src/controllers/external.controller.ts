@@ -66,9 +66,12 @@ export const registerExternalSale = async (req: Request, res: Response) => {
             status: true,
             newExternalSale,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error(error);
-        res.status(500).json({error: "Internal Server Error"});
+        res.status(400).json({
+            success: false,
+            message: error?.message || "No se pudo registrar la venta externa"
+        });
     }
 }
 
@@ -122,11 +125,11 @@ export const updateExternalSaleByID = async (req: Request, res: Response) => {
             message: "Venta externa actualizada exitosamente",
             data: updatedSale
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error al actualizar la venta externa:", error);
-        res.status(500).json({ 
+        res.status(400).json({ 
             success: false, 
-            message: "Error al actualizar la venta externa" 
+            message: error?.message || "Error al actualizar la venta externa" 
         });
     }
 }
