@@ -29,7 +29,11 @@ export const ReportsRepository = {
         venta: 1,
       },
     )
-      .populate([{ path: "venta", select: "utilidad sucursal" }])
+      .populate([
+        { path: "sucursal", select: "nombre" },
+        { path: "lugar_origen", select: "nombre" },
+        { path: "venta", select: "utilidad sucursal" },
+      ])
       .lean()
       .exec();
   },
@@ -296,6 +300,134 @@ async fetchVendedoresActivosPorSucursalEnRango(opts: { start: Date; end: Date; s
       },
     },
     { $sort: { sucursal: 1, id_sucursal: 1 } },
+  ]).exec();
+},
+async fetchVendedoresActivosDetalleEnRango(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+  const { start, end, sucursalIds } = opts;
+
+  const matchPago: any = {
+    "pago_sucursales.activo": true,
+  };
+
+  if (sucursalIds?.length) {
+    matchPago["pago_sucursales.id_sucursal"] = {
+      $in: sucursalIds.map((id) => new Types.ObjectId(id)),
+    };
+  }
+
+  return await VendedorModel.aggregate([
+    { $match: { fecha_vigencia: { $gte: start } } },
+    { $unwind: "$pago_sucursales" },
+    { $match: matchPago },
+    {
+      $match: {
+        $and: [
+          {
+            $or: [
+              { "pago_sucursales.fecha_ingreso": { $exists: false } },
+              { "pago_sucursales.fecha_ingreso": null },
+              { "pago_sucursales.fecha_ingreso": { $lt: end } },
+            ],
+          },
+          {
+            $or: [
+              { "pago_sucursales.fecha_salida": { $exists: false } },
+              { "pago_sucursales.fecha_salida": null },
+              { "pago_sucursales.fecha_salida": { $gte: start } },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      $group: {
+        _id: { vendedor: "$_id", sucursal: "$pago_sucursales.id_sucursal" },
+        sucursalName: { $first: "$pago_sucursales.sucursalName" },
+        vendedorNombre: {
+          $first: {
+            $trim: {
+              input: {
+                $concat: [{ $ifNull: ["$nombre", ""] }, " ", { $ifNull: ["$apellido", ""] }],
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        id_vendedor: { $toString: "$_id.vendedor" },
+        vendedor: { $ifNull: ["$vendedorNombre", ""] },
+        id_sucursal: { $toString: "$_id.sucursal" },
+        sucursal: { $ifNull: ["$sucursalName", ""] },
+      },
+    },
+    { $sort: { sucursal: 1, vendedor: 1, id_vendedor: 1 } },
+  ]).exec();
+},
+async fetchClientesNuevosDetalleEnRango(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+  const { start, end, sucursalIds } = opts;
+
+  const matchPago: any = {
+    "pago_sucursales.fecha_ingreso": { $gte: start, $lt: end },
+  };
+
+  if (sucursalIds?.length) {
+    matchPago["pago_sucursales.id_sucursal"] = {
+      $in: sucursalIds.map((id) => new Types.ObjectId(id)),
+    };
+  }
+
+  return await VendedorModel.aggregate([
+    { $unwind: "$pago_sucursales" },
+    { $match: matchPago },
+    {
+      $addFields: {
+        mes_ingreso: {
+          $dateToString: {
+            format: "%Y-%m",
+            date: "$pago_sucursales.fecha_ingreso",
+            timezone: "UTC",
+          },
+        },
+        vendedorNombre: {
+          $trim: {
+            input: {
+              $concat: [{ $ifNull: ["$nombre", ""] }, " ", { $ifNull: ["$apellido", ""] }],
+            },
+          },
+        },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          vendedor: "$_id",
+          sucursal: "$pago_sucursales.id_sucursal",
+          mes: "$mes_ingreso",
+        },
+        vendedor: { $first: "$vendedorNombre" },
+        mail: { $first: "$mail" },
+        telefono: { $first: "$telefono" },
+        sucursal: { $first: "$pago_sucursales.sucursalName" },
+        fecha_ingreso: { $first: "$pago_sucursales.fecha_ingreso" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        mes: "$_id.mes",
+        id_vendedor: { $toString: "$_id.vendedor" },
+        vendedor: { $ifNull: ["$vendedor", ""] },
+        mail: { $ifNull: ["$mail", ""] },
+        telefono: { $ifNull: [{ $toString: "$telefono" }, ""] },
+        id_sucursal: { $toString: "$_id.sucursal" },
+        sucursal: { $ifNull: ["$sucursal", ""] },
+        fecha_ingreso: "$fecha_ingreso",
+      },
+    },
+    { $sort: { mes: 1, sucursal: 1, vendedor: 1, id_vendedor: 1 } },
   ]).exec();
 },
 async fetchVendedoresConPagoSucursales() {

@@ -25,6 +25,15 @@ export const getOperacionMensual = async (req: Request, res: Response) => {
     res.status(500).json({ ok:false, msg:"Internal Error", error: err?.message });
   }
 };
+const parseMesesInput = (source: any) => {
+  const mes = typeof source?.mes === "string" ? String(source.mes) : undefined;
+  const mesesRaw = source?.meses;
+  const meses = Array.isArray(mesesRaw)
+    ? mesesRaw
+    : (typeof mesesRaw === "string" ? mesesRaw.split(",").map((m: string) => m.trim()).filter(Boolean) : undefined);
+
+  return { mes, meses };
+};
 const SUCURSALES_REPORTE_3M = [
   "6859a22ce3356f061c43e151",
   "685a74a6ce20b0f8bf89d4f4",
@@ -83,10 +92,8 @@ export const exportStockProductosXlsx = async (req: Request, res: Response) => {
 };
 export const exportComisiones3MesesXlsx = async (req: Request, res: Response) => {
   try {
+    const { mes, meses } = parseMesesInput(req.query);
     const mesFin = String(req.query.mesFin || "");
-    if (!mesFin) {
-      return res.status(400).json({ ok: false, msg: "mesFin es requerido (YYYY-MM)" });
-    }
 
     // Si te pasan sucursales por query, úsalo; si no, usa las fijas
     const sucursalesParam =
@@ -97,7 +104,9 @@ export const exportComisiones3MesesXlsx = async (req: Request, res: Response) =>
         ? sucursalesParam.split(",").map(s => s.trim()).filter(Boolean)
         : SUCURSALES_REPORTE_3M;
 
-    const { filePath, filename } = await ReportsService.exportComisiones3MesesXlsx({
+    const { filePath, filename } = await ReportsService.exportComisionesMesesXlsx({
+      mes,
+      meses,
       mesFin,
       sucursalIds,
     });
@@ -108,17 +117,28 @@ export const exportComisiones3MesesXlsx = async (req: Request, res: Response) =>
     res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
+export const getComisionesMeses = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.body || {});
+    const sucursalIds = Array.isArray(req.body?.sucursales) ? req.body.sucursales : undefined;
+    const data = await ReportsService.getComisionesPorMeses({ mes, meses, sucursalIds });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getComisionesMeses error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
   export const exportIngresosFlujo3MesesXlsx = async (req: Request, res: Response) => {
     try {
+      const { mes, meses } = parseMesesInput(req.query);
       const mesFin = String(req.query.mesFin || "");
-      if (!mesFin || !/^\d{4}-\d{2}$/.test(mesFin)) {
-        return res.status(400).json({ message: "mesFin es requerido y debe ser YYYY-MM" });
-      }
 
       // opcional: incluir deuda
       const incluirDeuda = String(req.query.incluirDeuda || "false") === "true";
 
-      const { filePath, filename } = await ReportsService.exportIngresosFlujo4MesesXlsx({
+      const { filePath, filename } = await ReportsService.exportIngresosMesesXlsx({
+        mes,
+        meses,
         mesFin,
         incluirDeuda,
       });
@@ -129,28 +149,62 @@ export const exportComisiones3MesesXlsx = async (req: Request, res: Response) =>
       return res.status(500).json({ message: "Error al generar reporte de ingresos 3M" });
     }
   };
+  export const getIngresosMeses = async (req: Request, res: Response) => {
+    try {
+      const { mes, meses } = parseMesesInput(req.body || {});
+      const mesFin = String(req.body?.mesFin || "");
+      const incluirDeuda = !!req.body?.incluirDeuda;
+      const data = await ReportsService.getIngresosPorMeses({ mes, meses, mesFin, incluirDeuda });
+      return res.json({ ok: true, ...data });
+    } catch (err: any) {
+      console.error("getIngresosMeses error:", err);
+      return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+    }
+  };
   export const exportClientesActivosXlsx = async (req: Request, res: Response) => {
   try {
+    const { mes, meses } = parseMesesInput(req.query);
     const mesFin = String(req.query.mesFin || "");
-    if (!mesFin || !/^\d{4}-\d{2}$/.test(mesFin)) {
-      return res.status(400).json({ ok:false, msg:"mesFin es requerido (YYYY-MM)" });
-    }
 
-    const { filePath, filename } = await ReportsService.exportClientesActivosXlsx({ mesFin });
+    const { filePath, filename } = await ReportsService.exportClientesActivosMesesXlsx({ mes, meses, mesFin });
     return res.download(filePath, filename);
   } catch (err:any) {
     console.error("exportClientesActivosXlsx error:", err);
     return res.status(500).json({ ok:false, msg:"No se pudo generar el XLSX", error: err?.message });
   }
 };
+export const getClientesActivos = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.body || {});
+    const mesFin = String(req.body?.mesFin || "");
+    const data = await ReportsService.getClientesActivosServicio({ mes, meses, mesFin });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getClientesActivos error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
 export const exportVentasVendedores4mXlsx = async (req: Request, res: Response) => {
   try {
-    const { filePath, filename } = await ReportsService.exportVentasVendedores4mXlsx();
+    const { mes, meses } = parseMesesInput(req.query);
+    const mesFin = String(req.query.mesFin || "");
+    const { filePath, filename } = await ReportsService.exportVentasVendedoresMesesXlsx({ mes, meses, mesFin });
 
     return res.download(filePath, filename);
   } catch (err: any) {
     console.error("exportVentasVendedores4mXlsx error:", err);
     return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+export const getVentasVendedores = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.body || {});
+    const mesFin = String(req.body?.mesFin || "");
+    const data = await ReportsService.getVentasVendedoresPorMeses({ mes, meses, mesFin });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getVentasVendedores error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
   }
 };
 export const getVentasQr = async (req: Request, res: Response) => {
