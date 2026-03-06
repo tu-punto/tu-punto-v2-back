@@ -822,10 +822,28 @@ export const ReportsService = {
         .sort((a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal));
 
       const totalVendedores = global.size;
+      const promedioPorSucursal = new Map<string, { suma_ticket_bs: number; filas: number }>();
+
+      for (const row of ticketPromedioPorSucursal) {
+        const idSucursal = String(row.id_sucursal || "").trim();
+        if (!idSucursal) continue;
+        const got = promedioPorSucursal.get(idSucursal) || { suma_ticket_bs: 0, filas: 0 };
+        got.suma_ticket_bs += safeNum(row.ticket_promedio_bs);
+        got.filas += 1;
+        promedioPorSucursal.set(idSucursal, got);
+      }
+
+      const sucursalesConsideradas = promedioPorSucursal.size;
+      const sumaPromediosSucursal = Array.from(promedioPorSucursal.values()).reduce((sum, item) => {
+        const promedioSucursal = item.filas ? item.suma_ticket_bs / item.filas : 0;
+        return sum + promedioSucursal;
+      }, 0);
+
       ticketPromedioGlobal = {
         vendedores_activos: totalVendedores,
+        sucursales: sucursalesConsideradas,
         total_servicios_bs: +totalServiciosGlobal.toFixed(2),
-        ticket_promedio_bs: totalVendedores ? +(totalServiciosGlobal / totalVendedores).toFixed(2) : 0,
+        ticket_promedio_bs: sucursalesConsideradas ? +(sumaPromediosSucursal / sucursalesConsideradas).toFixed(2) : 0,
       };
     }
 
@@ -914,59 +932,106 @@ export const ReportsService = {
     let clientesNuevosGlobal: any = {};
     const clientesNuevosDetalle: any[] = [];
     {
-      const rows = await ReportsRepository.fetchClientesNuevosDetalleEnRango({
-        start,
-        end,
-        sucursalIds,
-      });
+      const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
+      const acc = new Map<
+        string,
+        { mes: string; id_sucursal: string; sucursal: string; tipo: "nuevo" | "ampliacion"; clientes_nuevos: number }
+      >();
+      const globalNuevos = new Set<string>();
+      const globalAmpliaron = new Set<string>();
 
-      const acc = new Map<string, { mes: string; id_sucursal: string; sucursal: string; clientes_nuevos: number }>();
-      const global = new Set<string>();
+      for (const ven of vendedores as any[]) {
+        const idVendedor = String(ven._id || "").trim();
+        if (!idVendedor) continue;
 
-      for (const row of rows as any[]) {
-        const mes = String(row.mes || "").trim();
-        const idSucursal = String(row.id_sucursal || "").trim();
-        const sucursal = String(row.sucursal || sucMap.get(idSucursal) || "").trim();
-        const idVendedor = String(row.id_vendedor || "").trim();
-        if (!mes || !idSucursal || !sucursal || !idVendedor) continue;
+        const pagosRaw = Array.isArray(ven.pago_sucursales) ? ven.pago_sucursales : [];
+        const earliestBySucursal = new Map<string, any>();
 
-        const key = `${mes}|${idSucursal}`;
-        const got = acc.get(key) || {
-          mes,
-          id_sucursal: idSucursal,
-          sucursal,
-          clientes_nuevos: 0,
-        };
-        got.clientes_nuevos += 1;
-        acc.set(key, got);
-        global.add(idVendedor);
+        for (const pago of pagosRaw) {
+          const idSucursal = pago?.id_sucursal ? String(pago.id_sucursal) : "";
+          const sucursal = String(pago?.sucursalName || sucMap.get(idSucursal) || "").trim();
+          const fechaIngreso = pago?.fecha_ingreso ? moment.tz(pago.fecha_ingreso, TZ) : null;
+          if (!idSucursal || !sucursal || !fechaIngreso?.isValid()) continue;
 
-        clientesNuevosDetalle.push({
-          mes,
-          id_sucursal: idSucursal,
-          sucursal,
-          id_vendedor: idVendedor,
-          vendedor: row.vendedor || "",
-          mail: row.mail || "",
-          telefono: row.telefono || "",
-          fecha_ingreso: row.fecha_ingreso || null,
+          const current = earliestBySucursal.get(idSucursal);
+          if (!current || fechaIngreso.isBefore(current.fechaIngreso)) {
+            earliestBySucursal.set(idSucursal, {
+              id_sucursal: idSucursal,
+              sucursal,
+              fechaIngreso,
+            });
+          }
+        }
+
+        const ingresosOrdenados = Array.from(earliestBySucursal.values()).sort(
+          (a, b) =>
+            a.fechaIngreso.valueOf() - b.fechaIngreso.valueOf() ||
+            String(a.id_sucursal).localeCompare(String(b.id_sucursal)),
+        );
+
+        const primeraFechaIngreso = ingresosOrdenados[0]?.fechaIngreso
+          ? ingresosOrdenados[0].fechaIngreso.clone().startOf("day")
+          : null;
+
+        ingresosOrdenados.forEach((ingreso) => {
+          if (ingreso.fechaIngreso.isBefore(start) || !ingreso.fechaIngreso.isBefore(end)) return;
+          if (sucursalIds?.length && !sucursalIds.includes(String(ingreso.id_sucursal))) return;
+
+          const mes = ingreso.fechaIngreso.format("YYYY-MM");
+          const tipo = (
+            primeraFechaIngreso && ingreso.fechaIngreso.clone().startOf("day").isSame(primeraFechaIngreso)
+              ? "nuevo"
+              : "ampliacion"
+          ) as "nuevo" | "ampliacion";
+          const key = `${mes}|${ingreso.id_sucursal}|${tipo}`;
+          const got = acc.get(key) || {
+            mes,
+            id_sucursal: ingreso.id_sucursal,
+            sucursal: ingreso.sucursal,
+            tipo,
+            clientes_nuevos: 0,
+          };
+
+          got.clientes_nuevos += 1;
+          acc.set(key, got);
+
+          if (tipo === "nuevo") globalNuevos.add(idVendedor);
+          else globalAmpliaron.add(idVendedor);
+
+          clientesNuevosDetalle.push({
+            mes,
+            tipo,
+            id_sucursal: ingreso.id_sucursal,
+            sucursal: ingreso.sucursal,
+            id_vendedor: idVendedor,
+            vendedor: `${ven.nombre || ""} ${ven.apellido || ""}`.trim(),
+            mail: ven.mail || "",
+            telefono: ven.telefono != null ? String(ven.telefono) : "",
+            fecha_ingreso: ingreso.fechaIngreso.toDate(),
+          });
         });
       }
 
       clientesNuevosPorSucursal = Array.from(acc.values()).sort(
-        (a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal),
+        (a, b) =>
+          a.mes.localeCompare(b.mes) ||
+          a.sucursal.localeCompare(b.sucursal) ||
+          a.tipo.localeCompare(b.tipo) ||
+          a.id_sucursal.localeCompare(b.id_sucursal),
       );
 
       clientesNuevosDetalle.sort(
         (a, b) =>
           a.mes.localeCompare(b.mes) ||
           a.sucursal.localeCompare(b.sucursal) ||
+          a.tipo.localeCompare(b.tipo) ||
           String(a.fecha_ingreso || "").localeCompare(String(b.fecha_ingreso || "")) ||
           String(a.id_vendedor || "").localeCompare(String(b.id_vendedor || "")),
       );
 
       clientesNuevosGlobal = {
-        clientes_nuevos: global.size,
+        clientes_nuevos: globalNuevos.size,
+        clientes_ampliaron: globalAmpliaron.size,
       };
     }
 
