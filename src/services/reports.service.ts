@@ -139,6 +139,58 @@ function safeNum(n: any) {
   }
   return 0;
 }
+
+function normalizeText(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function buildProductoDisplayName(params: {
+  baseName?: unknown;
+  nombreVariante?: unknown;
+  variantes?: unknown;
+}) {
+  const baseName = String(params.baseName || "").trim();
+  const nombreVariante = String(params.nombreVariante || "").trim();
+  const varianteDesdeMapa = formatVariante(params.variantes);
+  const variantLabel = nombreVariante || varianteDesdeMapa;
+
+  if (!baseName && !variantLabel) return "Producto";
+  if (!baseName) return variantLabel;
+  if (!variantLabel) return baseName;
+
+  const baseNorm = normalizeText(baseName);
+  const variantNorm = normalizeText(variantLabel);
+
+  if (
+    variantNorm === baseNorm ||
+    variantNorm.startsWith(`${baseNorm} -`) ||
+    variantNorm.startsWith(`${baseNorm}:`) ||
+    variantNorm.startsWith(`${baseNorm} /`) ||
+    variantNorm.startsWith(`${baseNorm},`) ||
+    variantNorm.startsWith(`${baseNorm} `)
+  ) {
+    return variantLabel;
+  }
+
+  return `${baseName} - ${variantLabel}`;
+}
+
+function isVentaDirectaLike(params: { estado_pedido?: unknown; observaciones?: unknown }) {
+  const estado = String(params.estado_pedido || "").trim().toLowerCase();
+  const obs = String(params.observaciones || "").toLowerCase();
+
+  return (
+    estado === "interno" ||
+    obs.includes("pedido generado automaticamente desde una venta directa") ||
+    obs.includes("pedido generado autom\u00e1ticamente desde una venta directa")
+  );
+}
+
 type ExportIngresos3MParams = {
   mesFin: string; 
   incluirDeuda?: boolean; 
@@ -171,7 +223,10 @@ export const ReportsService = {
       sucursalId: string;
       sucursalNombre: string;
       productoId?: string; // undefined en temporales
+      variantKey?: string;
+      nombreVariante?: string;
       productoNombre: string;
+      productoBaseNombre?: string;
       productoCategoria?: string;
       mes: string;
       cantidad: number;
@@ -205,8 +260,12 @@ export const ReportsService = {
           obs.includes("pedido generado automáticamente desde una venta directa") ||
           obs.includes("pedido generado automaticamente desde una venta directa");
         const esEntregaEntregada = estado === "entregado";
+        const esVentaDirectaNormalizada = isVentaDirectaLike({
+          estado_pedido: p.estado_pedido,
+          observaciones: p.observaciones,
+        });
 
-        if (esVentaDirecta || esEntregaEntregada) {
+        if (esVentaDirectaNormalizada || esEntregaEntregada) {
           const key = sucursalId || "sin_sucursal";
           const nombre = sucursalId ? sucursalNombre : "Sin Sucursal";
           const got =
@@ -217,7 +276,7 @@ export const ReportsService = {
               entregas_entregadas: 0,
             };
 
-          if (esVentaDirecta) got.ventas_directas += 1;
+          if (esVentaDirectaNormalizada) got.ventas_directas += 1;
           else if (esEntregaEntregada) got.entregas_entregadas += 1;
 
           ventasPorSucursalAcc.set(key, got);
@@ -235,6 +294,7 @@ export const ReportsService = {
         fecha: fechaBase,
         mes: mesPedido,
         estado_pedido: p.estado_pedido || "",
+        observaciones: p.observaciones || "",
         cliente: p.cliente || "",
         telefono_cliente: p.telefono_cliente || "",
         totalCobrado,
@@ -255,6 +315,8 @@ export const ReportsService = {
             cantidad: number;
             precio_unitario: number;
             nombre_variante?: string;
+            variantes?: Record<string, string>;
+            variantKey?: string;
             sucursal?: any;
             producto?: any;
             vendedor?: any;
@@ -272,17 +334,21 @@ export const ReportsService = {
               : (v.sucursal?.nombre || sucursalNombre);
 
           const categoriaNombre = v?.producto?.categoria?.categoria || v?.producto?.categoria || "";
-          const baseNombre = v?.producto?.nombre_producto || v?.nombre_variante || "Producto";
-          const nombreCompleto =
-            v?.producto?.nombre_producto && v?.nombre_variante
-              ? `${v.producto.nombre_producto} - ${v.nombre_variante}`
-              : baseNombre;
+          const baseNombre = v?.producto?.nombre_producto || "";
+          const nombreCompleto = buildProductoDisplayName({
+            baseName: baseNombre,
+            nombreVariante: v?.nombre_variante,
+            variantes: v?.variantes,
+          });
 
           ventas.push({
             sucursalId: sId,
             sucursalNombre: sNom,
             productoId: v?.producto?._id ? String(v.producto._id) : (v?.producto ? String(v.producto) : undefined),
+            variantKey: v?.variantKey ? String(v.variantKey) : undefined,
+            nombreVariante: v?.nombre_variante ? String(v.nombre_variante) : undefined,
             productoNombre: nombreCompleto,
+            productoBaseNombre: baseNombre || undefined,
             productoCategoria: categoriaNombre || undefined,
             mes: mesPedido,
             cantidad,
@@ -322,17 +388,35 @@ export const ReportsService = {
     // ------------- 1) Top 10 productos por sucursal -------------
     const topProductosPorSucursal: any[] = [];
     {
+      const sucursalFilterSet = new Set((sucursalIds || []).map((id) => String(id)));
       const acc = new Map<
         string,
-        { sucursalId: string; productoId?: string; productoNombre: string; productoCategoria?: string; unidades: number; monto: number }
+        {
+          sucursalId: string;
+          sucursalNombre: string;
+          productoId?: string;
+          productoNombre: string;
+          productoCategoria?: string;
+          unidades: number;
+          monto: number;
+        }
       >();
 
       for (const v of ventas) {
-        const productoKey = v.productoId ? `id:${v.productoId}` : `nom:${v.productoNombre}`;
+        if (!v.sucursalId) continue;
+        if (sucursalFilterSet.size > 0 && !sucursalFilterSet.has(String(v.sucursalId))) continue;
+        if (!String(v.sucursalNombre || "").trim()) continue;
+
+        const productoKey = v.variantKey
+          ? `variant:${v.variantKey}`
+          : v.productoId
+            ? `product:${v.productoId}|name:${normalizeText(v.productoNombre)}`
+            : `nom:${normalizeText(v.productoNombre)}`;
         const key = `${v.sucursalId}|${productoKey}`;
         const got =
           acc.get(key) || {
             sucursalId: v.sucursalId,
+            sucursalNombre: v.sucursalNombre,
             productoId: v.productoId,
             productoNombre: v.productoNombre,
             productoCategoria: v.productoCategoria,
@@ -346,6 +430,7 @@ export const ReportsService = {
 
       const porSuc = new Map<string, any[]>();
       for (const row of acc.values()) {
+        if (!String(row.sucursalNombre || "").trim()) continue;
         const arr = porSuc.get(row.sucursalId) || [];
         arr.push(row);
         porSuc.set(row.sucursalId, arr);
@@ -355,14 +440,14 @@ export const ReportsService = {
         arr.sort((a, b) => (b.unidades - a.unidades) || (b.monto - a.monto));
         const top = arr.slice(0, 10).map((r, i) => ({
           id_sucursal: sucId,
-          sucursal: sucMap.get(sucId) || "",
+          sucursal: r.sucursalNombre || sucMap.get(sucId) || "",
           categoria: r.productoCategoria || "",
           id_producto: r.productoId || null,
           nombre_producto: r.productoNombre,
           unidades: r.unidades,
           monto_bs: +r.monto.toFixed(2),
           rank: i + 1,
-        }));
+        })).filter((r) => String(r.sucursal || "").trim().length > 0);
         topProductosPorSucursal.push(...top);
       }
 
@@ -373,11 +458,13 @@ export const ReportsService = {
 
     // ------------- 2) Top 10 (clientes o vendedores) GLOBAL -------------
     let topGlobal: any[] = [];
+    const topGlobalSucursalFilterSet = new Set((sucursalIds || []).map((id) => String(id)));
     if (modoTop === "vendedores") {
       const acc = new Map<string, { vendedorId: string; vendedor: string; monto: number }>();
 
       for (const v of ventas) {
         if (!v.vendedorId) continue;
+        if (topGlobalSucursalFilterSet.size > 0 && !topGlobalSucursalFilterSet.has(String(v.sucursalId))) continue;
         const k = v.vendedorId;
         const got = acc.get(k) || { vendedorId: k, vendedor: v.vendedorNombre || k, monto: 0 };
         got.monto += v.cantidad * v.precioUnit;
@@ -392,6 +479,7 @@ export const ReportsService = {
       const acc2 = new Map<string, { cliente: string; monto: number; pedidos: number }>();
 
       for (const p of pedidosFlat) {
+        if (topGlobalSucursalFilterSet.size > 0 && !topGlobalSucursalFilterSet.has(String(p.sucursalId))) continue;
         const clave = p.telefono_cliente || p.cliente || "";
         if (!clave) continue;
         const totalCobrado = safeNum(p.totalCobrado);
@@ -419,6 +507,7 @@ export const ReportsService = {
       const acc = new Map<string, { sucursalId: string; sum: number; sumPos: number; n: number; nPos: number }>();
 
       for (const p of pedidosFlat) {
+        if (isVentaDirectaLike(p)) continue;
         const k = p.sucursalId;
         const got = acc.get(k) || { sucursalId: k, sum: 0, sumPos: 0, n: 0, nPos: 0 };
         got.sum += p.costoDelivery;
@@ -480,8 +569,7 @@ export const ReportsService = {
       const entregasMap = new Map<string, number>();
       let totalEntregas = 0;
       for (const p of pedidosFlat) {
-        const esEntrega = safeNum(p.cargoDelivery) > 0 || safeNum(p.costoDelivery) > 0;
-        if (!esEntrega) continue;
+        if (isVentaDirectaLike(p)) continue;
         const sucId = p.sucursalId ? String(p.sucursalId) : "sin_sucursal";
         entregasMap.set(sucId, (entregasMap.get(sucId) || 0) + 1);
         totalEntregas += 1;
@@ -515,6 +603,7 @@ export const ReportsService = {
 
     // ------------- 4) Clientes atendidos por hora (L–S) por sucursal -------------
     const clientesPorHoraMensual: any[] = [];
+    const clientesPorHoraDetalle: any[] = [];
     {
       const acc = new Map<string, number>(); // sucursalId|hora
 
@@ -526,6 +615,17 @@ export const ReportsService = {
         const hora = base.hour();
         const key = `${p.sucursalId}|${hora}`;
         acc.set(key, (acc.get(key) || 0) + 1);
+        clientesPorHoraDetalle.push({
+          id_sucursal: p.sucursalId || "",
+          sucursal: p.sucursalNombre || sucMap.get(String(p.sucursalId || "")) || "",
+          id_pedido: p._id || "",
+          fecha: p.fecha || null,
+          hora: `${String(hora).padStart(2, "0")}:00`,
+          cliente: p.cliente || "",
+          telefono_cliente: p.telefono_cliente || "",
+          estado_pedido: p.estado_pedido || "",
+          observaciones: p.observaciones || "",
+        });
       }
 
       for (const [sucId, sucNombre] of sucMap.entries()) {
@@ -535,13 +635,19 @@ export const ReportsService = {
           clientesPorHoraMensual.push({
             id_sucursal: sucId,
             sucursal: sucNombre,
-            hora: h,
+            hora: `${String(h).padStart(2, "0")}:00`,
             clientes_atendidos: count,
           });
         }
       }
 
-      clientesPorHoraMensual.sort((a, b) => a.sucursal.localeCompare(b.sucursal) || (a.hora - b.hora));
+      clientesPorHoraMensual.sort((a, b) => a.sucursal.localeCompare(b.sucursal) || a.hora.localeCompare(b.hora));
+      clientesPorHoraDetalle.sort(
+        (a, b) =>
+          a.sucursal.localeCompare(b.sucursal) ||
+          a.hora.localeCompare(b.hora) ||
+          String(a.id_pedido).localeCompare(String(b.id_pedido)),
+      );
     }
 
     // ------------- 4B) Ventas por hora (todos los dias) por sucursal -------------
@@ -775,28 +881,69 @@ export const ReportsService = {
 
     // ------------- 9) Monto vendido (mensual y por sucursal) -------------
     const ventasMensualPorSucursal: any[] = [];
+    const ventasMensualPorSucursalDetalle: any[] = [];
     {
-      const acc = new Map<string, { sucursalId: string; mes: string; monto: number; ventas: number }>();
+      const acc = new Map<
+        string,
+        { sucursalId: string; sucursalNombre: string; mes: string; monto: number; ventas: number }
+      >();
 
-      for (const v of ventas) {
-        const k = `${v.sucursalId}|${v.mes}`;
-        const got = acc.get(k) || { sucursalId: v.sucursalId, mes: v.mes, monto: 0, ventas: 0 };
-        got.monto += v.cantidad * v.precioUnit;
+      for (const p of pedidosFlat) {
+        const sucursalId = String(p.sucursalId || "").trim();
+        const sucursalNombre = String(p.sucursalNombre || sucMap.get(sucursalId) || "").trim();
+        if (!sucursalId || !sucursalNombre) continue;
+
+        const mes = String(p.mes || "").trim();
+        if (!mes) continue;
+
+        const totalCobrado = safeNum(p.totalCobrado);
+        const k = `${sucursalId}|${mes}`;
+        const got = acc.get(k) || {
+          sucursalId,
+          sucursalNombre,
+          mes,
+          monto: 0,
+          ventas: 0,
+        };
+
+        got.monto += totalCobrado;
         got.ventas += 1;
         acc.set(k, got);
+
+        ventasMensualPorSucursalDetalle.push({
+          mes,
+          id_sucursal: sucursalId,
+          sucursal: sucursalNombre,
+          id_pedido: p._id || "",
+          fecha: p.fecha || null,
+          cliente: p.cliente || "",
+          telefono_cliente: p.telefono_cliente || "",
+          estado_pedido: p.estado_pedido || "",
+          observaciones: p.observaciones || "",
+          monto_bs: +totalCobrado.toFixed(2),
+        });
       }
 
       for (const a of acc.values()) {
         ventasMensualPorSucursal.push({
           mes: a.mes,
           id_sucursal: a.sucursalId,
-          sucursal: sucMap.get(a.sucursalId) || "",
+          sucursal: a.sucursalNombre,
           ventas: a.ventas,
           monto_bs: +a.monto.toFixed(2),
         });
       }
 
-      ventasMensualPorSucursal.sort((a, b) => a.sucursal.localeCompare(b.sucursal));
+      ventasMensualPorSucursal.sort(
+        (a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal) || a.id_sucursal.localeCompare(b.id_sucursal),
+      );
+      ventasMensualPorSucursalDetalle.sort(
+        (a, b) =>
+          a.mes.localeCompare(b.mes) ||
+          a.sucursal.localeCompare(b.sucursal) ||
+          String(a.fecha || "").localeCompare(String(b.fecha || "")) ||
+          String(a.id_pedido || "").localeCompare(String(b.id_pedido || "")),
+      );
     }
 
     return {
@@ -808,6 +955,7 @@ export const ReportsService = {
       costoEntregaPromedioPorSucursal,
       costoEntregaPromedioGlobal,
       clientesPorHoraMensual,
+      clientesPorHoraDetalle,
       ventasPorHoraPorSucursal,
       ventasPorHoraEntregasPorSucursal,
       ventasPorHoraVentasPorSucursal,
@@ -822,6 +970,7 @@ export const ReportsService = {
       numeroVentasPorSucursal,
       numeroVentasTotalPorSucursal,
       ventasMensualPorSucursal,
+      ventasMensualPorSucursalDetalle,
     };
   },
 
@@ -903,6 +1052,8 @@ export const ReportsService = {
     if (reportesSet?.has("clientesActivosPorSucursal")) reportesSet.add("clientesActivosGlobal");
     if (reportesSet?.has("costoEntregaPromedioPorSucursal")) reportesSet.add("costoEntregaPromedioGlobal");
     if (reportesSet?.has("deliveryPromedioPorSucursal")) reportesSet.add("deliveryPromedioGlobal");
+    if (reportesSet?.has("clientesPorHoraMensual")) reportesSet.add("clientesPorHoraDetalle");
+    if (reportesSet?.has("ventasMensualPorSucursal")) reportesSet.add("ventasMensualPorSucursalDetalle");
     const colsMap = params.columnas;
 
     const pickCols = (rows: any[], key: string) => {
@@ -933,6 +1084,7 @@ export const ReportsService = {
     addSheet("Costo_Entrega_Promedio", "costoEntregaPromedioPorSucursal", data.costoEntregaPromedioPorSucursal);
     addSheet("Costo_Entrega_Global", "costoEntregaPromedioGlobal", [data.costoEntregaPromedioGlobal]);
     addSheet("Clientes_por_Hora_(Mes)", "clientesPorHoraMensual", data.clientesPorHoraMensual);
+    addSheet("Clientes_por_Hora_Detalle", "clientesPorHoraDetalle", data.clientesPorHoraDetalle);
     addSheet("Ventas_Por_Hora", "ventasPorHoraPorSucursal", data.ventasPorHoraPorSucursal);
     addSheet("Ventas_Por_Hora_Entregas", "ventasPorHoraEntregasPorSucursal", data.ventasPorHoraEntregasPorSucursal);
     addSheet("Ventas_Por_Hora_Ventas", "ventasPorHoraVentasPorSucursal", data.ventasPorHoraVentasPorSucursal);
@@ -947,6 +1099,11 @@ export const ReportsService = {
     addSheet("Numero_Ventas_Por_Sucursal", "numeroVentasPorSucursal", data.numeroVentasPorSucursal);
     addSheet("Numero_Ventas_Total_Por_Sucursal", "numeroVentasTotalPorSucursal", data.numeroVentasTotalPorSucursal);
     addSheet("Ventas_Mensual_Por_Sucursal", "ventasMensualPorSucursal", data.ventasMensualPorSucursal);
+    addSheet(
+      "Ventas_Mensual_Por_Sucursal_Detalle",
+      "ventasMensualPorSucursalDetalle",
+      data.ventasMensualPorSucursalDetalle,
+    );
 
     const meses = data.meses || [];
     const filename =
