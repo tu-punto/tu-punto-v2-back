@@ -409,6 +409,61 @@ export const ReportsService = {
       }
     }
 
+    // Base compartida para reportes de clientes/vendedores activos por servicios.
+    const vendedoresServicioMensualMap = new Map<
+      string,
+      { mes: string; id_sucursal: string; sucursal: string; id_vendedor: string; servicios_total_bs: number }
+    >();
+
+    {
+      const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
+
+      for (const ven of vendedores as any[]) {
+        const idVendedor = String(ven._id || "").trim();
+        if (!idVendedor) continue;
+
+        const vigencia = ven.fecha_vigencia ? moment.tz(ven.fecha_vigencia, TZ).endOf("day") : null;
+        const pagos = Array.isArray(ven.pago_sucursales) ? ven.pago_sucursales : [];
+
+        for (const pago of pagos) {
+          if (pago?.activo === false) continue;
+
+          const idSucursal = pago?.id_sucursal ? String(pago.id_sucursal) : "";
+          const sucursal = String(pago?.sucursalName || sucMap.get(idSucursal) || "").trim();
+          if (!idSucursal || !sucursal) continue;
+          if (sucursalIds?.length && !sucursalIds.includes(idSucursal)) continue;
+
+          const fechaIngreso = pago?.fecha_ingreso ? moment.tz(pago.fecha_ingreso, TZ).startOf("day") : null;
+          const fechaSalida = pago?.fecha_salida ? moment.tz(pago.fecha_salida, TZ).endOf("day") : null;
+          const serviciosTotalBs =
+            safeNum(pago?.alquiler) +
+            safeNum(pago?.exhibicion) +
+            safeNum(pago?.delivery) +
+            safeNum(pago?.entrega_simple);
+
+          for (const mesSel of mesesSeleccionados) {
+            const monthStart = moment.tz(`${mesSel}-01 00:00:00`, TZ).startOf("month");
+            const monthEnd = monthStart.clone().endOf("month");
+
+            if (vigencia && vigencia.isBefore(monthStart)) continue;
+            if (fechaIngreso && fechaIngreso.isAfter(monthEnd)) continue;
+            if (fechaSalida && fechaSalida.isBefore(monthStart)) continue;
+
+            const key = `${mesSel}|${idSucursal}|${idVendedor}`;
+            if (!vendedoresServicioMensualMap.has(key)) {
+              vendedoresServicioMensualMap.set(key, {
+                mes: mesSel,
+                id_sucursal: idSucursal,
+                sucursal,
+                id_vendedor: idVendedor,
+                servicios_total_bs: serviciosTotalBs,
+              });
+            }
+          }
+        }
+      }
+    }
+
     // ------------- 1) Top 10 productos por sucursal -------------
     const topProductosPorSucursal: any[] = [];
     {
@@ -763,54 +818,30 @@ export const ReportsService = {
     let ticketPromedioPorSucursal: any[] = [];
     let ticketPromedioGlobal: any = {};
     {
-      const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
-      const acc = new Map<string, { mes: string; id_sucursal: string; sucursal: string; vendedores_activos: number; total_servicios_bs: number }>();
+      const servicioRows = Array.from(vendedoresServicioMensualMap.values());
+      const acc = new Map<
+        string,
+        { mes: string; id_sucursal: string; sucursal: string; vendedores_activos: number; total_servicios_bs: number }
+      >();
       const global = new Set<string>();
       let totalServiciosGlobal = 0;
 
-      for (const ven of vendedores as any[]) {
-        const idVendedor = String(ven._id || "").trim();
-        if (!idVendedor) continue;
+      for (const row of servicioRows) {
+        const key = `${row.mes}|${row.id_sucursal}`;
+        const got = acc.get(key) || {
+          mes: row.mes,
+          id_sucursal: row.id_sucursal,
+          sucursal: row.sucursal,
+          vendedores_activos: 0,
+          total_servicios_bs: 0,
+        };
 
-        const vigencia = ven.fecha_vigencia ? moment.tz(ven.fecha_vigencia, TZ).endOf("day") : null;
-        const pagos = Array.isArray(ven.pago_sucursales) ? ven.pago_sucursales : [];
+        got.vendedores_activos += 1;
+        got.total_servicios_bs += safeNum(row.servicios_total_bs);
+        acc.set(key, got);
 
-        for (const pago of pagos) {
-          if (pago?.activo === false) continue;
-
-          const idSucursal = pago?.id_sucursal ? String(pago.id_sucursal) : "";
-          const sucursal = String(pago?.sucursalName || sucMap.get(idSucursal) || "").trim();
-          if (!idSucursal || !sucursal) continue;
-
-          const fechaIngreso = pago?.fecha_ingreso ? moment.tz(pago.fecha_ingreso, TZ).startOf("day") : null;
-          const fechaSalida = pago?.fecha_salida ? moment.tz(pago.fecha_salida, TZ).endOf("day") : null;
-          const totalServicios = safeNum(pago?.alquiler) + safeNum(pago?.exhibicion) + safeNum(pago?.delivery) + safeNum(pago?.entrega_simple);
-
-          for (const mesSel of mesesSeleccionados) {
-            const monthStart = moment.tz(`${mesSel}-01 00:00:00`, TZ).startOf("month");
-            const monthEnd = monthStart.clone().endOf("month");
-
-            if (vigencia && vigencia.isBefore(monthStart)) continue;
-            if (fechaIngreso && fechaIngreso.isAfter(monthEnd)) continue;
-            if (fechaSalida && fechaSalida.isBefore(monthStart)) continue;
-
-            const key = `${mesSel}|${idSucursal}`;
-            const got = acc.get(key) || {
-              mes: mesSel,
-              id_sucursal: idSucursal,
-              sucursal,
-              vendedores_activos: 0,
-              total_servicios_bs: 0,
-            };
-
-            got.vendedores_activos += 1;
-            got.total_servicios_bs += totalServicios;
-            acc.set(key, got);
-
-            global.add(`${mesSel}|${idVendedor}`);
-            totalServiciosGlobal += totalServicios;
-          }
-        }
+        global.add(`${row.mes}|${row.id_vendedor}`);
+        totalServiciosGlobal += safeNum(row.servicios_total_bs);
       }
 
       ticketPromedioPorSucursal = Array.from(acc.values())
@@ -894,16 +925,10 @@ export const ReportsService = {
     let clientesActivosPorSucursal: any[] = [];
     let clientesActivosGlobal: any = {};
     {
-      const rows = await ReportsRepository.fetchVendedoresActivosDetalleEnRango({
-        start,
-        end,
-        sucursalIds,
-      });
-
       const porSuc = new Map<string, { sucursal: string; vendedores: Set<string> }>();
       const global = new Set<string>();
 
-      for (const row of rows as any[]) {
+      for (const row of vendedoresServicioMensualMap.values()) {
         const idSucursal = String(row.id_sucursal || "").trim();
         const sucursal = String(row.sucursal || sucMap.get(idSucursal) || "").trim();
         const idVendedor = String(row.id_vendedor || "").trim();
