@@ -394,6 +394,13 @@ const getDailySalesHistory = async (
     estado_pedido: { $ne: "En Espera" }
   };
 
+  const getHistoryDate = (pedido: any): Date => {
+    const estado = String(pedido?.estado_pedido || "").trim().toLowerCase();
+    if (estado === "interno") return pedido?.fecha_pedido;
+    if (estado === "entregado") return pedido?.hora_entrega_real || pedido?.fecha_pedido;
+    return pedido?.hora_entrega_acordada || pedido?.fecha_pedido;
+  };
+
   if (fromLastClose) {
     let periodStart = startOfDay;
 
@@ -407,7 +414,21 @@ const getDailySalesHistory = async (
       periodStart = new Date(lastClose.created_at);
     }
 
-    filter.hora_entrega_acordada = { $gt: periodStart, $lte: periodEnd };
+    delete filter.estado_pedido;
+    filter.$and = [
+      {
+        $or: [
+          {
+            estado_pedido: "interno",
+            fecha_pedido: { $gt: periodStart, $lte: periodEnd },
+          },
+          {
+            estado_pedido: "Entregado",
+            hora_entrega_real: { $gt: periodStart, $lte: periodEnd },
+          },
+        ],
+      },
+    ];
   } else if (date) {
     filter.hora_entrega_acordada = { $gte: startOfDay, $lte: periodEnd };
   } else {
@@ -422,7 +443,7 @@ const getDailySalesHistory = async (
         { path: 'producto', select: 'nombre_producto' }
       ]
     })
-    .sort({ hora_entrega_acordada: -1 })
+    .sort(fromLastClose ? { hora_entrega_real: -1, fecha_pedido: -1 } : { hora_entrega_acordada: -1 })
     .lean();
 
   const resumen = pedidos.map(p => {
@@ -444,8 +465,8 @@ const getDailySalesHistory = async (
 
     return {
       _id: p._id,
-      fecha: p.hora_entrega_acordada,
-      hora: dayjs(p.hora_entrega_acordada).format("HH:mm"),
+      fecha: getHistoryDate(p),
+      hora: dayjs(getHistoryDate(p)).format("HH:mm"),
       tipo_de_pago: p.tipo_de_pago,
       monto_total: montoTotal,
       subtotal_efectivo: p.subtotal_efectivo || 0,
