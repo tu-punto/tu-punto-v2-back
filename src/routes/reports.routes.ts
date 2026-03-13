@@ -3,6 +3,8 @@ import {
   getOperacionMensual,
   exportOperacionMensualXlsx,
   exportStockProductosXlsx,
+  getProductosRiesgoVariantes,
+  exportProductosRiesgoVariantesXlsx,
   exportComisiones3MesesXlsx,
   getComisionesMeses,
   exportIngresosFlujo3MesesXlsx,
@@ -22,6 +24,8 @@ reportsRouter.post("/operacion-mensual", getOperacionMensual);
 
 reportsRouter.get("/operacion-mensual/xlsx", exportOperacionMensualXlsx);
 reportsRouter.get("/stock-productos/xlsx", exportStockProductosXlsx);
+reportsRouter.get("/productos-variantes-riesgo", getProductosRiesgoVariantes);
+reportsRouter.get("/productos-variantes-riesgo/xlsx", exportProductosRiesgoVariantesXlsx);
 reportsRouter.post("/comisiones", getComisionesMeses);
 reportsRouter.get("/comisiones-3m/xlsx", exportComisiones3MesesXlsx);
 reportsRouter.post("/ingresos", getIngresosMeses);

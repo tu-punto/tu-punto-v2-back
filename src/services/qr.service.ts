@@ -14,8 +14,9 @@ export class QRService {
   private static async generateBufferFromContent(content: string): Promise<Buffer> {
     return QRCode.toBuffer(content, {
       type: 'png',
-      width: 300,
-      margin: 2,
+      width: 900,
+      margin: 1,
+      errorCorrectionLevel: 'M',
       color: {
         dark: '#000000',
         light: '#FFFFFF'

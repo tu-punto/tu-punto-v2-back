@@ -90,6 +90,62 @@ export const exportStockProductosXlsx = async (req: Request, res: Response) => {
     res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
+export const getProductosRiesgoVariantes = async (req: Request, res: Response) => {
+  try {
+    const sellerId =
+      typeof req.query.sellerId === "string" ? String(req.query.sellerId).trim() : undefined;
+    const limit =
+      typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const minCombinaciones =
+      typeof req.query.minCombinaciones === "string"
+        ? Number(req.query.minCombinaciones)
+        : undefined;
+    const minEspacioTeorico =
+      typeof req.query.minEspacioTeorico === "string"
+        ? Number(req.query.minEspacioTeorico)
+        : undefined;
+
+    const data = await ReportsService.getProductosRiesgoVariantes({
+      sellerId,
+      limit,
+      minCombinaciones,
+      minEspacioTeorico,
+    });
+
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getProductosRiesgoVariantes error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+export const exportProductosRiesgoVariantesXlsx = async (req: Request, res: Response) => {
+  try {
+    const sellerId =
+      typeof req.query.sellerId === "string" ? String(req.query.sellerId).trim() : undefined;
+    const limit =
+      typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const minCombinaciones =
+      typeof req.query.minCombinaciones === "string"
+        ? Number(req.query.minCombinaciones)
+        : undefined;
+    const minEspacioTeorico =
+      typeof req.query.minEspacioTeorico === "string"
+        ? Number(req.query.minEspacioTeorico)
+        : undefined;
+
+    const { filePath, filename } = await ReportsService.exportProductosRiesgoVariantesXlsx({
+      sellerId,
+      limit,
+      minCombinaciones,
+      minEspacioTeorico,
+    });
+
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportProductosRiesgoVariantesXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
 export const exportComisiones3MesesXlsx = async (req: Request, res: Response) => {
   try {
     const { mes, meses } = parseMesesInput(req.query);

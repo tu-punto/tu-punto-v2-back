@@ -167,6 +167,47 @@ export const ReportsRepository = {
       { $sort: { nombre_producto: 1 } },
     ]).exec();
   },
+  async fetchProductosParaReporteVariantes(opts?: { sellerId?: string }) {
+    const match: any = { esTemporal: { $ne: true } };
+
+    if (opts?.sellerId && Types.ObjectId.isValid(opts.sellerId)) {
+      match.id_vendedor = new Types.ObjectId(opts.sellerId);
+    }
+
+    return await ProductoModel.aggregate([
+      { $match: match },
+      {
+        $lookup: {
+          from: "Vendedor",
+          localField: "id_vendedor",
+          foreignField: "_id",
+          as: "vendedor",
+        },
+      },
+      { $unwind: { path: "$vendedor", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 1,
+          nombre_producto: 1,
+          id_vendedor: 1,
+          groupId: 1,
+          sucursales: 1,
+          vendedor_nombre_completo: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ["$vendedor.nombre", ""] },
+                  " ",
+                  { $ifNull: ["$vendedor.apellido", ""] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      { $sort: { nombre_producto: 1, _id: 1 } },
+    ]).exec();
+  },
   async fetchIngresosFlujoEnRango(opts: { start: Date; end: Date }) {
   const { start, end } = opts;
 

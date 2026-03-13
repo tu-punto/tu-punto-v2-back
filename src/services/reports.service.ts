@@ -4,6 +4,7 @@ import fs from "node:fs";
 import ExcelJS from "exceljs";
 import moment from "moment-timezone";
 import { ReportsRepository } from "../repositories/reports.repository";
+import { variantFingerprint, variantsToEntries } from "../utils/variantKey";
 
 const TZ = "America/La_Paz";
 
@@ -29,6 +30,12 @@ type Params = {
 };
 
 type ExportStockParams = { idSucursal: string };
+type VariantRiskParams = {
+  sellerId?: string;
+  limit?: number;
+  minCombinaciones?: number;
+  minEspacioTeorico?: number;
+};
 
 type ExportComisionesParams = {
   mes?: string;
@@ -43,6 +50,26 @@ type StockRow = {
   id_vendedor: string;
   vendedor: string;
   stock: number;
+};
+
+type VariantRiskRow = {
+  id_producto: string;
+  producto: string;
+  id_vendedor: string;
+  vendedor: string;
+  group_id: number | "";
+  sucursales: number;
+  combinaciones_unicas: number;
+  combinaciones_max_sucursal: number;
+  atributos_distintos: number;
+  espacio_teorico: number;
+  cobertura_pct: number;
+  firmas_atributos: number;
+  combinaciones_incompletas: number;
+  score_riesgo: number;
+  atributos: string;
+  firmas_ejemplo: string;
+  motivo: string;
 };
 
 function formatVariante(v: unknown): string {
@@ -142,6 +169,19 @@ function safeNum(n: any) {
   return 0;
 }
 
+function safeProduct(values: number[]) {
+  let total = 1;
+  for (const value of values) {
+    const safeValue = Math.max(0, Math.trunc(value));
+    if (safeValue <= 0) return 0;
+    total *= safeValue;
+    if (!Number.isFinite(total) || total > Number.MAX_SAFE_INTEGER) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+  }
+  return total;
+}
+
 function normalizeText(value: unknown) {
   return String(value || "")
     .normalize("NFD")
@@ -191,6 +231,158 @@ function isVentaDirectaLike(params: { estado_pedido?: unknown; observaciones?: u
     obs.includes("pedido generado automaticamente desde una venta directa") ||
     obs.includes("pedido generado autom\u00e1ticamente desde una venta directa")
   );
+}
+
+function buildVariantRiskRows(rawProducts: any[], params?: VariantRiskParams): VariantRiskRow[] {
+  const minCombinaciones = Math.max(0, Number(params?.minCombinaciones) || 0);
+  const minEspacioTeorico = Math.max(0, Number(params?.minEspacioTeorico) || 0);
+  const limit = Math.max(1, Math.min(500, Number(params?.limit) || 100));
+
+  const rows = (rawProducts || [])
+    .map((product) => {
+      const uniqueCombos = new Map<
+        string,
+        { variantes: Record<string, string>; attributeSignature: string }
+      >();
+      const attributeNames = new Map<string, string>();
+      const attributeValues = new Map<string, Set<string>>();
+      const signatureCounts = new Map<string, number>();
+      const sucursales = Array.isArray(product?.sucursales) ? product.sucursales : [];
+      let combinacionesMaxSucursal = 0;
+
+      for (const sucursal of sucursales) {
+        const combinaciones = Array.isArray(sucursal?.combinaciones) ? sucursal.combinaciones : [];
+        combinacionesMaxSucursal = Math.max(combinacionesMaxSucursal, combinaciones.length);
+
+        for (const combinacion of combinaciones) {
+          const entries = variantsToEntries(combinacion?.variantes);
+          if (!entries.length) continue;
+
+          const normalizedRecord: Record<string, string> = {};
+          for (const [rawKey, rawValue] of entries) {
+            const keyNorm = normalizeText(rawKey);
+            const valueNorm = String(rawValue || "").trim();
+            if (!keyNorm || !valueNorm) continue;
+
+            normalizedRecord[keyNorm] = valueNorm;
+            if (!attributeNames.has(keyNorm)) {
+              attributeNames.set(keyNorm, String(rawKey).trim());
+            }
+            if (!attributeValues.has(keyNorm)) {
+              attributeValues.set(keyNorm, new Set<string>());
+            }
+            attributeValues.get(keyNorm)!.add(valueNorm);
+          }
+
+          const fingerprint = variantFingerprint(normalizedRecord);
+          if (!fingerprint) continue;
+
+          const attributeSignature = Object.keys(normalizedRecord).sort().join("|");
+          if (!uniqueCombos.has(fingerprint)) {
+            uniqueCombos.set(fingerprint, {
+              variantes: normalizedRecord,
+              attributeSignature,
+            });
+          }
+        }
+      }
+
+      if (!uniqueCombos.size) return null;
+
+      for (const combo of uniqueCombos.values()) {
+        signatureCounts.set(
+          combo.attributeSignature,
+          (signatureCounts.get(combo.attributeSignature) || 0) + 1
+        );
+      }
+
+      const combinacionesUnicas = uniqueCombos.size;
+      const atributosDistintos = attributeValues.size;
+      const valoresPorAtributo = Array.from(attributeValues.entries())
+        .map(([keyNorm, values]) => ({
+          keyNorm,
+          keyDisplay: attributeNames.get(keyNorm) || keyNorm,
+          count: values.size,
+        }))
+        .sort((a, b) => b.count - a.count || a.keyDisplay.localeCompare(b.keyDisplay));
+
+      const espacioTeorico = safeProduct(valoresPorAtributo.map((item) => item.count));
+      const firmasAtributos = signatureCounts.size;
+      const combinacionesIncompletas = Array.from(uniqueCombos.values()).filter(
+        (combo) => Object.keys(combo.variantes).length < atributosDistintos
+      ).length;
+      const coberturaPct =
+        espacioTeorico > 0
+          ? +((combinacionesUnicas / espacioTeorico) * 100).toFixed(2)
+          : 0;
+      const scoreRiesgo =
+        espacioTeorico +
+        (firmasAtributos - 1) * 25 +
+        combinacionesIncompletas * 5 +
+        Math.max(0, atributosDistintos - 2) * 10;
+
+      const atributos = valoresPorAtributo
+        .map((item) => `${item.keyDisplay}(${item.count})`)
+        .join(", ");
+      const firmasEjemplo = Array.from(signatureCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([signature, count]) => {
+          const readable = signature
+            .split("|")
+            .filter(Boolean)
+            .map((keyNorm) => attributeNames.get(keyNorm) || keyNorm)
+            .join(" + ");
+          return `${readable || "Sin atributos"} (${count})`;
+        })
+        .join(" | ");
+
+      const motivos: string[] = [];
+      motivos.push(`Matriz potencial ${espacioTeorico} con ${atributosDistintos} atributo(s)`);
+      if (firmasAtributos > 1) {
+        motivos.push(`${firmasAtributos} firmas de atributos distintas`);
+      }
+      if (combinacionesIncompletas > 0) {
+        motivos.push(`${combinacionesIncompletas} combinaciones sin todos los atributos`);
+      }
+      if (combinacionesUnicas !== espacioTeorico) {
+        motivos.push(`${combinacionesUnicas} combinaciones reales`);
+      }
+
+      return {
+        id_producto: String(product?._id || ""),
+        producto: String(product?.nombre_producto || ""),
+        id_vendedor: String(product?.id_vendedor || ""),
+        vendedor: String(product?.vendedor_nombre_completo || "").trim(),
+        group_id: typeof product?.groupId === "number" ? product.groupId : "",
+        sucursales: sucursales.length,
+        combinaciones_unicas: combinacionesUnicas,
+        combinaciones_max_sucursal: combinacionesMaxSucursal,
+        atributos_distintos: atributosDistintos,
+        espacio_teorico: espacioTeorico,
+        cobertura_pct: coberturaPct,
+        firmas_atributos: firmasAtributos,
+        combinaciones_incompletas: combinacionesIncompletas,
+        score_riesgo: scoreRiesgo,
+        atributos,
+        firmas_ejemplo: firmasEjemplo,
+        motivo: motivos.join("; "),
+      } satisfies VariantRiskRow;
+    })
+    .filter((row): row is VariantRiskRow => Boolean(row))
+    .filter(
+      (row) =>
+        row.combinaciones_unicas >= minCombinaciones &&
+        row.espacio_teorico >= minEspacioTeorico
+    )
+    .sort((a, b) =>
+      b.score_riesgo - a.score_riesgo ||
+      b.espacio_teorico - a.espacio_teorico ||
+      b.combinaciones_unicas - a.combinaciones_unicas ||
+      a.producto.localeCompare(b.producto)
+    );
+
+  return rows.slice(0, limit);
 }
 
 type ExportIngresos3MParams = {
@@ -1291,9 +1483,7 @@ export const ReportsService = {
   async getClientesActivosServicio({ mes, meses, mesFin }: ExportClientesActivosParams) {
     const mesesSeleccionados = resolveMesesSeleccionados({ mes, meses, mesFin }, 3);
     const { start, end } = rangeMeses(mesesSeleccionados);
-    const hoy = moment.tz(TZ).startOf("day").toDate();
-
-    const vendedores = await ReportsRepository.fetchVendedoresActivosConPlanes({ hoy });
+    const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
     const ventas = await ReportsRepository.fetchVentas3MPorVendedor({ start, end });
 
     const ventasMap = new Map<string, Map<string, number>>();
@@ -1306,30 +1496,62 @@ export const ReportsService = {
     }
 
     const sucursalesSet = new Set<string>();
-    for (const ven of vendedores as any[]) {
-      for (const ps of ven.pago_sucursales || []) {
-        if (ps?.sucursalName) sucursalesSet.add(String(ps.sucursalName));
-      }
-    }
+    const vendedoresActivos = (vendedores as any[])
+      .map((ven) => {
+        const id = String(ven._id || "").trim();
+        if (!id) return null;
+
+        const vigencia = ven.fecha_vigencia ? moment.tz(ven.fecha_vigencia, TZ).endOf("day") : null;
+        const pagos = Array.isArray(ven.pago_sucursales) ? ven.pago_sucursales : [];
+        const mesesActivos = new Set<string>();
+        const psMap = new Map<string, any>();
+
+        for (const ps of pagos) {
+          if (ps?.activo === false) continue;
+
+          const sucursal = String(ps?.sucursalName || "").trim();
+          if (!sucursal) continue;
+
+          const fechaIngreso = ps?.fecha_ingreso ? moment.tz(ps.fecha_ingreso, TZ).startOf("day") : null;
+          const fechaSalida = ps?.fecha_salida ? moment.tz(ps.fecha_salida, TZ).endOf("day") : null;
+
+          for (const mesSel of mesesSeleccionados) {
+            const monthStart = moment.tz(`${mesSel}-01 00:00:00`, TZ).startOf("month");
+            const monthEnd = monthStart.clone().endOf("month");
+
+            if (vigencia && vigencia.isBefore(monthStart)) continue;
+            if (fechaIngreso && fechaIngreso.isAfter(monthEnd)) continue;
+            if (fechaSalida && fechaSalida.isBefore(monthStart)) continue;
+
+            mesesActivos.add(mesSel);
+            sucursalesSet.add(sucursal);
+            if (!psMap.has(sucursal)) psMap.set(sucursal, ps);
+          }
+        }
+
+        if (mesesActivos.size === 0) return null;
+
+        return {
+          ven,
+          id,
+          mesesActivos,
+          psMap,
+        };
+      })
+      .filter(Boolean) as Array<{ ven: any; id: string; mesesActivos: Set<string>; psMap: Map<string, any> }>;
+
     const sucursales = Array.from(sucursalesSet).sort();
 
-    const rows = (vendedores as any[])
-      .map((ven) => {
-        const id = String(ven._id || "");
+    const rows = vendedoresActivos
+      .map(({ ven, id, mesesActivos, psMap }) => {
         const nombreCompleto = `${ven.nombre || ""} ${ven.apellido || ""}`.trim();
         const byMes = ventasMap.get(id) || new Map(mesesSeleccionados.map((m) => [m, 0]));
         const totalPeriodo = mesesSeleccionados.reduce((s, m) => s + (byMes.get(m) || 0), 0);
 
-        const psMap = new Map<string, any>();
-        for (const ps of ven.pago_sucursales || []) {
-          if (!ps?.sucursalName) continue;
-          psMap.set(String(ps.sucursalName), ps);
-        }
-
         const planesCols: Record<string, any> = {};
         for (const s of sucursales) {
           const ps = psMap.get(s);
-          planesCols[`${s} - Activo`] = !!ps?.activo;
+          planesCols[`${s} - Activo`] = !!ps;
           planesCols[`${s} - Alquiler`] = safeNum(ps?.alquiler);
           planesCols[`${s} - Exhibicion`] = safeNum(ps?.exhibicion);
           planesCols[`${s} - Delivery`] = safeNum(ps?.delivery);
@@ -1344,6 +1566,10 @@ export const ReportsService = {
           fecha_vigencia: ven.fecha_vigencia || null,
           comision_porcentual: safeNum(ven.comision_porcentual),
           comision_fija: safeNum(ven.comision_fija),
+          meses_activos: Array.from(mesesActivos).sort().join(", "),
+          cantidad_meses_activos: mesesActivos.size,
+          sucursales_activas: Array.from(psMap.keys()).sort().join(", "),
+          cantidad_sucursales_activas: psMap.size,
           ...Object.fromEntries(mesesSeleccionados.map((m) => [m, +((byMes.get(m) || 0).toFixed(2))])),
           total_periodo_bs: +totalPeriodo.toFixed(2),
           ...planesCols,
@@ -1351,13 +1577,18 @@ export const ReportsService = {
       })
       .sort((a, b) => String(a.cliente || "").localeCompare(String(b.cliente || "")) || String(a.id_cliente || "").localeCompare(String(b.id_cliente || "")));
 
+    const totalesPorMes = mesesSeleccionados.map((m) => ({
+      mes: m,
+      clientes_activos: vendedoresActivos.reduce((sum, item) => sum + (item.mesesActivos.has(m) ? 1 : 0), 0),
+    }));
+
     const resumen = {
       clientes_activos: rows.length,
-      ...Object.fromEntries(mesesSeleccionados.map((m) => [m, +rows.reduce((s, r) => s + safeNum((r as any)[m]), 0).toFixed(2)])),
+      ...Object.fromEntries(totalesPorMes.map((r) => [r.mes, r.clientes_activos])),
       total_periodo_bs: +rows.reduce((s, r) => s + safeNum(r.total_periodo_bs), 0).toFixed(2),
     };
 
-    return { meses: mesesSeleccionados, resumen, rows };
+    return { meses: mesesSeleccionados, resumen, totalesPorMes, rows };
   },
 
   async getVentasVendedoresPorMeses({ mes, meses, mesFin }: ExportVentasVendedoresParams) {
@@ -1644,6 +1875,63 @@ export const ReportsService = {
     rows.forEach((row) => ws.addRow(row));
 
     const filename = `stock_productos_${idSucursal}.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+    const filePath = path.join(outDir, filename);
+    await wb.xlsx.writeFile(filePath);
+
+    return { filePath, filename };
+  },
+
+  async getProductosRiesgoVariantes(params: VariantRiskParams = {}) {
+    const rowsRaw = await ReportsRepository.fetchProductosParaReporteVariantes({
+      sellerId: params.sellerId,
+    });
+    const rows = buildVariantRiskRows(rowsRaw as any[], params);
+
+    return {
+      total: rows.length,
+      filtros: {
+        sellerId: params.sellerId || "",
+        limit: Math.max(1, Math.min(500, Number(params.limit) || 100)),
+        minCombinaciones: Math.max(0, Number(params.minCombinaciones) || 0),
+        minEspacioTeorico: Math.max(0, Number(params.minEspacioTeorico) || 0),
+      },
+      rows,
+    };
+  },
+
+  async exportProductosRiesgoVariantesXlsx(params: VariantRiskParams = {}) {
+    const data = await this.getProductosRiesgoVariantes(params);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet("Productos_Variantes_Riesgo");
+    ws.columns = [
+      { header: "Score Riesgo", key: "score_riesgo", width: 16 },
+      { header: "Espacio Teorico", key: "espacio_teorico", width: 16 },
+      { header: "Combinaciones Unicas", key: "combinaciones_unicas", width: 18 },
+      { header: "Cobertura %", key: "cobertura_pct", width: 12 },
+      { header: "Firmas Atributos", key: "firmas_atributos", width: 16 },
+      { header: "Comb. Incompletas", key: "combinaciones_incompletas", width: 18 },
+      { header: "Atributos Distintos", key: "atributos_distintos", width: 18 },
+      { header: "Producto", key: "producto", width: 32 },
+      { header: "Id Producto", key: "id_producto", width: 28 },
+      { header: "Id Vendedor", key: "id_vendedor", width: 28 },
+      { header: "Vendedor", key: "vendedor", width: 28 },
+      { header: "Group Id", key: "group_id", width: 12 },
+      { header: "Sucursales", key: "sucursales", width: 10 },
+      { header: "Max Comb. Sucursal", key: "combinaciones_max_sucursal", width: 18 },
+      { header: "Atributos", key: "atributos", width: 40 },
+      { header: "Firmas Ejemplo", key: "firmas_ejemplo", width: 50 },
+      { header: "Motivo", key: "motivo", width: 65 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    data.rows.forEach((row) => ws.addRow(row));
+
+    const filename = `productos_variantes_riesgo.xlsx`;
     const outDir = path.join(process.cwd(), "reports");
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
