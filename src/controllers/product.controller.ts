@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ProductService } from "../services/product.service";
 import { CategoryService } from "../services/category.service";
 import { ProductVariantQRService } from "../services/productVariantQR.service";
+import { ProductVariantQRGroupService } from "../services/productVariantQRGroup.service";
 import { ProductVariantKeyService } from "../services/productVariantKey.service";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
@@ -294,6 +295,176 @@ export const resolveVariantQRPayload = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Error al resolver payload QR",
+      error
+    });
+  }
+};
+
+export const createVariantQRGroup = async (req: Request, res: Response) => {
+  const { name, sellerId, items } = req.body || {};
+
+  if (!name || !sellerId || !Array.isArray(items)) {
+    return res.status(400).json({
+      success: false,
+      message: "name, sellerId e items son requeridos"
+    });
+  }
+
+  try {
+    const group = await ProductVariantQRGroupService.createGroup({
+      name,
+      sellerId,
+      items
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Grupo QR creado correctamente",
+      group
+    });
+  } catch (error) {
+    console.error("Error creando grupo QR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al crear grupo QR",
+      error
+    });
+  }
+};
+
+export const updateVariantQRGroup = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, items, active } = req.body || {};
+
+  try {
+    const group = await ProductVariantQRGroupService.updateGroup({
+      id,
+      name,
+      items,
+      active
+    });
+
+    res.json({
+      success: true,
+      message: "Grupo QR actualizado correctamente",
+      group
+    });
+  } catch (error) {
+    console.error("Error actualizando grupo QR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al actualizar grupo QR",
+      error
+    });
+  }
+};
+
+export const getVariantQRGroup = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const sucursalId = req.query.sucursalId as string | undefined;
+
+  try {
+    const group = await ProductVariantQRGroupService.getGroupById(id, sucursalId);
+    res.json({
+      success: true,
+      group
+    });
+  } catch (error) {
+    console.error("Error obteniendo grupo QR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener grupo QR",
+      error
+    });
+  }
+};
+
+export const listVariantQRGroup = async (req: Request, res: Response) => {
+  const sellerId = req.query.sellerId as string | undefined;
+  const q = req.query.q as string | undefined;
+  const limitRaw = req.query.limit as string | undefined;
+  const activeRaw = req.query.active as string | undefined;
+  const active =
+    activeRaw === undefined
+      ? undefined
+      : activeRaw === "true" || activeRaw === "1";
+
+  try {
+    const result = await ProductVariantQRGroupService.listGroups({
+      sellerId,
+      q,
+      active,
+      limit: limitRaw ? Number(limitRaw) : undefined
+    });
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    console.error("Error listando grupos QR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al listar grupos QR",
+      error
+    });
+  }
+};
+
+export const generateVariantQRGroup = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { forceRegenerate } = req.body || {};
+
+  try {
+    const qrData = await ProductVariantQRGroupService.generateGroupQR({
+      id,
+      forceRegenerate: Boolean(forceRegenerate)
+    });
+
+    res.json({
+      success: true,
+      message: "QR de grupo generado correctamente",
+      qrData
+    });
+  } catch (error) {
+    console.error("Error generando QR de grupo:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al generar QR de grupo",
+      error
+    });
+  }
+};
+
+export const resolveVariantQRGroupPayload = async (req: Request, res: Response) => {
+  const payload = req.query.payload as string | undefined;
+  const sucursalId = req.query.sucursalId as string | undefined;
+
+  if (!payload) {
+    return res.status(400).json({
+      success: false,
+      message: "payload es requerido"
+    });
+  }
+
+  try {
+    const group = await ProductVariantQRGroupService.resolveGroupQRPayload(payload, sucursalId);
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "No se pudo resolver el QR de grupo"
+      });
+    }
+
+    res.json({
+      success: true,
+      group
+    });
+  } catch (error) {
+    console.error("Error resolviendo QR de grupo:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al resolver QR de grupo",
       error
     });
   }
@@ -636,6 +807,12 @@ export const ProductController = {
   listVariantQR,
   findVariantByQRCode,
   resolveVariantQRPayload,
+  createVariantQRGroup,
+  updateVariantQRGroup,
+  getVariantQRGroup,
+  listVariantQRGroup,
+  generateVariantQRGroup,
+  resolveVariantQRGroupPayload,
   migrateVariantKeys
 
 };
