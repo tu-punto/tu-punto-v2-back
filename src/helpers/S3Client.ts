@@ -24,3 +24,25 @@ export async function uploadFileToS3(buffer: Buffer, originalName: string, mimet
 
   return key;
 }
+
+export async function uploadVariantImageToS3(
+  buffer: Buffer,
+  originalName: string,
+  mimetype: string
+): Promise<{ key: string; url: string }> {
+  const fileExtension = originalName.split('.').pop() || "png";
+  const key = `prod-img/${randomUUID()}.${fileExtension}`;
+
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key: key,
+    Body: buffer,
+    ContentType: mimetype,
+  });
+
+  await s3.send(command);
+
+  const url = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+
+  return { key, url };
+}

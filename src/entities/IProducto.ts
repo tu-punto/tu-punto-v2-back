@@ -1,11 +1,30 @@
 import { Types } from 'mongoose';
 import { ICaracteristicas } from './ICaracteristicas';
 
+export interface IImagenVariante {
+  url: string;
+  key?: string;          
+  
+}
+
+export interface IPromocionVariante {
+  titulo?: string;              // max 60
+  descripcion?: string;         // max 150
+  // porcentajeDescuento?: number; 
+  // precioPromocional?: number;   
+  fechaInicio?: Date;
+  fechaFin?: Date;
+}
+
 export interface ICombinacion {
   variantes: Record<string, string>; // ejemplo: { "Color": "Rojo", "Talla": "L" }
   variantKey?: string;
   precio: number;
   stock: number;
+
+  imagenes?: IImagenVariante[]; 
+  descripcion?: string;
+  promocion?: IPromocionVariante;
 }
 
 export interface ISucursalProducto {

@@ -358,7 +358,11 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
         qrCode: "$qrCode",
         qrImagePath: "$qrImagePath",
         qrProductURL: "$qrProductURL",
-        variantKey: "$sucursales.combinaciones.variantKey"
+        variantKey: "$sucursales.combinaciones.variantKey",
+
+        imagenes: "$sucursales.combinaciones.imagenes",
+        descripcion: "$sucursales.combinaciones.descripcion",
+        promocion: "$sucursales.combinaciones.promocion"
       }
     }
   );
@@ -409,6 +413,72 @@ const findFlatProductListPage = async (params?: FlatInventoryPageParams) => {
   };
 };
 
+const updateVariantExtrasBySeller = async ({
+  productId,
+  sucursalId,
+  variantKey,
+  sellerId,
+  descripcion,
+  promocion,
+  imagenes
+}: {
+  productId: string;
+  sucursalId: string;
+  variantKey: string;
+  sellerId: string;
+  descripcion?: string;
+  promocion?: {
+    titulo?: string;
+    descripcion?: string;
+    fechaInicio?: Date;
+    fechaFin?: Date;
+  };
+  imagenes?: {
+    url: string;
+    key?: string;
+  }[];
+}): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado o no pertenece al vendedor");
+  }
+
+  const sucursal = producto.sucursales.find(
+    s => s.id_sucursal.toString() === sucursalId
+  );
+
+  if (!sucursal) {
+    throw new Error("Sucursal no encontrada");
+  }
+
+  const combinacion = sucursal.combinaciones.find(
+    c => c.variantKey === variantKey
+  );
+
+  if (!combinacion) {
+    throw new Error("Combinación no encontrada");
+  }
+
+  if (descripcion !== undefined) {
+    combinacion.descripcion = descripcion;
+  }
+
+  if (promocion !== undefined) {
+    combinacion.promocion = promocion;
+  }
+
+  if (imagenes !== undefined) {
+    combinacion.imagenes = imagenes;
+  }
+  producto.markModified("sucursales");
+
+  return await producto.save();
+};
+
 export const ProductRepository = {
   findAll,
   findById,
@@ -427,5 +497,7 @@ export const ProductRepository = {
   findAllTemporales,
   findFlatProductList,
   findFlatProductListPage,
-  findByQRCode
+  findByQRCode,
+  updateVariantExtrasBySeller
+  
 };

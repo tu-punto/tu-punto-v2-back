@@ -27,7 +27,8 @@ import { requireAuth, requireRole } from "./middlewares/auth.middleware";
 const router = Router();
 
 router.use("/seller", requireAuth, sellerRouter);
-router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
+// router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
+router.use("/product", productRouter);
 router.use("/feature", requireAuth, requireRole("admin", "operator", "seller"), featureRouter);
 router.use("/category", requireAuth, requireRole("admin", "operator", "seller"), categoryRouter);
 router.use("/sale", requireAuth, requireRole("admin", "operator", "seller"), saleRouter);

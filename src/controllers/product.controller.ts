@@ -6,6 +6,7 @@ import { ProductVariantQRGroupService } from "../services/productVariantQRGroup.
 import { ProductVariantKeyService } from "../services/productVariantKey.service";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { uploadVariantImageToS3 } from "../helpers/S3Client";
 
 const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null> => {
   const user = await UserModel.findById(userId).select("role vendedor email").lean();
@@ -626,17 +627,6 @@ export const generateIngressPDF = async (req: Request, res: Response) => {
 
 export const getFlatProductList = async (req: Request, res: Response) => {
 
-
-
-
-
-
-
-
-
-
-
-
   try {
     const sucursalId = req.query.sucursalId as string | undefined;
     const sellerId = req.query.sellerId as string | undefined;
@@ -778,6 +768,89 @@ export const getSellerInventoryList = async (req: Request, res: Response) => {
   }
 };
 
+export const updateVariantExtrasBySeller = async (req: Request, res: Response) => {
+  try {
+    // const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    // const authUserId = String(res.locals.auth?.id || "");
+
+    // if (authRole !== "seller" || !authUserId) {
+    //   return res.status(403).json({
+    //     success: false,
+    //     message: "Solo un vendedor autenticado puede editar esta variante"
+    //   });
+    // }
+
+    // const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    // if (!sellerId) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "sellerId no resuelto"
+    //   });
+    // }
+    // TEMPORAL PARA PRUEBAS
+    const sellerId = "6863adc01c1493ba582e5f97";
+
+    const { productId, sucursalId, variantKey } = req.params;
+    const { descripcion } = req.body;
+
+    let promocion: any = undefined;
+
+    if (req.body.promocion !== undefined) {
+      try {
+        promocion =
+          typeof req.body.promocion === "string"
+            ? JSON.parse(req.body.promocion)
+            : req.body.promocion;
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo promocion debe tener formato JSON válido"
+        });
+      }
+    }
+
+    const files = req.files as Express.Multer.File[] | undefined;
+    let imagenes: { key: string; url: string }[] | undefined = undefined;
+
+    if (files && files.length > 0) {
+      if (files.length > 4) {
+        return res.status(400).json({
+          success: false,
+          message: "Solo se permiten máximo 4 imágenes"
+        });
+      }
+
+      imagenes = await Promise.all(
+        files.map((file) =>
+          uploadVariantImageToS3(file.buffer, file.originalname, file.mimetype)
+        )
+      );
+    }
+
+    const result = await ProductService.updateVariantExtrasBySeller({
+      productId,
+      sucursalId,
+      variantKey,
+      sellerId,
+      descripcion,
+      promocion,
+      imagenes
+    });
+
+    return res.json({
+      success: true,
+      message: "Extras de la variante actualizados correctamente",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en updateVariantExtrasBySeller:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al actualizar extras de la variante"
+    });
+  }
+};
+
 
 export const ProductController = {
   getProduct,
@@ -813,6 +886,7 @@ export const ProductController = {
   listVariantQRGroup,
   generateVariantQRGroup,
   resolveVariantQRGroupPayload,
-  migrateVariantKeys
+  migrateVariantKeys,
+  updateVariantExtrasBySeller
 
 };

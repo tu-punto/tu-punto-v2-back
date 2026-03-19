@@ -13,7 +13,24 @@ const CombinacionSchema = new Schema({
     required: false
   },
   precio: { type: Number, required: true },
-  stock: { type: Number, required: true }
+  stock: { type: Number, required: true },
+
+  imagenes: [
+    {
+      url: { type: String, required: true },
+      key: { type: String, required: false }
+    }
+  ],
+  descripcion: {
+    type: String,
+    required: false
+  },
+  promocion: {
+    titulo: { type: String, required: false },
+    descripcion: { type: String, required: false },
+    fechaInicio: { type: Date, required: false },
+    fechaFin: { type: Date, required: false }
+  }
 }, { _id: false });
 
 // Subdocumento: sucursal

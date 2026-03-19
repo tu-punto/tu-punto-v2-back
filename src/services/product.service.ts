@@ -419,6 +419,63 @@ const getFlatProductListPage = async (params?: {
   return await ProductRepository.findFlatProductListPage(params);
 };
 
+const updateVariantExtrasBySeller = async ({
+  productId,
+  sucursalId,
+  variantKey,
+  sellerId,
+  descripcion,
+  promocion,
+  imagenes
+}: {
+  productId: string;
+  sucursalId: string;
+  variantKey: string;
+  sellerId: string;
+  descripcion?: string;
+  promocion?: {
+    titulo?: string;
+    descripcion?: string;
+    fechaInicio?: Date;
+    fechaFin?: Date;
+  };
+  imagenes?: {
+    url: string;
+    key?: string;
+  }[];
+}) => {
+  if (imagenes && imagenes.length > 4) {
+    throw new Error("Solo se permiten máximo 4 imágenes");
+  }
+
+  if (promocion?.titulo && promocion.titulo.length > 60) {
+    throw new Error("El título de la promoción no puede exceder 60 caracteres");
+  }
+
+  if (promocion?.descripcion && promocion.descripcion.length > 150) {
+    throw new Error("La descripción de la promoción no puede exceder 150 caracteres");
+  }
+
+  if (promocion?.fechaInicio && promocion?.fechaFin) {
+    const inicio = new Date(promocion.fechaInicio);
+    const fin = new Date(promocion.fechaFin);
+
+    if (fin < inicio) {
+      throw new Error("La fechaFin no puede ser menor a la fechaInicio");
+    }
+  }
+
+  return await ProductRepository.updateVariantExtrasBySeller({
+    productId,
+    sucursalId,
+    variantKey,
+    sellerId,
+    descripcion,
+    promocion,
+    imagenes
+  });
+};
+
 export const ProductService = {
   getAllProducts,
   registerProduct,
@@ -440,5 +497,6 @@ export const ProductService = {
   getFlatProductListPage,
   regenerateProductQR,
   getProductQR,
-  findProductByQRCode
+  findProductByQRCode,
+  updateVariantExtrasBySeller
 };

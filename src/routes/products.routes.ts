@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ProductController } from "../controllers/product.controller";
 import { requireSellerOwnership } from "../middlewares/auth.middleware";
+import { uploadVariantImages } from "../middlewares/upload.middleware";
 
 const productRouter = Router();
 
@@ -46,5 +47,12 @@ productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF
   productRouter.put("/update-price", ProductController.updatePrice);
   productRouter.put("/update-subvariant-stock", ProductController.updateSubvariantStock);
   productRouter.put("/variant-qr-group/:id", ProductController.updateVariantQRGroup);
+
+  //PATCH
+  productRouter.patch(
+  "/:productId/sucursal/:sucursalId/variant/:variantKey/extras",
+  uploadVariantImages.array("imagenes", 4),
+  ProductController.updateVariantExtrasBySeller
+);
 
 export default productRouter;
