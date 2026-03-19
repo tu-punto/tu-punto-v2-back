@@ -16,6 +16,7 @@ import {
   getVentasQr,
   exportVentasQrXlsx,
   exportClientesStatusXlsx,
+  getEntregasSimplesResumen,
 } from "../controllers/reports.controller";
 
 const reportsRouter = Router();
@@ -37,5 +38,6 @@ reportsRouter.get("/ventas-vendedores-4m/xlsx", exportVentasVendedores4mXlsx);
 reportsRouter.post("/ventas-qr", getVentasQr);
 reportsRouter.get("/ventas-qr/xlsx", exportVentasQrXlsx);
 reportsRouter.get("/clientes-status/xlsx", exportClientesStatusXlsx);
+reportsRouter.get("/entregas-simples", getEntregasSimplesResumen);
 
 export default reportsRouter;

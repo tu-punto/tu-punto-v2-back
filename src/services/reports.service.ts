@@ -407,6 +407,31 @@ function parseFechaPreservandoHoraOriginal(value: unknown) {
   return moment.parseZone(String(value));
 }
 
+const SIMPLE_DELIVERY_DEFAULT_SELLERS = [
+  { id: "6863adbd1c1493ba582e5f7f", nombre: "Michelle Andrade" },
+  { id: "6929c7603f097364d6bf21f5", nombre: "Jessmy Estefani" },
+  { id: "6921ec250f648dc833be70ad", nombre: "Camila Azurduy" },
+  { id: "69810f7f46336267d1bdfef5", nombre: "Judith Montaño" },
+  { id: "697a404bad1c6f00979b5b87", nombre: "Nikole" },
+] as const;
+
+const SIMPLE_DELIVERY_DEFAULT_MONTHS = [1, 2, 11, 12] as const;
+
+const MONTH_LABELS_ES: Record<number, string> = {
+  1: "Enero",
+  2: "Febrero",
+  3: "Marzo",
+  4: "Abril",
+  5: "Mayo",
+  6: "Junio",
+  7: "Julio",
+  8: "Agosto",
+  9: "Septiembre",
+  10: "Octubre",
+  11: "Noviembre",
+  12: "Diciembre",
+};
+
 function resolveMesesSeleccionados(params: { mes?: string; meses?: string[]; mesFin?: string }, fallbackWindow?: 3 | 4) {
   if (params.mes || (params.meses && params.meses.length)) {
     return normalizeMeses(params.mes, params.meses);
@@ -2734,6 +2759,94 @@ async getVentasQr({ mes, meses, sucursalIds }: Params) {
     totalesPorMesYSucursal,  // pivot (mes+sucursal)
     totalesPorMes,           // pivot (mes)
     totalGlobal,
+  };
+},
+async getEntregasSimplesResumen(params: { sellerIds?: string[]; months?: number[] } = {}) {
+  const sellerIds =
+    Array.isArray(params.sellerIds) && params.sellerIds.length
+      ? Array.from(new Set(params.sellerIds.map((id) => String(id).trim()).filter(Boolean)))
+      : SIMPLE_DELIVERY_DEFAULT_SELLERS.map((s) => s.id);
+
+  const months =
+    Array.isArray(params.months) && params.months.length
+      ? Array.from(
+          new Set(
+            params.months
+              .map((m) => Number(m))
+              .filter((m) => Number.isInteger(m) && m >= 1 && m <= 12),
+          ),
+        ).sort((a, b) => a - b)
+      : [...SIMPLE_DELIVERY_DEFAULT_MONTHS];
+
+  const rowsRaw = (await ReportsRepository.fetchEntregasSimplesPorVendedorYMes({
+    sellerIds,
+    months,
+  })) as Array<{
+    id_vendedor: string;
+    vendedor?: string;
+    month: number;
+    entregas_simples: number;
+  }>;
+
+  const defaultSellerNameMap = new Map<string, string>(
+    SIMPLE_DELIVERY_DEFAULT_SELLERS.map((s) => [s.id, s.nombre]),
+  );
+  const sellerNameMap = new Map<string, string>();
+
+  for (const row of rowsRaw) {
+    const sellerId = String(row.id_vendedor || "");
+    sellerNameMap.set(
+      sellerId,
+      String(row.vendedor || "").trim() || defaultSellerNameMap.get(sellerId) || sellerId,
+    );
+  }
+
+  for (const sellerId of sellerIds) {
+    if (!sellerNameMap.has(sellerId)) {
+      sellerNameMap.set(sellerId, defaultSellerNameMap.get(sellerId) || sellerId);
+    }
+  }
+
+  const rows = rowsRaw.map((row) => ({
+    id_vendedor: String(row.id_vendedor || ""),
+    vendedor: sellerNameMap.get(String(row.id_vendedor || "")) || String(row.id_vendedor || ""),
+    month: Number(row.month || 0),
+    mes: MONTH_LABELS_ES[Number(row.month || 0)] || String(row.month || ""),
+    entregas_simples: safeNum(row.entregas_simples),
+  }));
+
+  const totalesPorMes = months.map((month) => ({
+    month,
+    mes: MONTH_LABELS_ES[month] || String(month),
+    entregas_simples: rows
+      .filter((row) => row.month === month)
+      .reduce((sum, row) => sum + safeNum(row.entregas_simples), 0),
+  }));
+
+  const totalesPorVendedor = sellerIds.map((sellerId) => ({
+    id_vendedor: sellerId,
+    vendedor: sellerNameMap.get(sellerId) || sellerId,
+    entregas_simples: rows
+      .filter((row) => row.id_vendedor === sellerId)
+      .reduce((sum, row) => sum + safeNum(row.entregas_simples), 0),
+  }));
+
+  return {
+    filtros: {
+      sellerIds,
+      months,
+    },
+    criterio: {
+      incluido: 'Pedidos con estado "Entregado"',
+      excluido: 'Ventas directas (estado "interno") y ventas externas',
+      nota: "El conteo se atribuye al vendedor por ventas o productos temporales asociados al pedido.",
+    },
+    rows,
+    totalesPorMes,
+    totalesPorVendedor,
+    totalGeneral: {
+      entregas_simples: totalesPorMes.reduce((sum, row) => sum + safeNum(row.entregas_simples), 0),
+    },
   };
 },
 async exportVentasQrXlsx({ meses, sucursalIds }: VentasQrParams) {

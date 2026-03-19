@@ -34,6 +34,45 @@ const parseMesesInput = (source: any) => {
 
   return { mes, meses };
 };
+
+const MONTH_NAME_TO_NUMBER: Record<string, number> = {
+  enero: 1,
+  febrero: 2,
+  marzo: 3,
+  abril: 4,
+  mayo: 5,
+  junio: 6,
+  julio: 7,
+  agosto: 8,
+  septiembre: 9,
+  setiembre: 9,
+  octubre: 10,
+  noviembre: 11,
+  diciembre: 12,
+};
+
+const parseNumberArrayInput = (value: unknown) => {
+  const raw = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",").map((item) => item.trim()).filter(Boolean)
+      : [];
+
+  return raw
+    .map((item) => {
+      const direct = Number(item);
+      if (Number.isInteger(direct) && direct >= 1 && direct <= 12) return direct;
+      return MONTH_NAME_TO_NUMBER[String(item).trim().toLowerCase()];
+    })
+    .filter((item): item is number => Number.isInteger(item) && item >= 1 && item <= 12);
+};
+
+const parseStringArrayInput = (value: unknown) => {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return undefined;
+};
+
 const SUCURSALES_REPORTE_3M = [
   "6859a22ce3356f061c43e151",
   "685a74a6ce20b0f8bf89d4f4",
@@ -313,6 +352,18 @@ export const exportClientesStatusXlsx = async (_: Request, res: Response) => {
   } catch (err: any) {
     console.error("exportClientesStatusXlsx error:", err);
     return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+
+export const getEntregasSimplesResumen = async (req: Request, res: Response) => {
+  try {
+    const sellerIds = parseStringArrayInput(req.query?.sellerIds);
+    const months = parseNumberArrayInput(req.query?.months);
+    const data = await ReportsService.getEntregasSimplesResumen({ sellerIds, months });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getEntregasSimplesResumen error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
   }
 };
 
