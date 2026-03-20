@@ -28,6 +28,23 @@ const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null>
   return null;
 };
 
+const parseBooleanQuery = (value: unknown): boolean | undefined => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "si", "yes"].includes(normalized)) {
+    return true;
+  }
+
+  if (["false", "0", "no"].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
+};
+
 export const getProduct = async (req: Request, res: Response) => {
   try {
     const products = await ProductService.getAllProducts();
@@ -768,27 +785,72 @@ export const getSellerInventoryList = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellerProductInfoList = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+
+    if (authRole !== "seller" || !authUserId) {
+      return res.status(403).json({
+        success: false,
+        message: "Solo un vendedor autenticado puede consultar esta informacion"
+      });
+    }
+
+    const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId no resuelto"
+      });
+    }
+
+    const result = await ProductService.getSellerProductInfoListPage({
+      sellerId,
+      sucursalId: req.query.sucursalId as string | undefined,
+      categoryId: req.query.categoryId as string | undefined,
+      q: req.query.q as string | undefined,
+      inStock: parseBooleanQuery(req.query.inStock),
+      hasPromotion: parseBooleanQuery(req.query.hasPromotion),
+      hasImages: parseBooleanQuery(req.query.hasImages),
+      hasDescription: parseBooleanQuery(req.query.hasDescription),
+      page: Number(req.query.page || 1),
+      limit: Number(req.query.limit || 10),
+      sortOrder: req.query.sortOrder === "desc" ? "desc" : "asc"
+    });
+
+    return res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error("Error en getSellerProductInfoList:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener informacion de productos del vendedor"
+    });
+  }
+};
+
 export const updateVariantExtrasBySeller = async (req: Request, res: Response) => {
   try {
-    // const authRole = String(res.locals.auth?.role || "").toLowerCase();
-    // const authUserId = String(res.locals.auth?.id || "");
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
 
-    // if (authRole !== "seller" || !authUserId) {
-    //   return res.status(403).json({
-    //     success: false,
-    //     message: "Solo un vendedor autenticado puede editar esta variante"
-    //   });
-    // }
+    if (authRole !== "seller" || !authUserId) {
+      return res.status(403).json({
+        success: false,
+        message: "Solo un vendedor autenticado puede editar esta variante"
+      });
+    }
 
-    // const sellerId = await resolveSellerIdByAuthUser(authUserId);
-    // if (!sellerId) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "sellerId no resuelto"
-    //   });
-    // }
-    // TEMPORAL PARA PRUEBAS
-    const sellerId = "6863adc01c1493ba582e5f97";
+    const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId no resuelto"
+      });
+    }
 
     const { productId, sucursalId, variantKey } = req.params;
     const { descripcion } = req.body;
@@ -851,6 +913,88 @@ export const updateVariantExtrasBySeller = async (req: Request, res: Response) =
   }
 };
 
+export const updateSellerProductInfoByVariant = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+
+    if (authRole !== "seller" || !authUserId) {
+      return res.status(403).json({
+        success: false,
+        message: "Solo un vendedor autenticado puede editar esta variante"
+      });
+    }
+
+    const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId no resuelto"
+      });
+    }
+
+    const { productId, variantKey } = req.params;
+    const { descripcion } = req.body;
+    const clearImages = parseBooleanQuery(req.body.clearImages) === true;
+
+    let promocion: any = undefined;
+    if (req.body.promocion !== undefined) {
+      try {
+        promocion =
+          typeof req.body.promocion === "string"
+            ? JSON.parse(req.body.promocion)
+            : req.body.promocion;
+      } catch (_error) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo promocion debe tener formato JSON valido"
+        });
+      }
+    }
+
+    const files = req.files as Express.Multer.File[] | undefined;
+    let imagenes: { key: string; url: string }[] | undefined = undefined;
+
+    if (clearImages) {
+      imagenes = [];
+    } else if (files && files.length > 0) {
+      if (files.length > 4) {
+        return res.status(400).json({
+          success: false,
+          message: "Solo se permiten maximo 4 imagenes"
+        });
+      }
+
+      imagenes = await Promise.all(
+        files.map((file) =>
+          uploadVariantImageToS3(file.buffer, file.originalname, file.mimetype)
+        )
+      );
+    }
+
+    const result = await ProductService.updateSellerProductInfoByVariant({
+      productId,
+      variantKey,
+      sellerId,
+      descripcion,
+      promocion,
+      imagenes
+    });
+
+    return res.json({
+      success: true,
+      message: "Informacion de la variante actualizada correctamente",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en updateSellerProductInfoByVariant:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al actualizar informacion de la variante"
+    });
+  }
+};
+
 
 export const ProductController = {
   getProduct,
@@ -872,6 +1016,7 @@ export const ProductController = {
   getSellerInventoryAll,
   getFlatProductListPage,
   getSellerInventoryList,
+  getSellerProductInfoList,
   getProductQR,
   regenerateProductQR,
   findProductByQR,
@@ -887,6 +1032,7 @@ export const ProductController = {
   generateVariantQRGroup,
   resolveVariantQRGroupPayload,
   migrateVariantKeys,
-  updateVariantExtrasBySeller
+  updateVariantExtrasBySeller,
+  updateSellerProductInfoByVariant
 
 };
