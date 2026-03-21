@@ -124,6 +124,19 @@ function buildInventoryRowKey(params: {
   return `fallback|${sellerId}|${variante}`;
 }
 
+function getSellerLifecycleStatus(fechaVigencia: unknown): "activo" | "debe_renovar" | "ya_no_es_cliente" {
+  if (!fechaVigencia) return "ya_no_es_cliente";
+
+  const hoy = moment.tz(TZ).startOf("day");
+  const vigencia = moment.tz(fechaVigencia, TZ).endOf("day");
+  if (!vigencia.isValid()) return "ya_no_es_cliente";
+
+  const diasVencido = hoy.diff(vigencia, "day");
+  if (diasVencido <= 0) return "activo";
+  if (diasVencido <= 20) return "debe_renovar";
+  return "ya_no_es_cliente";
+}
+
 function monthRange(mes: string) {
   if (!/^\d{4}-\d{2}$/.test(mes)) throw new Error("mes debe ser 'YYYY-MM'");
   const start = moment.tz(`${mes}-01 00:00:00`, TZ).toDate();
@@ -1809,7 +1822,9 @@ export const ReportsService = {
       if (!idVendedor) continue;
       if (requestedSellerId && requestedSellerId !== idVendedor) continue;
 
-      const vigencia = ven.fecha_vigencia ? moment.tz(ven.fecha_vigencia, TZ).endOf("day") : null;
+      const estadoCliente = getSellerLifecycleStatus(ven.fecha_vigencia);
+      if (estadoCliente === "ya_no_es_cliente") continue;
+
       const pagos = Array.isArray(ven.pago_sucursales) ? ven.pago_sucursales : [];
 
       const tieneSucursalActiva = pagos.some((pago: any) => {
@@ -1827,7 +1842,7 @@ export const ReportsService = {
 
       sellerMeta.set(idVendedor, {
         vendedor: `${ven.nombre || ""} ${ven.apellido || ""}`.trim(),
-        estado_cliente: vigencia && !vigencia.isBefore(today) ? "activo" : "debe_renovar",
+        estado_cliente: estadoCliente,
       });
     }
 
