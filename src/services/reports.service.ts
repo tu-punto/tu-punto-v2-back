@@ -4,7 +4,7 @@ import fs from "node:fs";
 import ExcelJS from "exceljs";
 import moment from "moment-timezone";
 import { ReportsRepository } from "../repositories/reports.repository";
-import { variantFingerprint, variantsToEntries } from "../utils/variantKey";
+import { variantFingerprint, variantLabel, variantsToEntries } from "../utils/variantKey";
 
 const TZ = "America/La_Paz";
 
@@ -103,25 +103,94 @@ function formatVariante(v: unknown): string {
   return ordered.map((k) => `${k}: ${String(obj[k])}`).join("/");
 }
 
-function buildInventoryRowKey(params: {
+function toVariantRecord(variantes: unknown): Record<string, string> | null {
+  if (!variantes || typeof variantes !== "object") return null;
+
+  const entries = variantsToEntries(variantes as Record<string, string>);
+  if (!entries.length) return null;
+  return Object.fromEntries(entries);
+}
+
+function stripBaseProductPrefix(label: unknown, baseName?: unknown): string {
+  const raw = String(label || "").trim();
+  const base = String(baseName || "").trim();
+  if (!raw || !base) return raw;
+
+  const rawNorm = normalizeText(raw);
+  const baseNorm = normalizeText(base);
+  if (!baseNorm || !rawNorm.startsWith(baseNorm)) return raw;
+
+  return raw.slice(base.length).replace(/^[-:/\s]+/, "").trim() || raw;
+}
+
+function normalizeInventoryVariantValueLabel(label: unknown, baseName?: unknown): string {
+  const stripped = stripBaseProductPrefix(label, baseName);
+  return normalizeText(stripped).replace(/(^|\/)\s*[^:/]+:\s*/g, "$1");
+}
+
+function buildInventoryAliasKeys(params: {
   idProducto?: unknown;
   variantKey?: unknown;
+  variantes?: unknown;
   variante?: unknown;
   idVendedor?: unknown;
+  baseName?: unknown;
   esTemporal?: boolean;
 }) {
   const sellerId = String(params.idVendedor || "").trim();
   const productId = String(params.idProducto || "").trim();
   const variantKey = String(params.variantKey || "").trim();
-  const variante = String(params.variante || "").trim().toLowerCase();
+  const variantRecord = toVariantRecord(params.variantes);
+  const fingerprint = variantRecord ? variantFingerprint(variantRecord) : "";
+  const valueLabel = variantRecord
+    ? normalizeInventoryVariantValueLabel(variantLabel(variantRecord), params.baseName)
+    : normalizeInventoryVariantValueLabel(params.variante, params.baseName);
+  const aliases = new Set<string>();
 
   if (params.esTemporal) {
-    return `temp|${sellerId}|${variante}`;
+    aliases.add(`temp|${sellerId}|${normalizeText(params.variante)}`);
+    return Array.from(aliases);
   }
 
-  if (productId && variantKey) return `prod|${productId}|var|${variantKey}`;
-  if (productId) return `prod|${productId}|name|${variante}`;
-  return `fallback|${sellerId}|${variante}`;
+  if (productId && variantKey) aliases.add(`prod|${productId}|var|${variantKey}`);
+  if (productId && fingerprint) aliases.add(`prod|${productId}|fp|${fingerprint}`);
+  if (productId && valueLabel) aliases.add(`prod|${productId}|lbl|${valueLabel}`);
+  if (!productId && valueLabel) aliases.add(`fallback|${sellerId}|${valueLabel}`);
+
+  return Array.from(aliases);
+}
+
+function resolveInventoryRowKey(
+  aliasMap: Map<string, string>,
+  params: Parameters<typeof buildInventoryAliasKeys>[0]
+) {
+  const aliases = buildInventoryAliasKeys(params);
+  for (const alias of aliases) {
+    const existing = aliasMap.get(alias);
+    if (existing) return existing;
+  }
+
+  return aliases[0] || `fallback|${normalizeText(params.variante)}`;
+}
+
+function registerInventoryAliases(
+  aliasMap: Map<string, string>,
+  canonicalKey: string,
+  params: Parameters<typeof buildInventoryAliasKeys>[0]
+) {
+  for (const alias of buildInventoryAliasKeys(params)) {
+    aliasMap.set(alias, canonicalKey);
+  }
+}
+
+function getInventoryDisplayVariant(params: {
+  variantes?: unknown;
+  nombreVariante?: unknown;
+  baseName?: unknown;
+}) {
+  const fromMap = formatVariante(params.variantes);
+  if (fromMap) return fromMap;
+  return stripBaseProductPrefix(params.nombreVariante, params.baseName);
 }
 
 function getSellerLifecycleStatus(fechaVigencia: unknown): "activo" | "debe_renovar" | "ya_no_es_cliente" {
@@ -1861,36 +1930,51 @@ export const ReportsService = {
     ]);
 
     const inventoryMap = new Map<string, InventoryRow>();
+    const inventoryAliasMap = new Map<string, string>();
 
     for (const r of rowsRaw as any[]) {
       const idVendedor = String(r.id_vendedor || "").trim();
       const seller = sellerMeta.get(idVendedor);
       if (!seller) continue;
 
-      const variante = formatVariante(r.variantes);
-      const variantKey = String(r.variantKey || "").trim();
-      const rowKey = buildInventoryRowKey({
-        idProducto: r.id_producto,
-        variantKey,
-        variante,
-        idVendedor,
-      });
+        const producto = String(r.nombre_producto || "");
+        const variante = getInventoryDisplayVariant({
+          variantes: r.variantes,
+          baseName: producto,
+        });
+        const variantKey = String(r.variantKey || "").trim();
+        const rowKey = resolveInventoryRowKey(inventoryAliasMap, {
+          idProducto: r.id_producto,
+          variantKey,
+          variantes: r.variantes,
+          variante,
+          idVendedor,
+          baseName: producto,
+        });
 
-      inventoryMap.set(rowKey, {
-        id_producto: String(r.id_producto || ""),
-        producto: String(r.nombre_producto || ""),
-        variante,
-        variant_key: variantKey,
-        id_vendedor: idVendedor,
+        inventoryMap.set(rowKey, {
+          id_producto: String(r.id_producto || ""),
+          producto,
+          variante,
+          variant_key: variantKey,
+          id_vendedor: idVendedor,
         vendedor: seller.vendedor || String(r.vendedor_nombre_completo || ""),
         estado_cliente: seller.estado_cliente,
         stock_actual: safeNum(r.stock),
         unidades_en_espera: 0,
         tiene_entregas_en_espera: false,
-        stock_total_reportado: safeNum(r.stock),
-        es_temporal: false,
-      });
-    }
+          stock_total_reportado: safeNum(r.stock),
+          es_temporal: false,
+        });
+        registerInventoryAliases(inventoryAliasMap, rowKey, {
+          idProducto: r.id_producto,
+          variantKey,
+          variantes: r.variantes,
+          variante,
+          idVendedor,
+          baseName: producto,
+        });
+      }
 
     for (const pedido of pedidosEnEspera as any[]) {
       const ventas = Array.isArray(pedido?.venta) ? pedido.venta : [];
@@ -1903,14 +1987,20 @@ export const ReportsService = {
 
         const idProducto = String(venta?.producto?._id || venta?.producto || "").trim();
         const producto = String(venta?.producto?.nombre_producto || "").trim();
-        const variante = String(venta?.nombre_variante || "").trim() || formatVariante(venta?.variantes);
+        const variante = getInventoryDisplayVariant({
+          variantes: venta?.variantes,
+          nombreVariante: venta?.nombre_variante,
+          baseName: producto,
+        });
         const variantKey = String(venta?.variantKey || "").trim();
         const cantidad = safeNum(venta?.cantidad);
-        const rowKey = buildInventoryRowKey({
+        const rowKey = resolveInventoryRowKey(inventoryAliasMap, {
           idProducto,
           variantKey,
+          variantes: venta?.variantes,
           variante,
           idVendedor,
+          baseName: producto,
         });
 
         const got = inventoryMap.get(rowKey) || {
@@ -1932,6 +2022,14 @@ export const ReportsService = {
         got.tiene_entregas_en_espera = got.unidades_en_espera > 0;
         got.stock_total_reportado = got.stock_actual + got.unidades_en_espera;
         inventoryMap.set(rowKey, got);
+        registerInventoryAliases(inventoryAliasMap, rowKey, {
+          idProducto,
+          variantKey: got.variant_key || variantKey,
+          variantes: venta?.variantes,
+          variante: got.variante || variante,
+          idVendedor,
+          baseName: producto,
+        });
       }
 
       for (const temporal of temporales) {
@@ -1941,7 +2039,7 @@ export const ReportsService = {
 
         const producto = String(temporal?.producto || "").trim();
         const cantidad = safeNum(temporal?.cantidad);
-        const rowKey = buildInventoryRowKey({
+        const rowKey = resolveInventoryRowKey(inventoryAliasMap, {
           variante: producto,
           idVendedor,
           esTemporal: true,
@@ -1966,6 +2064,11 @@ export const ReportsService = {
         got.tiene_entregas_en_espera = got.unidades_en_espera > 0;
         got.stock_total_reportado = got.stock_actual + got.unidades_en_espera;
         inventoryMap.set(rowKey, got);
+        registerInventoryAliases(inventoryAliasMap, rowKey, {
+          variante: producto,
+          idVendedor,
+          esTemporal: true,
+        });
       }
     }
 

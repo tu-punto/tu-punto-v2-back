@@ -155,6 +155,7 @@ export const ReportsRepository = {
           _id: 0,
           id_producto: { $toString: "$_id" },
           nombre_producto: "$nombre_producto",
+          variantKey: { $ifNull: ["$sucursales.combinaciones.variantKey", ""] },
           id_vendedor: { $toString: "$id_vendedor" },
           vendedor_nombre_completo: {
             $trim: {
