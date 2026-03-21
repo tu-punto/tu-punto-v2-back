@@ -1962,6 +1962,7 @@ export const ReportsService = {
         stock_total_reportado: safeNum(row.stock_actual) + safeNum(row.unidades_en_espera),
         tiene_entregas_en_espera: safeNum(row.unidades_en_espera) > 0,
       }))
+      .filter((row) => safeNum(row.stock_actual) > 0 || safeNum(row.unidades_en_espera) > 0)
       .sort(
         (a, b) =>
           a.vendedor.localeCompare(b.vendedor) ||
