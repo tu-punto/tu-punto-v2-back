@@ -126,11 +126,18 @@ export const ReportsRepository = {
     ]).exec();
   },
 
-  async fetchStockProductosPorSucursal(opts: { idSucursal: string }) {
+  async fetchStockProductosPorSucursal(opts: { idSucursal: string; sellerIds?: string[] }) {
     const sucId = new Types.ObjectId(opts.idSucursal);
+    const matchProducto: any = { esTemporal: false };
+
+    if (opts.sellerIds?.length) {
+      matchProducto.id_vendedor = {
+        $in: opts.sellerIds.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id)),
+      };
+    }
 
     return await ProductoModel.aggregate([
-      { $match: { esTemporal: false } },
+      { $match: matchProducto },
       { $unwind: "$sucursales" },
       { $match: { "sucursales.id_sucursal": sucId } },
       {
@@ -166,6 +173,39 @@ export const ReportsRepository = {
       },
       { $sort: { nombre_producto: 1 } },
     ]).exec();
+  },
+  async fetchPedidosEnEsperaPorSucursal(opts: { idSucursal: string }) {
+    const sucId = new Types.ObjectId(opts.idSucursal);
+
+    return await PedidoModel.find(
+      {
+        estado_pedido: "En Espera",
+        $or: [{ sucursal: sucId }, { lugar_origen: sucId }],
+      },
+      {
+        cliente: 1,
+        telefono_cliente: 1,
+        fecha_pedido: 1,
+        hora_entrega_acordada: 1,
+        venta: 1,
+        productos_temporales: 1,
+        sucursal: 1,
+        lugar_origen: 1,
+      },
+    )
+      .populate([
+        { path: "sucursal", select: "nombre" },
+        { path: "lugar_origen", select: "nombre" },
+        {
+          path: "venta",
+          populate: [
+            { path: "producto", select: "nombre_producto" },
+            { path: "vendedor", select: "nombre apellido" },
+          ],
+        },
+      ])
+      .lean()
+      .exec();
   },
   async fetchProductosParaReporteVariantes(opts?: { sellerId?: string }) {
     const match: any = { esTemporal: { $ne: true } };

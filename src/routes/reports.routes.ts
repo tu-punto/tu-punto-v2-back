@@ -3,6 +3,8 @@ import {
   getOperacionMensual,
   exportOperacionMensualXlsx,
   exportStockProductosXlsx,
+  getInventarioActual,
+  exportInventarioActualXlsx,
   getProductosRiesgoVariantes,
   exportProductosRiesgoVariantesXlsx,
   exportComisiones3MesesXlsx,
@@ -24,6 +26,8 @@ reportsRouter.post("/operacion-mensual", getOperacionMensual);
 
 reportsRouter.get("/operacion-mensual/xlsx", exportOperacionMensualXlsx);
 reportsRouter.get("/stock-productos/xlsx", exportStockProductosXlsx);
+reportsRouter.post("/inventario-actual", getInventarioActual);
+reportsRouter.get("/inventario-actual/xlsx", exportInventarioActualXlsx);
 reportsRouter.get("/productos-variantes-riesgo", getProductosRiesgoVariantes);
 reportsRouter.get("/productos-variantes-riesgo/xlsx", exportProductosRiesgoVariantesXlsx);
 reportsRouter.post("/comisiones", getComisionesMeses);

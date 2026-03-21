@@ -90,6 +90,38 @@ export const exportStockProductosXlsx = async (req: Request, res: Response) => {
     res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
+export const getInventarioActual = async (req: Request, res: Response) => {
+  try {
+    const idSucursal = String(req.body?.idSucursal || "").trim();
+    const sellerId = typeof req.body?.sellerId === "string" ? String(req.body.sellerId).trim() : undefined;
+
+    if (!idSucursal) {
+      return res.status(400).json({ ok: false, msg: "idSucursal es requerido" });
+    }
+
+    const data = await ReportsService.getInventarioActual({ idSucursal, sellerId });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getInventarioActual error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+export const exportInventarioActualXlsx = async (req: Request, res: Response) => {
+  try {
+    const idSucursal = String(req.query.idSucursal || "").trim();
+    const sellerId = typeof req.query.sellerId === "string" ? String(req.query.sellerId).trim() : undefined;
+
+    if (!idSucursal) {
+      return res.status(400).json({ ok: false, msg: "idSucursal es requerido" });
+    }
+
+    const { filePath, filename } = await ReportsService.exportInventarioActualXlsx({ idSucursal, sellerId });
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportInventarioActualXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
 export const getProductosRiesgoVariantes = async (req: Request, res: Response) => {
   try {
     const sellerId =

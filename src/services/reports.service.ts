@@ -30,6 +30,7 @@ type Params = {
 };
 
 type ExportStockParams = { idSucursal: string };
+type InventoryParams = { idSucursal: string; sellerId?: string };
 type VariantRiskParams = {
   sellerId?: string;
   limit?: number;
@@ -50,6 +51,21 @@ type StockRow = {
   id_vendedor: string;
   vendedor: string;
   stock: number;
+};
+
+type InventoryRow = {
+  id_producto: string;
+  producto: string;
+  variante: string;
+  variant_key: string;
+  id_vendedor: string;
+  vendedor: string;
+  estado_cliente: "activo" | "debe_renovar";
+  stock_actual: number;
+  unidades_en_espera: number;
+  tiene_entregas_en_espera: boolean;
+  stock_total_reportado: number;
+  es_temporal: boolean;
 };
 
 type VariantRiskRow = {
@@ -85,6 +101,27 @@ function formatVariante(v: unknown): string {
   ];
 
   return ordered.map((k) => `${k}: ${String(obj[k])}`).join("/");
+}
+
+function buildInventoryRowKey(params: {
+  idProducto?: unknown;
+  variantKey?: unknown;
+  variante?: unknown;
+  idVendedor?: unknown;
+  esTemporal?: boolean;
+}) {
+  const sellerId = String(params.idVendedor || "").trim();
+  const productId = String(params.idProducto || "").trim();
+  const variantKey = String(params.variantKey || "").trim();
+  const variante = String(params.variante || "").trim().toLowerCase();
+
+  if (params.esTemporal) {
+    return `temp|${sellerId}|${variante}`;
+  }
+
+  if (productId && variantKey) return `prod|${productId}|var|${variantKey}`;
+  if (productId) return `prod|${productId}|name|${variante}`;
+  return `fallback|${sellerId}|${variante}`;
 }
 
 function monthRange(mes: string) {
@@ -1750,6 +1787,221 @@ export const ReportsService = {
     }
 
     const filename = `clientes_status.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const filePath = path.join(outDir, filename);
+
+    await wb.xlsx.writeFile(filePath);
+    return { filePath, filename };
+  },
+
+  async getInventarioActual({ idSucursal, sellerId }: InventoryParams) {
+    if (!idSucursal) throw new Error("idSucursal es requerido");
+
+    const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
+    const today = moment.tz(TZ).startOf("day");
+    const requestedSellerId = String(sellerId || "").trim();
+
+    const sellerMeta = new Map<string, { vendedor: string; estado_cliente: "activo" | "debe_renovar" }>();
+
+    for (const ven of vendedores as any[]) {
+      const idVendedor = String(ven._id || "").trim();
+      if (!idVendedor) continue;
+      if (requestedSellerId && requestedSellerId !== idVendedor) continue;
+
+      const vigencia = ven.fecha_vigencia ? moment.tz(ven.fecha_vigencia, TZ).endOf("day") : null;
+      const pagos = Array.isArray(ven.pago_sucursales) ? ven.pago_sucursales : [];
+
+      const tieneSucursalActiva = pagos.some((pago: any) => {
+        const idSucursalPago = pago?.id_sucursal ? String(pago.id_sucursal) : "";
+        if (idSucursalPago !== idSucursal) return false;
+        if (pago?.activo === false) return false;
+
+        const start = pago?.fecha_ingreso ? moment.tz(pago.fecha_ingreso, TZ).startOf("day") : null;
+        const end = pago?.fecha_salida ? moment.tz(pago.fecha_salida, TZ).endOf("day") : null;
+        const fueraDeRango = (start && start.isAfter(today)) || (end && end.isBefore(today));
+        return !fueraDeRango;
+      });
+
+      if (!tieneSucursalActiva) continue;
+
+      sellerMeta.set(idVendedor, {
+        vendedor: `${ven.nombre || ""} ${ven.apellido || ""}`.trim(),
+        estado_cliente: vigencia && !vigencia.isBefore(today) ? "activo" : "debe_renovar",
+      });
+    }
+
+    const sellerIds = Array.from(sellerMeta.keys());
+    if (!sellerIds.length) {
+      return {
+        filtros: { id_sucursal: idSucursal, id_vendedor: requestedSellerId || null },
+        resumen: { productos: 0, stock_actual: 0, unidades_en_espera: 0, stock_total_reportado: 0 },
+        rows: [] as InventoryRow[],
+      };
+    }
+
+    const [rowsRaw, pedidosEnEspera] = await Promise.all([
+      ReportsRepository.fetchStockProductosPorSucursal({ idSucursal, sellerIds }),
+      ReportsRepository.fetchPedidosEnEsperaPorSucursal({ idSucursal }),
+    ]);
+
+    const inventoryMap = new Map<string, InventoryRow>();
+
+    for (const r of rowsRaw as any[]) {
+      const idVendedor = String(r.id_vendedor || "").trim();
+      const seller = sellerMeta.get(idVendedor);
+      if (!seller) continue;
+
+      const variante = formatVariante(r.variantes);
+      const variantKey = String(r.variantKey || "").trim();
+      const rowKey = buildInventoryRowKey({
+        idProducto: r.id_producto,
+        variantKey,
+        variante,
+        idVendedor,
+      });
+
+      inventoryMap.set(rowKey, {
+        id_producto: String(r.id_producto || ""),
+        producto: String(r.nombre_producto || ""),
+        variante,
+        variant_key: variantKey,
+        id_vendedor: idVendedor,
+        vendedor: seller.vendedor || String(r.vendedor_nombre_completo || ""),
+        estado_cliente: seller.estado_cliente,
+        stock_actual: safeNum(r.stock),
+        unidades_en_espera: 0,
+        tiene_entregas_en_espera: false,
+        stock_total_reportado: safeNum(r.stock),
+        es_temporal: false,
+      });
+    }
+
+    for (const pedido of pedidosEnEspera as any[]) {
+      const ventas = Array.isArray(pedido?.venta) ? pedido.venta : [];
+      const temporales = Array.isArray(pedido?.productos_temporales) ? pedido.productos_temporales : [];
+
+      for (const venta of ventas) {
+        const idVendedor = String(venta?.vendedor?._id || venta?.vendedor || "").trim();
+        const seller = sellerMeta.get(idVendedor);
+        if (!seller) continue;
+
+        const idProducto = String(venta?.producto?._id || venta?.producto || "").trim();
+        const producto = String(venta?.producto?.nombre_producto || "").trim();
+        const variante = String(venta?.nombre_variante || "").trim() || formatVariante(venta?.variantes);
+        const variantKey = String(venta?.variantKey || "").trim();
+        const cantidad = safeNum(venta?.cantidad);
+        const rowKey = buildInventoryRowKey({
+          idProducto,
+          variantKey,
+          variante,
+          idVendedor,
+        });
+
+        const got = inventoryMap.get(rowKey) || {
+          id_producto: idProducto,
+          producto,
+          variante,
+          variant_key: variantKey,
+          id_vendedor: idVendedor,
+          vendedor: seller.vendedor,
+          estado_cliente: seller.estado_cliente,
+          stock_actual: 0,
+          unidades_en_espera: 0,
+          tiene_entregas_en_espera: false,
+          stock_total_reportado: 0,
+          es_temporal: false,
+        };
+
+        got.unidades_en_espera += cantidad;
+        got.tiene_entregas_en_espera = got.unidades_en_espera > 0;
+        got.stock_total_reportado = got.stock_actual + got.unidades_en_espera;
+        inventoryMap.set(rowKey, got);
+      }
+
+      for (const temporal of temporales) {
+        const idVendedor = String(temporal?.id_vendedor || "").trim();
+        const seller = sellerMeta.get(idVendedor);
+        if (!seller) continue;
+
+        const producto = String(temporal?.producto || "").trim();
+        const cantidad = safeNum(temporal?.cantidad);
+        const rowKey = buildInventoryRowKey({
+          variante: producto,
+          idVendedor,
+          esTemporal: true,
+        });
+
+        const got = inventoryMap.get(rowKey) || {
+          id_producto: "",
+          producto,
+          variante: "Temporal",
+          variant_key: "",
+          id_vendedor: idVendedor,
+          vendedor: seller.vendedor,
+          estado_cliente: seller.estado_cliente,
+          stock_actual: 0,
+          unidades_en_espera: 0,
+          tiene_entregas_en_espera: false,
+          stock_total_reportado: 0,
+          es_temporal: true,
+        };
+
+        got.unidades_en_espera += cantidad;
+        got.tiene_entregas_en_espera = got.unidades_en_espera > 0;
+        got.stock_total_reportado = got.stock_actual + got.unidades_en_espera;
+        inventoryMap.set(rowKey, got);
+      }
+    }
+
+    const rows = Array.from(inventoryMap.values())
+      .map((row) => ({
+        ...row,
+        stock_actual: safeNum(row.stock_actual),
+        unidades_en_espera: safeNum(row.unidades_en_espera),
+        stock_total_reportado: safeNum(row.stock_actual) + safeNum(row.unidades_en_espera),
+        tiene_entregas_en_espera: safeNum(row.unidades_en_espera) > 0,
+      }))
+      .sort(
+        (a, b) =>
+          a.vendedor.localeCompare(b.vendedor) ||
+          a.producto.localeCompare(b.producto) ||
+          a.variante.localeCompare(b.variante) ||
+          a.id_producto.localeCompare(b.id_producto),
+      );
+
+    return {
+      filtros: { id_sucursal: idSucursal, id_vendedor: requestedSellerId || null },
+      resumen: {
+        productos: rows.length,
+        stock_actual: rows.reduce((sum, row) => sum + safeNum(row.stock_actual), 0),
+        unidades_en_espera: rows.reduce((sum, row) => sum + safeNum(row.unidades_en_espera), 0),
+        stock_total_reportado: rows.reduce((sum, row) => sum + safeNum(row.stock_total_reportado), 0),
+      },
+      rows,
+    };
+  },
+
+  async exportInventarioActualXlsx(params: InventoryParams) {
+    const data = await this.getInventarioActual(params);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const wsResumen = wb.addWorksheet("Resumen");
+    wsResumen.columns = Object.keys(data.resumen).map((key) => ({ header: key, key, width: 24 }));
+    wsResumen.addRow(data.resumen);
+    wsResumen.getRow(1).font = { bold: true };
+
+    const ws = wb.addWorksheet("Inventario_Actual");
+    if (data.rows.length) {
+      ws.columns = Object.keys(data.rows[0]).map((key) => ({ header: key, key, width: 24 }));
+      ws.getRow(1).font = { bold: true };
+      data.rows.forEach((row) => ws.addRow(row));
+    }
+
+    const filename = `inventario_actual_${params.idSucursal}${params.sellerId ? `_${params.sellerId}` : "_todos"}.xlsx`;
     const outDir = path.join(process.cwd(), "reports");
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     const filePath = path.join(outDir, filename);
