@@ -483,6 +483,9 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
         _descriptionNormalized: {
           $trim: { input: { $ifNull: ["$sucursales.combinaciones.descripcion", ""] } }
         },
+        _usageNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.uso", ""] } }
+        },
         _promotionTitleNormalized: {
           $trim: { input: { $ifNull: ["$sucursales.combinaciones.promocion.titulo", ""] } }
         },
@@ -503,6 +506,7 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
     {
       $addFields: {
         _hasDescription: { $gt: [{ $strLenCP: "$_descriptionNormalized" }, 0] },
+        _hasUsage: { $gt: [{ $strLenCP: "$_usageNormalized" }, 0] },
         _hasPromotion: {
           $or: [
             { $gt: [{ $strLenCP: "$_promotionTitleNormalized" }, 0] },
@@ -525,16 +529,17 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
 
   if (q && q.trim()) {
     pipeline.push({
-      $match: {
-        $or: [
-          { nombre_producto: { $regex: q.trim(), $options: "i" } },
-          { _variantLabel: { $regex: q.trim(), $options: "i" } },
-          { _displayName: { $regex: q.trim(), $options: "i" } },
-          { _descriptionNormalized: { $regex: q.trim(), $options: "i" } },
-          { _promotionTitleNormalized: { $regex: q.trim(), $options: "i" } },
-          { _promotionDescriptionNormalized: { $regex: q.trim(), $options: "i" } }
-        ]
-      }
+        $match: {
+          $or: [
+            { nombre_producto: { $regex: q.trim(), $options: "i" } },
+            { _variantLabel: { $regex: q.trim(), $options: "i" } },
+            { _displayName: { $regex: q.trim(), $options: "i" } },
+            { _descriptionNormalized: { $regex: q.trim(), $options: "i" } },
+            { _usageNormalized: { $regex: q.trim(), $options: "i" } },
+            { _promotionTitleNormalized: { $regex: q.trim(), $options: "i" } },
+            { _promotionDescriptionNormalized: { $regex: q.trim(), $options: "i" } }
+          ]
+        }
     });
   }
 
@@ -542,6 +547,7 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
     {
       $sort: {
         _hasDescription: -1,
+        _hasUsage: -1,
         _hasPromotion: -1,
         _hasImages: -1,
         "sucursales.combinaciones.stock": -1
@@ -562,6 +568,7 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
         displayName: { $first: "$_displayName" },
         variantes: { $first: "$sucursales.combinaciones.variantes" },
         descripcion: { $first: "$_descriptionNormalized" },
+        uso: { $first: "$_usageNormalized" },
         imagenes: { $first: "$_imagesNormalized" },
         promocion: { $first: "$sucursales.combinaciones.promocion" },
         categoryId: { $first: "$id_categoria" },
@@ -574,6 +581,7 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
     {
       $addFields: {
         hasDescription: { $gt: [{ $strLenCP: "$descripcion" }, 0] },
+        hasUsage: { $gt: [{ $strLenCP: "$uso" }, 0] },
         hasImages: { $gt: [{ $size: "$imagenes" }, 0] },
         hasPromotion: {
           $or: [
@@ -633,10 +641,14 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
         descripcion: {
           $cond: [{ $eq: ["$descripcion", ""] }, null, "$descripcion"]
         },
+        uso: {
+          $cond: [{ $eq: ["$uso", ""] }, null, "$uso"]
+        },
         imagenes: 1,
         imagenesCount: { $size: "$imagenes" },
         hasImages: 1,
         hasDescription: 1,
+        hasUsage: 1,
         hasPromotion: 1,
         promocion: {
           titulo: { $ifNull: ["$promocion.titulo", null] },
@@ -696,6 +708,7 @@ const updateVariantExtrasBySeller = async ({
   variantKey,
   sellerId,
   descripcion,
+  uso,
   promocion,
   imagenes
 }: {
@@ -704,6 +717,7 @@ const updateVariantExtrasBySeller = async ({
   variantKey: string;
   sellerId: string;
   descripcion?: string;
+  uso?: string;
   promocion?: {
     titulo?: string;
     descripcion?: string;
@@ -744,6 +758,10 @@ const updateVariantExtrasBySeller = async ({
     combinacion.descripcion = descripcion;
   }
 
+  if (uso !== undefined) {
+    combinacion.uso = uso;
+  }
+
   if (promocion !== undefined) {
     combinacion.promocion = promocion;
   }
@@ -761,6 +779,7 @@ const updateSellerProductInfoByVariant = async ({
   variantKey,
   sellerId,
   descripcion,
+  uso,
   promocion,
   imagenes
 }: {
@@ -768,6 +787,7 @@ const updateSellerProductInfoByVariant = async ({
   variantKey: string;
   sellerId: string;
   descripcion?: string;
+  uso?: string;
   promocion?: {
     titulo?: string;
     descripcion?: string;
@@ -796,6 +816,10 @@ const updateSellerProductInfoByVariant = async ({
 
     if (descripcion !== undefined) {
       combinacion.descripcion = descripcion;
+    }
+
+    if (uso !== undefined) {
+      combinacion.uso = uso;
     }
 
     if (promocion !== undefined) {

@@ -24,6 +24,7 @@ export interface ICombinacion {
 
   imagenes?: IImagenVariante[]; 
   descripcion?: string;
+  uso?: string;
   promocion?: IPromocionVariante;
 }
 

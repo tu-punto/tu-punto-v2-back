@@ -25,6 +25,10 @@ const CombinacionSchema = new Schema({
     type: String,
     required: false
   },
+  uso: {
+    type: String,
+    required: false
+  },
   promocion: {
     titulo: { type: String, required: false },
     descripcion: { type: String, required: false },

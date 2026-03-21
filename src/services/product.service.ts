@@ -441,6 +441,7 @@ const updateVariantExtrasBySeller = async ({
   variantKey,
   sellerId,
   descripcion,
+  uso,
   promocion,
   imagenes
 }: {
@@ -449,6 +450,7 @@ const updateVariantExtrasBySeller = async ({
   variantKey: string;
   sellerId: string;
   descripcion?: string;
+  uso?: string;
   promocion?: {
     titulo?: string;
     descripcion?: string;
@@ -460,6 +462,14 @@ const updateVariantExtrasBySeller = async ({
     key?: string;
   }[];
 }) => {
+  if (descripcion && descripcion.length > 500) {
+    throw new Error("La descripcion no puede exceder 500 caracteres");
+  }
+
+  if (uso && uso.length > 500) {
+    throw new Error("El uso no puede exceder 500 caracteres");
+  }
+
   if (imagenes && imagenes.length > 4) {
     throw new Error("Solo se permiten máximo 4 imágenes");
   }
@@ -487,6 +497,7 @@ const updateVariantExtrasBySeller = async ({
     variantKey,
     sellerId,
     descripcion,
+    uso,
     promocion,
     imagenes
   });
@@ -497,6 +508,7 @@ const updateSellerProductInfoByVariant = async ({
   variantKey,
   sellerId,
   descripcion,
+  uso,
   promocion,
   imagenes
 }: {
@@ -504,6 +516,7 @@ const updateSellerProductInfoByVariant = async ({
   variantKey: string;
   sellerId: string;
   descripcion?: string;
+  uso?: string;
   promocion?: {
     titulo?: string;
     descripcion?: string;
@@ -515,6 +528,14 @@ const updateSellerProductInfoByVariant = async ({
     key?: string;
   }[];
 }) => {
+  if (descripcion && descripcion.length > 500) {
+    throw new Error("La descripcion no puede exceder 500 caracteres");
+  }
+
+  if (uso && uso.length > 500) {
+    throw new Error("El uso no puede exceder 500 caracteres");
+  }
+
   if (imagenes && imagenes.length > 4) {
     throw new Error("Solo se permiten máximo 4 imágenes");
   }
@@ -541,6 +562,7 @@ const updateSellerProductInfoByVariant = async ({
     variantKey,
     sellerId,
     descripcion,
+    uso,
     promocion,
     imagenes
   });

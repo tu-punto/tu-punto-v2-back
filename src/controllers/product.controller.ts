@@ -853,7 +853,7 @@ export const updateVariantExtrasBySeller = async (req: Request, res: Response) =
     }
 
     const { productId, sucursalId, variantKey } = req.params;
-    const { descripcion } = req.body;
+    const { descripcion, uso } = req.body;
 
     let promocion: any = undefined;
 
@@ -895,6 +895,7 @@ export const updateVariantExtrasBySeller = async (req: Request, res: Response) =
       variantKey,
       sellerId,
       descripcion,
+      uso,
       promocion,
       imagenes
     });
@@ -934,7 +935,7 @@ export const updateSellerProductInfoByVariant = async (req: Request, res: Respon
     }
 
     const { productId, variantKey } = req.params;
-    const { descripcion } = req.body;
+    const { descripcion, uso } = req.body;
     const clearImages = parseBooleanQuery(req.body.clearImages) === true;
 
     let promocion: any = undefined;
@@ -977,6 +978,7 @@ export const updateSellerProductInfoByVariant = async (req: Request, res: Respon
       variantKey,
       sellerId,
       descripcion,
+      uso,
       promocion,
       imagenes
     });
