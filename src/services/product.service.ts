@@ -446,7 +446,7 @@ const updateVariantExtrasBySeller = async ({
   imagenes
 }: {
   productId: string;
-  sucursalId: string;
+  sucursalId?: string;
   variantKey: string;
   sellerId: string;
   descripcion?: string;
@@ -503,68 +503,19 @@ const updateVariantExtrasBySeller = async ({
   });
 };
 
-const updateSellerProductInfoByVariant = async ({
+const getSellerVariantImages = async ({
   productId,
   variantKey,
-  sellerId,
-  descripcion,
-  uso,
-  promocion,
-  imagenes
+  sellerId
 }: {
   productId: string;
   variantKey: string;
   sellerId: string;
-  descripcion?: string;
-  uso?: string;
-  promocion?: {
-    titulo?: string;
-    descripcion?: string;
-    fechaInicio?: Date;
-    fechaFin?: Date;
-  };
-  imagenes?: {
-    url: string;
-    key?: string;
-  }[];
 }) => {
-  if (descripcion && descripcion.length > 500) {
-    throw new Error("La descripcion no puede exceder 500 caracteres");
-  }
-
-  if (uso && uso.length > 500) {
-    throw new Error("El uso no puede exceder 500 caracteres");
-  }
-
-  if (imagenes && imagenes.length > 4) {
-    throw new Error("Solo se permiten máximo 4 imágenes");
-  }
-
-  if (promocion?.titulo && promocion.titulo.length > 60) {
-    throw new Error("El título de la promoción no puede exceder 60 caracteres");
-  }
-
-  if (promocion?.descripcion && promocion.descripcion.length > 150) {
-    throw new Error("La descripción de la promoción no puede exceder 150 caracteres");
-  }
-
-  if (promocion?.fechaInicio && promocion?.fechaFin) {
-    const inicio = new Date(promocion.fechaInicio);
-    const fin = new Date(promocion.fechaFin);
-
-    if (fin < inicio) {
-      throw new Error("La fechaFin no puede ser menor a la fechaInicio");
-    }
-  }
-
-  return await ProductRepository.updateSellerProductInfoByVariant({
+  return await ProductRepository.findVariantImagesBySeller({
     productId,
     variantKey,
-    sellerId,
-    descripcion,
-    uso,
-    promocion,
-    imagenes
+    sellerId
   });
 };
 
@@ -592,5 +543,6 @@ export const ProductService = {
   getProductQR,
   findProductByQRCode,
   updateVariantExtrasBySeller,
-  updateSellerProductInfoByVariant
+  getSellerVariantImages
 };
+

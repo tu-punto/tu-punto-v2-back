@@ -713,7 +713,7 @@ const updateVariantExtrasBySeller = async ({
   imagenes
 }: {
   productId: string;
-  sucursalId: string;
+  sucursalId?: string;
   variantKey: string;
   sellerId: string;
   descripcion?: string;
@@ -733,118 +733,77 @@ const updateVariantExtrasBySeller = async ({
     _id: productId,
     id_vendedor: sellerId
   });
-
   if (!producto) {
     throw new Error("Producto no encontrado o no pertenece al vendedor");
   }
-
-  const sucursal = producto.sucursales.find(
-    s => s.id_sucursal.toString() === sucursalId
-  );
-
-  if (!sucursal) {
-    throw new Error("Sucursal no encontrada");
+  if (sucursalId) {
+    const sucursal = producto.sucursales.find(
+      s => s.id_sucursal.toString() === sucursalId
+    );
+    if (!sucursal) {
+      throw new Error("Sucursal no encontrada");
+    }
+    const combinacion = sucursal.combinaciones.find(
+      c => c.variantKey === variantKey
+    );
+    if (!combinacion) {
+      throw new Error("Combinaci?n no encontrada");
+    }
   }
-
-  const combinacion = sucursal.combinaciones.find(
-    c => c.variantKey === variantKey
-  );
-
-  if (!combinacion) {
-    throw new Error("Combinación no encontrada");
+  let updatedBranches = 0;
+  for (const sucursal of producto.sucursales || []) {
+    const combinacion = sucursal.combinaciones.find(
+      c => c.variantKey === variantKey
+    );
+    if (!combinacion) continue;
+    if (descripcion !== undefined) {
+      combinacion.descripcion = descripcion;
+    }
+    if (uso !== undefined) {
+      combinacion.uso = uso;
+    }
+    if (promocion !== undefined) {
+      combinacion.promocion = promocion;
+    }
+    if (imagenes !== undefined) {
+      combinacion.imagenes = imagenes;
+    }
+    updatedBranches += 1;
   }
-
-  if (descripcion !== undefined) {
-    combinacion.descripcion = descripcion;
-  }
-
-  if (uso !== undefined) {
-    combinacion.uso = uso;
-  }
-
-  if (promocion !== undefined) {
-    combinacion.promocion = promocion;
-  }
-
-  if (imagenes !== undefined) {
-    combinacion.imagenes = imagenes;
+  if (!updatedBranches) {
+    throw new Error("Combinaci?n no encontrada");
   }
   producto.markModified("sucursales");
-
   return await producto.save();
 };
-
-const updateSellerProductInfoByVariant = async ({
+const findVariantImagesBySeller = async ({
   productId,
   variantKey,
-  sellerId,
-  descripcion,
-  uso,
-  promocion,
-  imagenes
+  sellerId
 }: {
   productId: string;
   variantKey: string;
   sellerId: string;
-  descripcion?: string;
-  uso?: string;
-  promocion?: {
-    titulo?: string;
-    descripcion?: string;
-    fechaInicio?: Date;
-    fechaFin?: Date;
-  };
-  imagenes?: {
-    url: string;
-    key?: string;
-  }[];
 }) => {
   const producto = await ProductoModel.findOne({
     _id: productId,
     id_vendedor: sellerId
-  });
+  })
+    .select("sucursales.combinaciones")
+    .lean();
 
   if (!producto) {
     throw new Error("Producto no encontrado o no pertenece al vendedor");
   }
 
-  let updatedBranches = 0;
-
   for (const sucursal of producto.sucursales || []) {
-    const combinacion = sucursal.combinaciones.find((item) => item.variantKey === variantKey);
-    if (!combinacion) continue;
-
-    if (descripcion !== undefined) {
-      combinacion.descripcion = descripcion;
+    const combinacion = (sucursal.combinaciones || []).find((item) => item.variantKey === variantKey);
+    if (combinacion) {
+      return Array.isArray(combinacion.imagenes) ? combinacion.imagenes : [];
     }
-
-    if (uso !== undefined) {
-      combinacion.uso = uso;
-    }
-
-    if (promocion !== undefined) {
-      combinacion.promocion = promocion;
-    }
-
-    if (imagenes !== undefined) {
-      combinacion.imagenes = imagenes;
-    }
-
-    updatedBranches += 1;
   }
 
-  if (!updatedBranches) {
-    throw new Error("Combinación no encontrada");
-  }
-
-  producto.markModified("sucursales");
-  await producto.save();
-
-  return {
-    productId,
-    variantKey,
-    updatedBranches
-  };
+  throw new Error("Combinación no encontrada");
 };
 
 export const ProductRepository = {
@@ -868,6 +827,8 @@ export const ProductRepository = {
   findSellerProductInfoListPage,
   findByQRCode,
   updateVariantExtrasBySeller,
-  updateSellerProductInfoByVariant
+  findVariantImagesBySeller
   
 };
+
+

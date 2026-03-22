@@ -63,12 +63,4 @@ productRouter.patch(
   ProductController.updateVariantExtrasBySeller
 );
 
-productRouter.patch(
-  "/seller/product-info/:productId/variant/:variantKey",
-  requireAuth,
-  requireRole("seller"),
-  uploadVariantImages.array("imagenes", 4),
-  ProductController.updateSellerProductInfoByVariant
-);
-
 export default productRouter;

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 
 const s3 = new S3Client({
@@ -45,4 +45,15 @@ export async function uploadVariantImageToS3(
   const url = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
 
   return { key, url };
+}
+
+export async function deleteFileFromS3(key: string): Promise<void> {
+  if (!key) return;
+
+  const command = new DeleteObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
+    Key: key,
+  });
+
+  await s3.send(command);
 }
