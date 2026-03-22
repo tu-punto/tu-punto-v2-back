@@ -262,6 +262,20 @@ type FlatInventoryPageParams = FlatInventoryParams & {
   limit?: number;
 };
 
+type SellerProductInfoParams = {
+  sellerId: string;
+  sucursalId?: string;
+  categoryId?: string;
+  inStock?: boolean;
+  hasPromotion?: boolean;
+  hasImages?: boolean;
+  hasDescription?: boolean;
+  q?: string;
+  page?: number;
+  limit?: number;
+  sortOrder?: "asc" | "desc";
+};
+
 const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
   const sucursalId = params?.sucursalId;
   const sellerId = params?.sellerId;
@@ -358,7 +372,11 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
         qrCode: "$qrCode",
         qrImagePath: "$qrImagePath",
         qrProductURL: "$qrProductURL",
-        variantKey: "$sucursales.combinaciones.variantKey"
+        variantKey: "$sucursales.combinaciones.variantKey",
+
+        imagenes: "$sucursales.combinaciones.imagenes",
+        descripcion: "$sucursales.combinaciones.descripcion",
+        promocion: "$sucursales.combinaciones.promocion"
       }
     }
   );
@@ -409,6 +427,385 @@ const findFlatProductListPage = async (params?: FlatInventoryPageParams) => {
   };
 };
 
+const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] => {
+  const {
+    sellerId,
+    sucursalId,
+    categoryId,
+    inStock,
+    hasPromotion,
+    hasImages,
+    hasDescription,
+    q
+  } = params;
+
+  const match: any = {
+    esTemporal: { $ne: true },
+    id_vendedor: new Types.ObjectId(sellerId)
+  };
+
+  if (categoryId && Types.ObjectId.isValid(categoryId)) {
+    match.id_categoria = new Types.ObjectId(categoryId);
+  }
+
+  const variantLabelExpression = {
+    $reduce: {
+      input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+      initialValue: "",
+      in: {
+        $cond: [
+          { $eq: ["$$value", ""] },
+          "$$this.v",
+          { $concat: ["$$value", " / ", "$$this.v"] }
+        ]
+      }
+    }
+  };
+
+  const pipeline: any[] = [
+    { $match: match },
+    { $unwind: "$sucursales" }
+  ];
+
+  if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
+    pipeline.push({
+      $match: {
+        "sucursales.id_sucursal": new Types.ObjectId(sucursalId)
+      }
+    });
+  }
+
+  pipeline.push(
+    { $unwind: "$sucursales.combinaciones" },
+    {
+      $addFields: {
+        _variantLabel: variantLabelExpression,
+        _descriptionNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.descripcion", ""] } }
+        },
+        _usageNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.uso", ""] } }
+        },
+        _promotionTitleNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.promocion.titulo", ""] } }
+        },
+        _promotionDescriptionNormalized: {
+          $trim: {
+            input: { $ifNull: ["$sucursales.combinaciones.promocion.descripcion", ""] }
+          }
+        },
+        _promotionStartNormalized: {
+          $ifNull: ["$sucursales.combinaciones.promocion.fechaInicio", null]
+        },
+        _promotionEndNormalized: {
+          $ifNull: ["$sucursales.combinaciones.promocion.fechaFin", null]
+        },
+        _imagesNormalized: { $ifNull: ["$sucursales.combinaciones.imagenes", []] }
+      }
+    },
+    {
+      $addFields: {
+        _hasDescription: { $gt: [{ $strLenCP: "$_descriptionNormalized" }, 0] },
+        _hasUsage: { $gt: [{ $strLenCP: "$_usageNormalized" }, 0] },
+        _hasPromotion: {
+          $or: [
+            { $gt: [{ $strLenCP: "$_promotionTitleNormalized" }, 0] },
+            { $gt: [{ $strLenCP: "$_promotionDescriptionNormalized" }, 0] },
+            { $ne: ["$_promotionStartNormalized", null] },
+            { $ne: ["$_promotionEndNormalized", null] }
+          ]
+        },
+        _hasImages: { $gt: [{ $size: "$_imagesNormalized" }, 0] },
+        _displayName: {
+          $cond: [
+            { $gt: [{ $strLenCP: "$_variantLabel" }, 0] },
+            { $concat: ["$nombre_producto", " - ", "$_variantLabel"] },
+            "$nombre_producto"
+          ]
+        }
+      }
+    }
+  );
+
+  if (q && q.trim()) {
+    pipeline.push({
+        $match: {
+          $or: [
+            { nombre_producto: { $regex: q.trim(), $options: "i" } },
+            { _variantLabel: { $regex: q.trim(), $options: "i" } },
+            { _displayName: { $regex: q.trim(), $options: "i" } },
+            { _descriptionNormalized: { $regex: q.trim(), $options: "i" } },
+            { _usageNormalized: { $regex: q.trim(), $options: "i" } },
+            { _promotionTitleNormalized: { $regex: q.trim(), $options: "i" } },
+            { _promotionDescriptionNormalized: { $regex: q.trim(), $options: "i" } }
+          ]
+        }
+    });
+  }
+
+  pipeline.push(
+    {
+      $sort: {
+        _hasDescription: -1,
+        _hasUsage: -1,
+        _hasPromotion: -1,
+        _hasImages: -1,
+        "sucursales.combinaciones.stock": -1
+      }
+    },
+    {
+      $group: {
+        _id: {
+          productId: "$_id",
+          variantKey: {
+            $ifNull: ["$sucursales.combinaciones.variantKey", "$_variantLabel"]
+          }
+        },
+        productId: { $first: "$_id" },
+        variantKey: { $first: "$sucursales.combinaciones.variantKey" },
+        nombreProducto: { $first: "$nombre_producto" },
+        variantLabel: { $first: "$_variantLabel" },
+        displayName: { $first: "$_displayName" },
+        variantes: { $first: "$sucursales.combinaciones.variantes" },
+        descripcion: { $first: "$_descriptionNormalized" },
+        uso: { $first: "$_usageNormalized" },
+        imagenes: { $first: "$_imagesNormalized" },
+        promocion: { $first: "$sucursales.combinaciones.promocion" },
+        categoryId: { $first: "$id_categoria" },
+        sellerId: { $first: "$id_vendedor" },
+        representativeSucursalId: { $first: "$sucursales.id_sucursal" },
+        sucursalIds: { $addToSet: "$sucursales.id_sucursal" },
+        totalStock: { $sum: "$sucursales.combinaciones.stock" }
+      }
+    },
+    {
+      $addFields: {
+        hasDescription: { $gt: [{ $strLenCP: "$descripcion" }, 0] },
+        hasUsage: { $gt: [{ $strLenCP: "$uso" }, 0] },
+        hasImages: { $gt: [{ $size: "$imagenes" }, 0] },
+        hasPromotion: {
+          $or: [
+            { $gt: [{ $strLenCP: { $ifNull: ["$promocion.titulo", ""] } }, 0] },
+            { $gt: [{ $strLenCP: { $ifNull: ["$promocion.descripcion", ""] } }, 0] },
+            { $ne: [{ $ifNull: ["$promocion.fechaInicio", null] }, null] },
+            { $ne: [{ $ifNull: ["$promocion.fechaFin", null] }, null] }
+          ]
+        },
+        displayNameSortable: { $toLower: "$displayName" }
+      }
+    }
+  );
+
+  if (inStock !== undefined) {
+    pipeline.push({
+      $match: {
+        totalStock: inStock ? { $gt: 0 } : { $lte: 0 }
+      }
+    });
+  }
+
+  if (hasPromotion !== undefined) {
+    pipeline.push({ $match: { hasPromotion } });
+  }
+
+  if (hasImages !== undefined) {
+    pipeline.push({ $match: { hasImages } });
+  }
+
+  if (hasDescription !== undefined) {
+    pipeline.push({ $match: { hasDescription } });
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: "Categoria",
+        localField: "categoryId",
+        foreignField: "_id",
+        as: "categoria_info"
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        productId: 1,
+        sellerId: 1,
+        categoryId: 1,
+        categoryName: { $arrayElemAt: ["$categoria_info.categoria", 0] },
+        variantKey: 1,
+        variantLabel: 1,
+        displayName: 1,
+        displayNameSortable: 1,
+        nombreProducto: 1,
+        variantes: 1,
+        descripcion: {
+          $cond: [{ $eq: ["$descripcion", ""] }, null, "$descripcion"]
+        },
+        uso: {
+          $cond: [{ $eq: ["$uso", ""] }, null, "$uso"]
+        },
+        imagenes: 1,
+        imagenesCount: { $size: "$imagenes" },
+        hasImages: 1,
+        hasDescription: 1,
+        hasUsage: 1,
+        hasPromotion: 1,
+        promocion: {
+          titulo: { $ifNull: ["$promocion.titulo", null] },
+          descripcion: { $ifNull: ["$promocion.descripcion", null] },
+          fechaInicio: { $ifNull: ["$promocion.fechaInicio", null] },
+          fechaFin: { $ifNull: ["$promocion.fechaFin", null] }
+        },
+        promocionTitulo: { $ifNull: ["$promocion.titulo", null] },
+        promocionDescripcion: { $ifNull: ["$promocion.descripcion", null] },
+        promocionFechaInicio: { $ifNull: ["$promocion.fechaInicio", null] },
+        promocionFechaFin: { $ifNull: ["$promocion.fechaFin", null] },
+        totalStock: 1,
+        representativeSucursalId: 1,
+        sucursalIds: 1
+      }
+    }
+  );
+
+  return pipeline;
+};
+
+const findSellerProductInfoListPage = async (params: SellerProductInfoParams) => {
+  const safePage = Math.max(1, Number(params.page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(params.limit) || 10));
+  const sortDirection = params.sortOrder === "desc" ? -1 : 1;
+  const pipeline = buildSellerProductInfoPipeline(params);
+
+  const result = await ProductoModel.aggregate([
+    ...pipeline,
+    { $sort: { displayNameSortable: sortDirection, productId: 1 } },
+    {
+      $facet: {
+        rows: [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }],
+        total: [{ $count: "count" }]
+      }
+    }
+  ]);
+
+  const rows = (result?.[0]?.rows || []).map((row: any) => {
+    const { displayNameSortable, ...rest } = row;
+    return rest;
+  });
+  const total = Number(result?.[0]?.total?.[0]?.count || 0);
+
+  return {
+    rows,
+    total,
+    page: safePage,
+    limit: safeLimit,
+    pages: Math.max(1, Math.ceil(total / safeLimit))
+  };
+};
+
+const updateVariantExtrasBySeller = async ({
+  productId,
+  sucursalId,
+  variantKey,
+  sellerId,
+  descripcion,
+  uso,
+  promocion,
+  imagenes
+}: {
+  productId: string;
+  sucursalId?: string;
+  variantKey: string;
+  sellerId: string;
+  descripcion?: string;
+  uso?: string;
+  promocion?: {
+    titulo?: string;
+    descripcion?: string;
+    fechaInicio?: Date;
+    fechaFin?: Date;
+  };
+  imagenes?: {
+    url: string;
+    key?: string;
+  }[];
+}): Promise<IProductoDocument | null> => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+  if (!producto) {
+    throw new Error("Producto no encontrado o no pertenece al vendedor");
+  }
+  if (sucursalId) {
+    const sucursal = producto.sucursales.find(
+      s => s.id_sucursal.toString() === sucursalId
+    );
+    if (!sucursal) {
+      throw new Error("Sucursal no encontrada");
+    }
+    const combinacion = sucursal.combinaciones.find(
+      c => c.variantKey === variantKey
+    );
+    if (!combinacion) {
+      throw new Error("Combinaci?n no encontrada");
+    }
+  }
+  let updatedBranches = 0;
+  for (const sucursal of producto.sucursales || []) {
+    const combinacion = sucursal.combinaciones.find(
+      c => c.variantKey === variantKey
+    );
+    if (!combinacion) continue;
+    if (descripcion !== undefined) {
+      combinacion.descripcion = descripcion;
+    }
+    if (uso !== undefined) {
+      combinacion.uso = uso;
+    }
+    if (promocion !== undefined) {
+      combinacion.promocion = promocion;
+    }
+    if (imagenes !== undefined) {
+      combinacion.imagenes = imagenes;
+    }
+    updatedBranches += 1;
+  }
+  if (!updatedBranches) {
+    throw new Error("Combinaci?n no encontrada");
+  }
+  producto.markModified("sucursales");
+  return await producto.save();
+};
+const findVariantImagesBySeller = async ({
+  productId,
+  variantKey,
+  sellerId
+}: {
+  productId: string;
+  variantKey: string;
+  sellerId: string;
+}) => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  })
+    .select("sucursales.combinaciones")
+    .lean();
+
+  if (!producto) {
+    throw new Error("Producto no encontrado o no pertenece al vendedor");
+  }
+
+  for (const sucursal of producto.sucursales || []) {
+    const combinacion = (sucursal.combinaciones || []).find((item) => item.variantKey === variantKey);
+    if (combinacion) {
+      return Array.isArray(combinacion.imagenes) ? combinacion.imagenes : [];
+    }
+  }
+
+  throw new Error("Combinación no encontrada");
+};
+
 export const ProductRepository = {
   findAll,
   findById,
@@ -427,5 +824,11 @@ export const ProductRepository = {
   findAllTemporales,
   findFlatProductList,
   findFlatProductListPage,
-  findByQRCode
+  findSellerProductInfoListPage,
+  findByQRCode,
+  updateVariantExtrasBySeller,
+  findVariantImagesBySeller
+  
 };
+
+

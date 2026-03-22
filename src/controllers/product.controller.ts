@@ -6,6 +6,7 @@ import { ProductVariantQRGroupService } from "../services/productVariantQRGroup.
 import { ProductVariantKeyService } from "../services/productVariantKey.service";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { deleteFileFromS3, uploadVariantImageToS3 } from "../helpers/S3Client";
 
 const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null> => {
   const user = await UserModel.findById(userId).select("role vendedor email").lean();
@@ -25,6 +26,23 @@ const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null>
   }
 
   return null;
+};
+
+const parseBooleanQuery = (value: unknown): boolean | undefined => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "si", "yes"].includes(normalized)) {
+    return true;
+  }
+
+  if (["false", "0", "no"].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
 };
 
 export const getProduct = async (req: Request, res: Response) => {
@@ -626,17 +644,6 @@ export const generateIngressPDF = async (req: Request, res: Response) => {
 
 export const getFlatProductList = async (req: Request, res: Response) => {
 
-
-
-
-
-
-
-
-
-
-
-
   try {
     const sucursalId = req.query.sucursalId as string | undefined;
     const sellerId = req.query.sellerId as string | undefined;
@@ -778,6 +785,244 @@ export const getSellerInventoryList = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellerProductInfoList = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+
+    if (authRole !== "seller" || !authUserId) {
+      return res.status(403).json({
+        success: false,
+        message: "Solo un vendedor autenticado puede consultar esta informacion"
+      });
+    }
+
+    const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId no resuelto"
+      });
+    }
+
+    const result = await ProductService.getSellerProductInfoListPage({
+      sellerId,
+      sucursalId: req.query.sucursalId as string | undefined,
+      categoryId: req.query.categoryId as string | undefined,
+      q: req.query.q as string | undefined,
+      inStock: parseBooleanQuery(req.query.inStock),
+      hasPromotion: parseBooleanQuery(req.query.hasPromotion),
+      hasImages: parseBooleanQuery(req.query.hasImages),
+      hasDescription: parseBooleanQuery(req.query.hasDescription),
+      page: Number(req.query.page || 1),
+      limit: Number(req.query.limit || 10),
+      sortOrder: req.query.sortOrder === "desc" ? "desc" : "asc"
+    });
+
+    return res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error("Error en getSellerProductInfoList:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener informacion de productos del vendedor"
+    });
+  }
+};
+
+export const updateVariantExtrasBySeller = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const authUserId = String(res.locals.auth?.id || "");
+    if (authRole !== "seller" || !authUserId) {
+      return res.status(403).json({
+        success: false,
+        message: "Solo un vendedor autenticado puede editar esta variante"
+      });
+    }
+    const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId no resuelto"
+      });
+    }
+    const { productId, sucursalId, variantKey } = req.params;
+    const { descripcion, uso } = req.body;
+    const clearImages = parseBooleanQuery(req.body.clearImages) === true;
+    const previousImages = await ProductService.getSellerVariantImages({
+      productId,
+      variantKey,
+      sellerId
+    });
+    let promocion: any = undefined;
+    let retainedImages: { uid?: string; key?: string; url: string }[] | undefined = undefined;
+    let imageOrder: string[] | undefined = undefined;
+    let newImageUids: string[] | undefined = undefined;
+    if (req.body.promocion !== undefined) {
+      try {
+        promocion =
+          typeof req.body.promocion === "string"
+            ? JSON.parse(req.body.promocion)
+            : req.body.promocion;
+      } catch (_error) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo promocion debe tener formato JSON valido"
+        });
+      }
+    }
+    if (req.body.retainedImages !== undefined) {
+      try {
+        retainedImages =
+          typeof req.body.retainedImages === "string"
+            ? JSON.parse(req.body.retainedImages)
+            : req.body.retainedImages;
+        if (!Array.isArray(retainedImages)) {
+          throw new Error("retainedImages debe ser un arreglo");
+        }
+        retainedImages = retainedImages
+          .filter((image) => image && typeof image.url === "string" && image.url.trim())
+          .map((image) => ({
+            uid: image.uid ? String(image.uid).trim() : undefined,
+            url: String(image.url).trim(),
+            key: image.key ? String(image.key).trim() : undefined
+          }));
+      } catch (_error) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo retainedImages debe tener formato JSON valido"
+        });
+      }
+    }
+    if (req.body.imageOrder !== undefined) {
+      try {
+        imageOrder =
+          typeof req.body.imageOrder === "string"
+            ? JSON.parse(req.body.imageOrder)
+            : req.body.imageOrder;
+        if (!Array.isArray(imageOrder)) {
+          throw new Error("imageOrder debe ser un arreglo");
+        }
+        imageOrder = imageOrder
+          .map((item) => String(item || "").trim())
+          .filter(Boolean);
+      } catch (_error) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo imageOrder debe tener formato JSON valido"
+        });
+      }
+    }
+    if (req.body.newImageUids !== undefined) {
+      try {
+        newImageUids =
+          typeof req.body.newImageUids === "string"
+            ? JSON.parse(req.body.newImageUids)
+            : req.body.newImageUids;
+        if (!Array.isArray(newImageUids)) {
+          throw new Error("newImageUids debe ser un arreglo");
+        }
+        newImageUids = newImageUids
+          .map((item) => String(item || "").trim())
+          .filter(Boolean);
+      } catch (_error) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo newImageUids debe tener formato JSON valido"
+        });
+      }
+    }
+    const files = req.files as Express.Multer.File[] | undefined;
+    let imagenes: { key?: string; url: string }[] | undefined = undefined;
+    let uploadedImages: { key: string; url: string }[] = [];
+    if (files && files.length > 0) {
+      uploadedImages = await Promise.all(
+        files.map((file) =>
+          uploadVariantImageToS3(file.buffer, file.originalname, file.mimetype)
+        )
+      );
+    }
+    if (clearImages || retainedImages !== undefined || uploadedImages.length > 0) {
+      const existingByUid = new Map<string, { key?: string; url: string }>();
+      const uploadedByUid = new Map<string, { key: string; url: string }>();
+      (clearImages ? [] : retainedImages || []).forEach((image) => {
+        const uid = String(image.uid || image.key || image.url || "").trim();
+        if (!uid) return;
+        existingByUid.set(uid, {
+          key: image.key,
+          url: image.url
+        });
+      });
+      uploadedImages.forEach((image, index) => {
+        const uid = String(newImageUids?.[index] || "").trim();
+        if (!uid) return;
+        uploadedByUid.set(uid, image);
+      });
+      if (imageOrder && imageOrder.length > 0) {
+        imagenes = imageOrder
+          .map((uid) => existingByUid.get(uid) || uploadedByUid.get(uid))
+          .filter((image): image is { key?: string; url: string } => Boolean(image));
+      } else {
+        imagenes = [
+          ...(clearImages ? [] : retainedImages || []).map((image) => ({
+            key: image.key,
+            url: image.url
+          })),
+          ...uploadedImages
+        ];
+      }
+      if (imagenes.length > 4) {
+        return res.status(400).json({
+          success: false,
+          message: "Solo se permiten maximo 4 imagenes"
+        });
+      }
+    }
+    const result = await ProductService.updateVariantExtrasBySeller({
+      productId,
+      sucursalId,
+      variantKey,
+      sellerId,
+      descripcion,
+      uso,
+      promocion,
+      imagenes
+    });
+    if (imagenes !== undefined) {
+      const finalKeys = new Set(
+        imagenes
+          .map((image) => String(image?.key || "").trim())
+          .filter(Boolean)
+      );
+      const removedKeys = previousImages
+        .map((image: any) => String(image?.key || "").trim())
+        .filter((key: string) => Boolean(key) && !finalKeys.has(key));
+      if (removedKeys.length > 0) {
+        Promise.allSettled(removedKeys.map((key) => deleteFileFromS3(key))).then((results) => {
+          const failures = results.filter((item) => item.status === "rejected");
+          if (failures.length > 0) {
+            console.error("No se pudieron eliminar algunas imagenes antiguas de S3:", failures.length);
+          }
+        });
+      }
+    }
+    return res.json({
+      success: true,
+      message: "Extras de la variante actualizados correctamente",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en updateVariantExtrasBySeller:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al actualizar extras de la variante"
+    });
+  }
+};
+
 
 export const ProductController = {
   getProduct,
@@ -799,6 +1044,7 @@ export const ProductController = {
   getSellerInventoryAll,
   getFlatProductListPage,
   getSellerInventoryList,
+  getSellerProductInfoList,
   getProductQR,
   regenerateProductQR,
   findProductByQR,
@@ -813,6 +1059,9 @@ export const ProductController = {
   listVariantQRGroup,
   generateVariantQRGroup,
   resolveVariantQRGroupPayload,
-  migrateVariantKeys
+  migrateVariantKeys,
+  updateVariantExtrasBySeller
 
 };
+
+

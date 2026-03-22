@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ProductController } from "../controllers/product.controller";
-import { requireSellerOwnership } from "../middlewares/auth.middleware";
+import { requireAuth, requireRole, requireSellerOwnership } from "../middlewares/auth.middleware";
+import { uploadVariantImages } from "../middlewares/upload.middleware";
 
 const productRouter = Router();
 
@@ -10,6 +11,12 @@ productRouter.get("/flat", ProductController.getFlatProductList);
 productRouter.get("/flat/list", ProductController.getFlatProductListPage);
 productRouter.get("/seller/inventory/all", ProductController.getSellerInventoryAll);
 productRouter.get("/seller/inventory", ProductController.getSellerInventoryList);
+productRouter.get(
+  "/seller/product-info",
+  requireAuth,
+  requireRole("seller"),
+  ProductController.getSellerProductInfoList
+);
 productRouter.get("/features/:id", ProductController.getFeatures);
 productRouter.get("/category/:id", ProductController.getProductCategory);
 productRouter.get("/seller/:id", requireSellerOwnership("id"), ProductController.getAllProductsEntryAmountBySellerId);
@@ -46,5 +53,14 @@ productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF
   productRouter.put("/update-price", ProductController.updatePrice);
   productRouter.put("/update-subvariant-stock", ProductController.updateSubvariantStock);
   productRouter.put("/variant-qr-group/:id", ProductController.updateVariantQRGroup);
+
+  //PATCH
+productRouter.patch(
+  "/:productId/sucursal/:sucursalId/variant/:variantKey/extras",
+  requireAuth,
+  requireRole("seller"),
+  uploadVariantImages.array("imagenes", 4),
+  ProductController.updateVariantExtrasBySeller
+);
 
 export default productRouter;
