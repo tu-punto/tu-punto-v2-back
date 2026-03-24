@@ -1,1 +1,7 @@
-export { PagoSucursal, calcSellerDebt, calcSucursalSubtotal, calcPagoMensual } from './seller.utils';
+export {
+  PagoSucursal,
+  calcSellerDebt,
+  calcSucursalSubtotal,
+  calcPagoMensual,
+  canAccessSellerProductInfo
+} from './seller.utils';

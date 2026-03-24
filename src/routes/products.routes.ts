@@ -9,8 +9,18 @@ const productRouter = Router();
 productRouter.get("/", ProductController.getProduct);
 productRouter.get("/flat", ProductController.getFlatProductList);
 productRouter.get("/flat/list", ProductController.getFlatProductListPage);
-productRouter.get("/seller/inventory/all", ProductController.getSellerInventoryAll);
-productRouter.get("/seller/inventory", ProductController.getSellerInventoryList);
+productRouter.get(
+  "/seller/inventory/all",
+  requireAuth,
+  requireRole("seller"),
+  ProductController.getSellerInventoryAll
+);
+productRouter.get(
+  "/seller/inventory",
+  requireAuth,
+  requireRole("seller"),
+  ProductController.getSellerInventoryList
+);
 productRouter.get(
   "/seller/product-info",
   requireAuth,

@@ -7,11 +7,24 @@ import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
 import { USER_ROLES } from "../constants/roles";
+import { canAccessSellerProductInfo } from "../utils";
 
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
 const isSecure = process.env.NODE_ENV === "production";
+
+type SellerProductInfoAccessShape = {
+  pago_sucursales?: {
+    alquiler?: number;
+    exhibicion?: number;
+    delivery?: number;
+    entrega_simple?: number;
+    activo?: boolean;
+  }[];
+  comision_porcentual?: number;
+  comision_fija?: number;
+};
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   console.log("User:",user)
@@ -113,12 +126,18 @@ export const getUserInfoController = async (req: Request, res: Response) => {
   if (userObj.role === "seller") {
     const vendedor = await VendedorModel.findOne({ mail: userObj.email });
     if (vendedor) {
+      const sellerAccessData = vendedor.toObject?.() as SellerProductInfoAccessShape | undefined;
       userObj.id_vendedor = vendedor._id;
       userObj.nombre_vendedor = `${vendedor.nombre} ${vendedor.apellido}`;
+      userObj.can_access_seller_product_info = canAccessSellerProductInfo({
+        pago_sucursales: Array.isArray(sellerAccessData?.pago_sucursales)
+          ? sellerAccessData.pago_sucursales
+          : [],
+        comision_porcentual: Number(sellerAccessData?.comision_porcentual ?? 0),
+        comision_fija: Number(sellerAccessData?.comision_fija ?? 0),
+      });
     }
   }
-
-
     //console.log("Enviando al frontend:", userObj);
     res.json({ success: true, data: userObj });
   } catch (error) {

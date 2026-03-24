@@ -43,6 +43,19 @@ export const calcPagoMensual = (seller: {
       0
     );
 
+export const canAccessSellerProductInfo = (seller: {
+  pago_sucursales: PagoSucursal[];
+  comision_porcentual?: number;
+  comision_fija?: number;
+}): boolean => {
+  const pagoMensual = calcPagoMensual(seller);
+  const hasMonthlyPayment = pagoMensual > 0;
+  const hasCommission =
+    Number(seller.comision_porcentual ?? 0) > 0 || Number(seller.comision_fija ?? 0) > 0;
+
+  return hasMonthlyPayment && hasCommission;
+};
+
 export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
   const pedidosProcesados = new Set();
   const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {

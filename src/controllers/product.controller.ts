@@ -7,6 +7,19 @@ import { ProductVariantKeyService } from "../services/productVariantKey.service"
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { deleteFileFromS3, uploadVariantImageToS3 } from "../helpers/S3Client";
+import { canAccessSellerProductInfo } from "../utils";
+
+type SellerProductInfoAccessShape = {
+  pago_sucursales?: {
+    alquiler?: number;
+    exhibicion?: number;
+    delivery?: number;
+    entrega_simple?: number;
+    activo?: boolean;
+  }[];
+  comision_porcentual?: number;
+  comision_fija?: number;
+};
 
 const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null> => {
   const user = await UserModel.findById(userId).select("role vendedor email").lean();
@@ -26,6 +39,25 @@ const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null>
   }
 
   return null;
+};
+
+const canAuthenticatedSellerAccessProductInfo = async (sellerId: string): Promise<boolean> => {
+  const seller = await VendedorModel.findById(sellerId)
+    .select("pago_sucursales comision_porcentual comision_fija")
+    .lean();
+
+  if (!seller) {
+    return false;
+  }
+
+  const sellerAccessData = seller as unknown as SellerProductInfoAccessShape;
+  return canAccessSellerProductInfo({
+    pago_sucursales: Array.isArray(sellerAccessData.pago_sucursales)
+      ? sellerAccessData.pago_sucursales
+      : [],
+    comision_porcentual: Number(sellerAccessData.comision_porcentual ?? 0),
+    comision_fija: Number(sellerAccessData.comision_fija ?? 0),
+  });
 };
 
 const parseBooleanQuery = (value: unknown): boolean | undefined => {
@@ -804,6 +836,13 @@ export const getSellerProductInfoList = async (req: Request, res: Response) => {
         message: "sellerId no resuelto"
       });
     }
+    const hasAccess = await canAuthenticatedSellerAccessProductInfo(sellerId);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "Esta funcion requiere pago mensual y comision activos"
+      });
+    }
 
     const result = await ProductService.getSellerProductInfoListPage({
       sellerId,
@@ -847,6 +886,13 @@ export const updateVariantExtrasBySeller = async (req: Request, res: Response) =
       return res.status(400).json({
         success: false,
         message: "sellerId no resuelto"
+      });
+    }
+    const hasAccess = await canAuthenticatedSellerAccessProductInfo(sellerId);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "Esta funcion requiere pago mensual y comision activos"
       });
     }
     const { productId, sucursalId, variantKey } = req.params;
