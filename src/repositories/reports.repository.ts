@@ -815,6 +815,124 @@ async fetchVentasDetalleEnRango(opts: { start: Date; end: Date }) {
     .exec();
 },
 
+async fetchEntregasSimplesPorVendedorYMes(opts: { sellerIds: string[]; months?: number[] }) {
+  const sellerIds = (opts.sellerIds || []).filter((id) => Types.ObjectId.isValid(id));
+  if (!sellerIds.length) return [];
+
+  const sellerObjectIds = sellerIds.map((id) => new Types.ObjectId(id));
+  const months = Array.isArray(opts.months)
+    ? opts.months.map((m) => Number(m)).filter((m) => Number.isInteger(m) && m >= 1 && m <= 12)
+    : [];
+
+  const pipeline: any[] = [
+    { $match: { estado_pedido: "Entregado" } },
+    {
+      $lookup: {
+        from: "Venta",
+        localField: "venta",
+        foreignField: "_id",
+        as: "ventasInfo",
+        pipeline: [{ $project: { _id: 0, vendedor: 1 } }],
+      },
+    },
+    {
+      $addFields: {
+        sellerIds: {
+          $setUnion: [
+            {
+              $map: {
+                input: { $ifNull: ["$ventasInfo", []] },
+                as: "v",
+                in: "$$v.vendedor",
+              },
+            },
+            {
+              $map: {
+                input: { $ifNull: ["$productos_temporales", []] },
+                as: "t",
+                in: "$$t.id_vendedor",
+              },
+            },
+          ],
+        },
+        fechaBase: { $ifNull: ["$hora_entrega_real", "$fecha_pedido"] },
+      },
+    },
+    {
+      $addFields: {
+        sellerIds: {
+          $filter: {
+            input: "$sellerIds",
+            as: "sellerId",
+            cond: { $ne: ["$$sellerId", null] },
+          },
+        },
+        month: {
+          $toInt: {
+            $dateToString: {
+              format: "%m",
+              date: "$fechaBase",
+              timezone: "America/La_Paz",
+            },
+          },
+        },
+      },
+    },
+    {
+      $match: {
+        $expr: { $gt: [{ $size: "$sellerIds" }, 0] },
+      },
+    },
+  ];
+
+  if (months.length) {
+    pipeline.push({ $match: { month: { $in: months } } });
+  }
+
+  pipeline.push(
+    { $unwind: "$sellerIds" },
+    { $match: { sellerIds: { $in: sellerObjectIds } } },
+    {
+      $group: {
+        _id: { seller: "$sellerIds", month: "$month" },
+        entregas_simples: { $sum: 1 },
+      },
+    },
+    {
+      $lookup: {
+        from: "Vendedor",
+        localField: "_id.seller",
+        foreignField: "_id",
+        as: "sellerInfo",
+        pipeline: [{ $project: { _id: 0, nombre: 1, apellido: 1 } }],
+      },
+    },
+    { $unwind: { path: "$sellerInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        id_vendedor: { $toString: "$_id.seller" },
+        vendedor: {
+          $trim: {
+            input: {
+              $concat: [
+                { $ifNull: ["$sellerInfo.nombre", ""] },
+                " ",
+                { $ifNull: ["$sellerInfo.apellido", ""] },
+              ],
+            },
+          },
+        },
+        month: "$_id.month",
+        entregas_simples: 1,
+      },
+    },
+    { $sort: { month: 1, vendedor: 1, id_vendedor: 1 } },
+  );
+
+  return await PedidoModel.aggregate(pipeline).exec();
+},
+
 
 
 };
