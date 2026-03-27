@@ -1,6 +1,7 @@
 import { SellerRepository } from "../repositories/seller.repository";
+import { ProductRepository } from "../repositories/product.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
-import { calcPagoMensual, calcSellerDebt } from "../utils";
+import { calcPagoMensual, calcSellerDebt, canAccessSellerProductInfo } from "../utils";
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { Types } from "mongoose";
 import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
@@ -38,8 +39,47 @@ const getAllSellers = async () => {
 const getAllSellersBasic = async (params?: {
   sucursalId?: string;
   sellerId?: string;
+  onlyProductInfoAccess?: boolean;
+  includeProductInfoStatus?: boolean;
 }) => {
-  return await SellerRepository.findAllBasic(params);
+  const sellers = await SellerRepository.findAllBasic(params);
+  const filteredSellers = !params?.onlyProductInfoAccess
+    ? sellers
+    : sellers.filter((seller: any) =>
+    canAccessSellerProductInfo({
+      pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
+      comision_porcentual: Number(seller?.comision_porcentual ?? 0),
+      comision_fija: Number(seller?.comision_fija ?? 0),
+    })
+  );
+
+  if (!params?.includeProductInfoStatus) {
+    return filteredSellers;
+  }
+
+  const sellerIds = filteredSellers.map((seller: any) => String(seller?._id || "")).filter(Boolean);
+  const statusRows = await ProductRepository.findSellerProductInfoStatusBySellerIds(sellerIds);
+  const statusBySellerId = new Map(
+    statusRows.map((row) => [row.sellerId, row])
+  );
+
+  return filteredSellers.map((seller: any) => {
+    const sellerId = String(seller?._id || "");
+    const summary = statusBySellerId.get(sellerId) || {
+      sellerId,
+      totalVariants: 0,
+      emptyCount: 0,
+      partialCount: 0,
+      completeCount: 0,
+      productInfoStatus: "empty" as const,
+    };
+
+    return {
+      ...seller,
+      product_info_status: summary.productInfoStatus,
+      product_info_summary: summary,
+    };
+  });
 };
 
 const getSeller = async (sellerId: string) => {

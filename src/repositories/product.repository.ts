@@ -276,6 +276,15 @@ type SellerProductInfoParams = {
   sortOrder?: "asc" | "desc";
 };
 
+type SellerProductInfoStatusSummary = {
+  sellerId: string;
+  totalVariants: number;
+  emptyCount: number;
+  partialCount: number;
+  completeCount: number;
+  productInfoStatus: "empty" | "partial" | "complete";
+};
+
 const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
   const sucursalId = params?.sucursalId;
   const sellerId = params?.sellerId;
@@ -702,6 +711,196 @@ const findSellerProductInfoListPage = async (params: SellerProductInfoParams) =>
   };
 };
 
+const findSellerProductInfoStatusBySellerIds = async (
+  sellerIds: string[]
+): Promise<SellerProductInfoStatusSummary[]> => {
+  const validSellerIds = sellerIds
+    .filter((id) => Types.ObjectId.isValid(id))
+    .map((id) => new Types.ObjectId(id));
+
+  if (validSellerIds.length === 0) {
+    return [];
+  }
+
+  const variantLabelExpression = {
+    $reduce: {
+      input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+      initialValue: "",
+      in: {
+        $cond: [
+          { $eq: ["$$value", ""] },
+          "$$this.v",
+          { $concat: ["$$value", " / ", "$$this.v"] }
+        ]
+      }
+    }
+  };
+
+  const result = await ProductoModel.aggregate([
+    {
+      $match: {
+        esTemporal: { $ne: true },
+        id_vendedor: { $in: validSellerIds }
+      }
+    },
+    { $unwind: "$sucursales" },
+    { $unwind: "$sucursales.combinaciones" },
+    {
+      $addFields: {
+        _variantLabel: variantLabelExpression,
+        _descriptionNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.descripcion", ""] } }
+        },
+        _usageNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.uso", ""] } }
+        },
+        _promotionTitleNormalized: {
+          $trim: { input: { $ifNull: ["$sucursales.combinaciones.promocion.titulo", ""] } }
+        },
+        _promotionDescriptionNormalized: {
+          $trim: {
+            input: { $ifNull: ["$sucursales.combinaciones.promocion.descripcion", ""] }
+          }
+        },
+        _promotionStartNormalized: {
+          $ifNull: ["$sucursales.combinaciones.promocion.fechaInicio", null]
+        },
+        _promotionEndNormalized: {
+          $ifNull: ["$sucursales.combinaciones.promocion.fechaFin", null]
+        },
+        _imagesNormalized: { $ifNull: ["$sucursales.combinaciones.imagenes", []] }
+      }
+    },
+    {
+      $addFields: {
+        _hasDescription: { $gt: [{ $strLenCP: "$_descriptionNormalized" }, 0] },
+        _hasUsage: { $gt: [{ $strLenCP: "$_usageNormalized" }, 0] },
+        _hasImages: { $gt: [{ $size: "$_imagesNormalized" }, 0] },
+        _hasPromotion: {
+          $or: [
+            { $gt: [{ $strLenCP: "$_promotionTitleNormalized" }, 0] },
+            { $gt: [{ $strLenCP: "$_promotionDescriptionNormalized" }, 0] },
+            { $ne: ["$_promotionStartNormalized", null] },
+            { $ne: ["$_promotionEndNormalized", null] }
+          ]
+        }
+      }
+    },
+    {
+      $addFields: {
+        _statusRank: {
+          $switch: {
+            branches: [
+              {
+                case: {
+                  $and: [
+                    { $eq: ["$_hasDescription", false] },
+                    { $eq: ["$_hasUsage", false] },
+                    { $eq: ["$_hasImages", false] },
+                    { $eq: ["$_hasPromotion", false] }
+                  ]
+                },
+                then: 0
+              },
+              {
+                case: {
+                  $and: [
+                    { $eq: ["$_hasDescription", true] },
+                    { $eq: ["$_hasImages", true] }
+                  ]
+                },
+                then: 2
+              }
+            ],
+            default: 1
+          }
+        }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          sellerId: "$id_vendedor",
+          productId: "$_id",
+          variantKey: {
+            $ifNull: ["$sucursales.combinaciones.variantKey", "$_variantLabel"]
+          }
+        },
+        statusRank: { $max: "$_statusRank" }
+      }
+    },
+    {
+      $group: {
+        _id: "$_id.sellerId",
+        emptyCount: {
+          $sum: {
+            $cond: [{ $eq: ["$statusRank", 0] }, 1, 0]
+          }
+        },
+        partialCount: {
+          $sum: {
+            $cond: [{ $eq: ["$statusRank", 1] }, 1, 0]
+          }
+        },
+        completeCount: {
+          $sum: {
+            $cond: [{ $eq: ["$statusRank", 2] }, 1, 0]
+          }
+        }
+      }
+    },
+    {
+      $addFields: {
+        totalVariants: {
+          $add: ["$emptyCount", "$partialCount", "$completeCount"]
+        }
+      }
+    },
+    {
+      $addFields: {
+        productInfoStatus: {
+          $switch: {
+            branches: [
+              {
+                case: {
+                  $and: [
+                    { $gt: ["$totalVariants", 0] },
+                    { $eq: ["$completeCount", "$totalVariants"] }
+                  ]
+                },
+                then: "complete"
+              },
+              {
+                case: {
+                  $and: [
+                    { $eq: ["$completeCount", 0] },
+                    { $eq: ["$partialCount", 0] }
+                  ]
+                },
+                then: "empty"
+              }
+            ],
+            default: "partial"
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        sellerId: { $toString: "$_id" },
+        totalVariants: 1,
+        emptyCount: 1,
+        partialCount: 1,
+        completeCount: 1,
+        productInfoStatus: 1
+      }
+    }
+  ]);
+
+  return result as SellerProductInfoStatusSummary[];
+};
+
 const updateVariantExtrasBySeller = async ({
   productId,
   sucursalId,
@@ -825,6 +1024,7 @@ export const ProductRepository = {
   findFlatProductList,
   findFlatProductListPage,
   findSellerProductInfoListPage,
+  findSellerProductInfoStatusBySellerIds,
   findByQRCode,
   updateVariantExtrasBySeller,
   findVariantImagesBySeller

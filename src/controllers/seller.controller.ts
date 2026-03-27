@@ -52,17 +52,30 @@ export const getSellersBasic = async (req: Request, res: Response) => {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
     const authUserId = String(res.locals.auth?.id || "");
     const sucursalId = (req.query.sucursalId as string | undefined) || undefined;
+    const onlyProductInfoAccess =
+      String(req.query.onlyProductInfoAccess || "").trim().toLowerCase() === "true";
+    const includeProductInfoStatus =
+      String(req.query.includeProductInfoStatus || "").trim().toLowerCase() === "true";
 
     if (authRole === "seller" && authUserId) {
       const sellerId = await resolveSellerIdByAuthUser(authUserId);
       if (!sellerId) {
         return res.json([]);
       }
-      const sellerList = await SellerService.getAllSellersBasic({ sellerId, sucursalId });
+      const sellerList = await SellerService.getAllSellersBasic({
+        sellerId,
+        sucursalId,
+        onlyProductInfoAccess,
+        includeProductInfoStatus,
+      });
       return res.json(sellerList);
     }
 
-    const sellerList = await SellerService.getAllSellersBasic({ sucursalId });
+    const sellerList = await SellerService.getAllSellersBasic({
+      sucursalId,
+      onlyProductInfoAccess,
+      includeProductInfoStatus,
+    });
     return res.json(sellerList);
   } catch (err) {
     console.error("Error obteniendo vendedores basicos:", err);

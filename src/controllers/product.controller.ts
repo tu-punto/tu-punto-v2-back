@@ -77,6 +77,20 @@ const parseBooleanQuery = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
+const buildSellerProductInfoQueryParams = (req: Request, sellerId: string) => ({
+  sellerId,
+  sucursalId: req.query.sucursalId as string | undefined,
+  categoryId: req.query.categoryId as string | undefined,
+  q: req.query.q as string | undefined,
+  inStock: parseBooleanQuery(req.query.inStock),
+  hasPromotion: parseBooleanQuery(req.query.hasPromotion),
+  hasImages: parseBooleanQuery(req.query.hasImages),
+  hasDescription: parseBooleanQuery(req.query.hasDescription),
+  page: Number(req.query.page || 1),
+  limit: Number(req.query.limit || 10),
+  sortOrder: req.query.sortOrder === "desc" ? "desc" : ("asc" as "asc" | "desc"),
+});
+
 export const getProduct = async (req: Request, res: Response) => {
   try {
     const products = await ProductService.getAllProducts();
@@ -844,19 +858,9 @@ export const getSellerProductInfoList = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await ProductService.getSellerProductInfoListPage({
-      sellerId,
-      sucursalId: req.query.sucursalId as string | undefined,
-      categoryId: req.query.categoryId as string | undefined,
-      q: req.query.q as string | undefined,
-      inStock: parseBooleanQuery(req.query.inStock),
-      hasPromotion: parseBooleanQuery(req.query.hasPromotion),
-      hasImages: parseBooleanQuery(req.query.hasImages),
-      hasDescription: parseBooleanQuery(req.query.hasDescription),
-      page: Number(req.query.page || 1),
-      limit: Number(req.query.limit || 10),
-      sortOrder: req.query.sortOrder === "desc" ? "desc" : "asc"
-    });
+    const result = await ProductService.getSellerProductInfoListPage(
+      buildSellerProductInfoQueryParams(req, sellerId)
+    );
 
     return res.json({
       success: true,
@@ -867,6 +871,49 @@ export const getSellerProductInfoList = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Error al obtener informacion de productos del vendedor"
+    });
+  }
+};
+
+export const getAdminSellerProductInfoList = async (req: Request, res: Response) => {
+  try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    if (authRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Solo un administrador puede consultar esta informacion"
+      });
+    }
+
+    const sellerId = String(req.query.sellerId || "").trim();
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId es requerido"
+      });
+    }
+
+    const hasAccess = await canAuthenticatedSellerAccessProductInfo(sellerId);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "El vendedor seleccionado no tiene habilitada esta funcion"
+      });
+    }
+
+    const result = await ProductService.getSellerProductInfoListPage(
+      buildSellerProductInfoQueryParams(req, sellerId)
+    );
+
+    return res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error("Error en getAdminSellerProductInfoList:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener informacion de productos del vendedor para administrador"
     });
   }
 };
@@ -1091,6 +1138,7 @@ export const ProductController = {
   getFlatProductListPage,
   getSellerInventoryList,
   getSellerProductInfoList,
+  getAdminSellerProductInfoList,
   getProductQR,
   regenerateProductQR,
   findProductByQR,

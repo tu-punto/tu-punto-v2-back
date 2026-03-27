@@ -27,6 +27,12 @@ productRouter.get(
   requireRole("seller"),
   ProductController.getSellerProductInfoList
 );
+productRouter.get(
+  "/admin/seller/product-info",
+  requireAuth,
+  requireRole("admin"),
+  ProductController.getAdminSellerProductInfoList
+);
 productRouter.get("/features/:id", ProductController.getFeatures);
 productRouter.get("/category/:id", ProductController.getProductCategory);
 productRouter.get("/seller/:id", requireSellerOwnership("id"), ProductController.getAllProductsEntryAmountBySellerId);
