@@ -36,22 +36,51 @@ const getAllSellers = async () => {
   return processedSellers;
 };
 
+const getSellerLifecycleStatus = (fechaVigencia: unknown): "activo" | "debe_renovar" | "ya_no_es_cliente" => {
+  if (!fechaVigencia) return "ya_no_es_cliente";
+  if (
+    typeof fechaVigencia !== "string" &&
+    typeof fechaVigencia !== "number" &&
+    !(fechaVigencia instanceof Date) &&
+    !dayjs.isDayjs(fechaVigencia)
+  ) {
+    return "ya_no_es_cliente";
+  }
+
+  const today = dayjs().startOf("day");
+  const vigencia = dayjs(fechaVigencia).endOf("day");
+  if (!vigencia.isValid()) return "ya_no_es_cliente";
+
+  const diasVencido = today.diff(vigencia, "day");
+  if (diasVencido <= 0) return "activo";
+  if (diasVencido <= 20) return "debe_renovar";
+  return "ya_no_es_cliente";
+};
+
 const getAllSellersBasic = async (params?: {
   sucursalId?: string;
   sellerId?: string;
   onlyProductInfoAccess?: boolean;
   includeProductInfoStatus?: boolean;
+  onlyActiveOrRenewal?: boolean;
 }) => {
   const sellers = await SellerRepository.findAllBasic(params);
-  const filteredSellers = !params?.onlyProductInfoAccess
+  const sellersWithProductInfoAccess = !params?.onlyProductInfoAccess
     ? sellers
     : sellers.filter((seller: any) =>
-    canAccessSellerProductInfo({
-      pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
-      comision_porcentual: Number(seller?.comision_porcentual ?? 0),
-      comision_fija: Number(seller?.comision_fija ?? 0),
-    })
-  );
+        canAccessSellerProductInfo({
+          pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
+          comision_porcentual: Number(seller?.comision_porcentual ?? 0),
+          comision_fija: Number(seller?.comision_fija ?? 0),
+        })
+      );
+
+  const filteredSellers = !params?.onlyActiveOrRenewal
+    ? sellersWithProductInfoAccess
+    : sellersWithProductInfoAccess.filter((seller: any) => {
+        const status = getSellerLifecycleStatus(seller?.fecha_vigencia);
+        return status === "activo" || status === "debe_renovar";
+      });
 
   if (!params?.includeProductInfoStatus) {
     return filteredSellers;
