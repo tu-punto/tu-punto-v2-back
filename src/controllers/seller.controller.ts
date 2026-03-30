@@ -56,6 +56,8 @@ export const getSellersBasic = async (req: Request, res: Response) => {
       String(req.query.onlyProductInfoAccess || "").trim().toLowerCase() === "true";
     const includeProductInfoStatus =
       String(req.query.includeProductInfoStatus || "").trim().toLowerCase() === "true";
+    const onlyActiveOrRenewal =
+      String(req.query.onlyActiveOrRenewal || "").trim().toLowerCase() === "true";
 
     if (authRole === "seller" && authUserId) {
       const sellerId = await resolveSellerIdByAuthUser(authUserId);
@@ -67,6 +69,7 @@ export const getSellersBasic = async (req: Request, res: Response) => {
         sucursalId,
         onlyProductInfoAccess,
         includeProductInfoStatus,
+        onlyActiveOrRenewal,
       });
       return res.json(sellerList);
     }
@@ -75,6 +78,7 @@ export const getSellersBasic = async (req: Request, res: Response) => {
       sucursalId,
       onlyProductInfoAccess,
       includeProductInfoStatus,
+      onlyActiveOrRenewal,
     });
     return res.json(sellerList);
   } catch (err) {
