@@ -16,8 +16,27 @@ import { PaymentProofService } from "./paymentProof.service";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
-const getAllSellers = async () => {
-  const sellersWithData = await SellerRepository.findWithDebtsAndSales();
+type SellerListFilters = {
+  sellerId?: string;
+  q?: string;
+  status?: "activo" | "debe_renovar" | "ya_no_es_cliente";
+  pendingPayment?: "con_deuda" | "sin_deuda";
+};
+
+const matchesSellerFullName = (sellerData: any, q?: string) => {
+  const normalizedQuery = String(q || "").trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  const fullName = `${sellerData?.nombre || ""} ${sellerData?.apellido || ""}`.trim().toLowerCase();
+  return fullName.includes(normalizedQuery);
+};
+
+const getAllSellers = async (params?: SellerListFilters) => {
+  const sellersWithData = await SellerRepository.findWithDebtsAndSales({
+    sellerId: params?.sellerId,
+    q: params?.q,
+    status: params?.status,
+  });
 
   const processedSellers = sellersWithData.map((sellerData: any) => {
     const metrics = calcPagoPendiente(
@@ -33,7 +52,28 @@ const getAllSellers = async () => {
     };
   });
 
-  return processedSellers;
+  return processedSellers.filter((sellerData: any) => {
+    if (!matchesSellerFullName(sellerData, params?.q)) {
+      return false;
+    }
+
+    if (params?.status) {
+      const lifecycleStatus = getSellerLifecycleStatus(sellerData?.fecha_vigencia);
+      if (lifecycleStatus !== params.status) {
+        return false;
+      }
+    }
+
+    if (params?.pendingPayment === "con_deuda") {
+      return Number(sellerData?.pago_pendiente ?? 0) !== 0;
+    }
+
+    if (params?.pendingPayment === "sin_deuda") {
+      return Number(sellerData?.pago_pendiente ?? 0) === 0;
+    }
+
+    return true;
+  });
 };
 
 const getSellerLifecycleStatus = (fechaVigencia: unknown): "activo" | "debe_renovar" | "ya_no_es_cliente" => {

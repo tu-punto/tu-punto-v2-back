@@ -28,6 +28,19 @@ export const getSellers = async (req: Request, res: Response) => {
   try {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
     const authUserId = String(res.locals.auth?.id || "");
+    const q = String(req.query.q || "").trim() || undefined;
+    const statusQuery = String(req.query.status || "").trim().toLowerCase();
+    const pendingPaymentQuery = String(req.query.pendingPayment || "").trim().toLowerCase();
+    const status =
+      statusQuery === "activo" ||
+      statusQuery === "debe_renovar" ||
+      statusQuery === "ya_no_es_cliente"
+        ? statusQuery
+        : undefined;
+    const pendingPayment =
+      pendingPaymentQuery === "con_deuda" || pendingPaymentQuery === "sin_deuda"
+        ? pendingPaymentQuery
+        : undefined;
 
     if (authRole === "seller" && authUserId) {
       const sellerId = await resolveSellerIdByAuthUser(authUserId);
@@ -35,11 +48,20 @@ export const getSellers = async (req: Request, res: Response) => {
         return res.json([]);
       }
 
-      const seller = await SellerService.getSeller(sellerId);
-      return res.json(seller ? [seller] : []);
+      const sellerList = await SellerService.getAllSellers({
+        sellerId,
+        q,
+        status,
+        pendingPayment,
+      });
+      return res.json(sellerList);
     }
 
-    const sellerList = await SellerService.getAllSellers();
+    const sellerList = await SellerService.getAllSellers({
+      q,
+      status,
+      pendingPayment,
+    });
     res.json(sellerList);
   } catch (err) {
     console.error("Error obteniendo vendedores:", err);

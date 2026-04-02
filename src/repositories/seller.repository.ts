@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { Types } from "mongoose";
+import dayjs from "dayjs";
 import { VendedorSchema } from "../entities/implements/VendedorSchema";
 import { IVendedor } from "../entities/IVendedor";
 import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
@@ -11,6 +12,14 @@ const VendedorModel = mongoose.model<IVendedorDocument>(
   "Vendedor",
   VendedorSchema
 );
+
+type SellerListQueryParams = {
+  sellerId?: string;
+  q?: string;
+  status?: "activo" | "debe_renovar" | "ya_no_es_cliente";
+};
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const findAll = async (): Promise<IVendedor[]> => {
   return await VendedorModel.find().lean<IVendedor[]>().exec();
@@ -127,8 +136,58 @@ const markSalesAsDeposited = async (sellerId: string): Promise<void> => {
   );
 };
 
-const findWithDebtsAndSales = async () => {
+const buildSellerListMatch = (params?: SellerListQueryParams) => {
+  const match: Record<string, any> = {};
+
+  if (params?.sellerId && Types.ObjectId.isValid(params.sellerId)) {
+    match._id = new Types.ObjectId(params.sellerId);
+  }
+
+  const trimmedQuery = String(params?.q || "").trim();
+  if (trimmedQuery) {
+    match.$expr = {
+      $regexMatch: {
+        input: {
+          $trim: {
+            input: {
+              $concat: [
+                { $ifNull: ["$nombre", ""] },
+                " ",
+                { $ifNull: ["$apellido", ""] }
+              ]
+            }
+          }
+        },
+        regex: escapeRegex(trimmedQuery),
+        options: "i"
+      }
+    };
+  }
+
+  const todayStart = dayjs().startOf("day");
+  if (params?.status === "activo") {
+    match.fecha_vigencia = { $gte: todayStart.toDate() };
+  } else if (params?.status === "debe_renovar") {
+    match.fecha_vigencia = {
+      $gte: todayStart.subtract(20, "day").toDate(),
+      $lt: todayStart.toDate()
+    };
+  } else if (params?.status === "ya_no_es_cliente") {
+    match.$or = [
+      { fecha_vigencia: { $lt: todayStart.subtract(20, "day").toDate() } },
+      { fecha_vigencia: null },
+      { fecha_vigencia: { $exists: false } }
+    ];
+  }
+
+  return match;
+};
+
+const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
+  const match = buildSellerListMatch(params);
+
   return await VendedorModel.aggregate([
+    ...(Object.keys(match).length ? [{ $match: match }] : []),
     {
       $lookup: {
         from: "Venta",
