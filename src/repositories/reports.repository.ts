@@ -815,6 +815,206 @@ async fetchVentasDetalleEnRango(opts: { start: Date; end: Date }) {
     .exec();
 },
 
+async fetchSellerDisplayInfo(sellerId: string) {
+  if (!Types.ObjectId.isValid(sellerId)) return null;
+
+  const seller = await VendedorModel.findById(sellerId, {
+    nombre: 1,
+    apellido: 1,
+  })
+    .lean()
+    .exec();
+
+  if (!seller) return null;
+
+  return {
+    id_vendedor: String(seller._id),
+    vendedor: `${String(seller.nombre || "").trim()} ${String(seller.apellido || "").trim()}`.trim(),
+  };
+},
+
+async fetchVentasTemporalesPorVendedor(opts: { sellerId: string }) {
+  if (!Types.ObjectId.isValid(opts.sellerId)) return [];
+
+  const sellerObjectId = new Types.ObjectId(opts.sellerId);
+
+  return await VentaModel.aggregate([
+    { $match: { vendedor: sellerObjectId } },
+    {
+      $lookup: {
+        from: "Producto",
+        localField: "producto",
+        foreignField: "_id",
+        as: "productInfo",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              nombre_producto: 1,
+              esTemporal: 1,
+            },
+          },
+        ],
+      },
+    },
+    { $unwind: { path: "$productInfo", preserveNullAndEmptyArrays: true } },
+    { $match: { "productInfo.esTemporal": true } },
+    {
+      $lookup: {
+        from: "Pedido",
+        localField: "pedido",
+        foreignField: "_id",
+        as: "pedidoInfo",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              fecha_pedido: 1,
+              hora_entrega_acordada: 1,
+              hora_entrega_real: 1,
+              estado_pedido: 1,
+              tipo_de_pago: 1,
+              cliente: 1,
+              telefono_cliente: 1,
+              lugar_entrega: 1,
+              observaciones: 1,
+              sucursal: 1,
+              lugar_origen: 1,
+            },
+          },
+        ],
+      },
+    },
+    { $unwind: { path: "$pedidoInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "Vendedor",
+        localField: "vendedor",
+        foreignField: "_id",
+        as: "sellerInfo",
+        pipeline: [{ $project: { _id: 1, nombre: 1, apellido: 1 } }],
+      },
+    },
+    { $unwind: { path: "$sellerInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "Sucursal",
+        localField: "sucursal",
+        foreignField: "_id",
+        as: "saleSucursalInfo",
+        pipeline: [{ $project: { _id: 1, nombre: 1 } }],
+      },
+    },
+    { $unwind: { path: "$saleSucursalInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "Sucursal",
+        localField: "pedidoInfo.sucursal",
+        foreignField: "_id",
+        as: "pedidoSucursalInfo",
+        pipeline: [{ $project: { _id: 1, nombre: 1 } }],
+      },
+    },
+    { $unwind: { path: "$pedidoSucursalInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "Sucursal",
+        localField: "pedidoInfo.lugar_origen",
+        foreignField: "_id",
+        as: "pedidoOrigenInfo",
+        pipeline: [{ $project: { _id: 1, nombre: 1 } }],
+      },
+    },
+    { $unwind: { path: "$pedidoOrigenInfo", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        id_venta: { $convert: { input: "$_id", to: "string", onError: "", onNull: "" } },
+        id_pedido: { $convert: { input: "$pedido", to: "string", onError: "", onNull: "" } },
+        id_producto: { $convert: { input: "$producto", to: "string", onError: "", onNull: "" } },
+        fecha_pedido: "$pedidoInfo.fecha_pedido",
+        hora_entrega_acordada: "$pedidoInfo.hora_entrega_acordada",
+        hora_entrega_real: "$pedidoInfo.hora_entrega_real",
+        estado_pedido: { $ifNull: ["$pedidoInfo.estado_pedido", ""] },
+        tipo_de_pago: { $ifNull: ["$pedidoInfo.tipo_de_pago", ""] },
+        cliente: { $ifNull: ["$pedidoInfo.cliente", ""] },
+        telefono_cliente: {
+          $convert: { input: "$pedidoInfo.telefono_cliente", to: "string", onError: "", onNull: "" },
+        },
+        lugar_entrega: { $ifNull: ["$pedidoInfo.lugar_entrega", ""] },
+        observaciones: { $ifNull: ["$pedidoInfo.observaciones", ""] },
+        id_vendedor: { $convert: { input: "$vendedor", to: "string", onError: "", onNull: "" } },
+        vendedor: {
+          $trim: {
+            input: {
+              $concat: [
+                { $ifNull: ["$sellerInfo.nombre", ""] },
+                " ",
+                { $ifNull: ["$sellerInfo.apellido", ""] },
+              ],
+            },
+          },
+        },
+        producto: { $ifNull: ["$productInfo.nombre_producto", ""] },
+        nombre_variante: { $ifNull: ["$nombre_variante", ""] },
+        variantes: { $ifNull: ["$variantes", {}] },
+        variantKey: { $ifNull: ["$variantKey", ""] },
+        cantidad: { $ifNull: ["$cantidad", 0] },
+        precio_unitario: { $ifNull: ["$precio_unitario", 0] },
+        subtotal_bs: {
+          $round: [
+            {
+              $multiply: [
+                { $ifNull: ["$cantidad", 0] },
+                { $ifNull: ["$precio_unitario", 0] },
+              ],
+            },
+            2,
+          ],
+        },
+        utilidad_bs: { $round: [{ $ifNull: ["$utilidad", 0] }, 2] },
+        id_sucursal: {
+          $ifNull: [
+            { $convert: { input: "$sucursal", to: "string", onError: null, onNull: null } },
+            {
+              $ifNull: [
+                {
+                  $convert: {
+                    input: "$pedidoInfo.sucursal",
+                    to: "string",
+                    onError: null,
+                    onNull: null,
+                  },
+                },
+                {
+                  $convert: {
+                    input: "$pedidoInfo.lugar_origen",
+                    to: "string",
+                    onError: "",
+                    onNull: "",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        sucursal: {
+          $ifNull: [
+            "$saleSucursalInfo.nombre",
+            {
+              $ifNull: [
+                "$pedidoSucursalInfo.nombre",
+                { $ifNull: ["$pedidoOrigenInfo.nombre", ""] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $sort: { fecha_pedido: -1, id_venta: 1 } },
+  ]).exec();
+},
+
 async fetchEntregasSimplesPorVendedorYMes(opts: { sellerIds: string[]; months?: number[] }) {
   const sellerIds = (opts.sellerIds || []).filter((id) => Types.ObjectId.isValid(id));
   if (!sellerIds.length) return [];

@@ -119,14 +119,25 @@ const findByIds = async (shippingIds: string[]): Promise<IPedidoDocument[]> => {
 
 const findByDateRange = async (
   from?: Date,
-  to?: Date
+  to?: Date,
+  sucursalIds?: string[]
 ): Promise<IPedidoDocument[]> => {
-  if (!from && !to) return await findAll();
+  const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
+  if (!from && !to && !validSucursalIds.length) return await findAll();
 
   const match: any = {};
-  match.fecha_pedido = {};
-  if (from) match.fecha_pedido.$gte = from;
-  if (to) match.fecha_pedido.$lte = to;
+  if (from || to) {
+    match.fecha_pedido = {};
+    if (from) match.fecha_pedido.$gte = from;
+    if (to) match.fecha_pedido.$lte = to;
+  }
+  if (validSucursalIds.length) {
+    const branchObjectIds = validSucursalIds.map((id) => new Types.ObjectId(id));
+    match.$or = [
+      { sucursal: { $in: branchObjectIds } },
+      { lugar_origen: { $in: branchObjectIds } },
+    ];
+  }
 
   return await PedidoModel.find(match).populate(shippingPopulate);
 };

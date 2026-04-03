@@ -19,6 +19,8 @@ import {
   exportVentasQrXlsx,
   exportClientesStatusXlsx,
   getEntregasSimplesResumen,
+  exportVentasTemporalesPorVendedorXlsx,
+  getVentasTemporalesPorVendedor,
 } from "../controllers/reports.controller";
 
 const reportsRouter = Router();
@@ -43,5 +45,7 @@ reportsRouter.post("/ventas-qr", getVentasQr);
 reportsRouter.get("/ventas-qr/xlsx", exportVentasQrXlsx);
 reportsRouter.get("/clientes-status/xlsx", exportClientesStatusXlsx);
 reportsRouter.get("/entregas-simples", getEntregasSimplesResumen);
+reportsRouter.get("/ventas-temporales-vendedor", getVentasTemporalesPorVendedor);
+reportsRouter.get("/ventas-temporales-vendedor/xlsx", exportVentasTemporalesPorVendedorXlsx);
 
 export default reportsRouter;

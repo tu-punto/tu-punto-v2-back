@@ -12,24 +12,38 @@ const findAll = async (): Promise<IVentaDocument[]> => {
 };
 
 
-const findByPedidoDateRange = async (from?: Date, to?: Date): Promise<IVentaDocument[]> => {
-  // If no range provided, return all
-  if (!from && !to) {
+const findByPedidoDateRange = async (
+  from?: Date,
+  to?: Date,
+  sucursalIds?: string[]
+): Promise<IVentaDocument[]> => {
+  const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
+
+  if (!from && !to && !validSucursalIds.length) {
     return await findAll();
   }
 
-  const match: any = {};
+  const pedidoMatch: any = {};
   if (from || to) {
-    match.fecha_pedido = {};
-    if (from) match.fecha_pedido.$gte = from;
-    if (to) match.fecha_pedido.$lte = to;
+    pedidoMatch.fecha_pedido = {};
+    if (from) pedidoMatch.fecha_pedido.$gte = from;
+    if (to) pedidoMatch.fecha_pedido.$lte = to;
   }
 
-  const pedidos = await PedidoModel.find(match).select('_id').lean().exec();
-  const pedidoIds = pedidos.map((p: any) => p._id);
-  if (pedidoIds.length === 0) return [];
+  const ventaMatch: any = {};
 
-  return await VentaModel.find({ pedido: { $in: pedidoIds } })
+  if (validSucursalIds.length) {
+    ventaMatch.sucursal = { $in: validSucursalIds.map((id) => new Types.ObjectId(id)) };
+  }
+
+  if (from || to) {
+    const pedidos = await PedidoModel.find(pedidoMatch).select('_id').lean().exec();
+    const pedidoIds = pedidos.map((p: any) => p._id);
+    if (pedidoIds.length === 0) return [];
+    ventaMatch.pedido = { $in: pedidoIds };
+  }
+
+  return await VentaModel.find(ventaMatch)
     .populate(['producto', 'pedido', 'vendedor'])
     .lean()
     .exec();

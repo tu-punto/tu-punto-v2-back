@@ -17,14 +17,24 @@ const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
 
 const findByDateRange = async (
   from?: Date,
-  to?: Date
+  to?: Date,
+  sucursalIds?: string[]
 ): Promise<IFlujoFinancieroDocument[]> => {
-  if (!from && !to) return await findAll();
+  if (!from && !to && !sucursalIds?.length) return await findAll();
 
   const match: any = {};
-  match.fecha = {};
-  if (from) match.fecha.$gte = from;
-  if (to) match.fecha.$lte = to;
+  if (from || to) {
+    match.fecha = {};
+    if (from) match.fecha.$gte = from;
+    if (to) match.fecha.$lte = to;
+  }
+  if (sucursalIds?.length) {
+    match.id_sucursal = {
+      $in: sucursalIds
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id)),
+    };
+  }
 
   return await FlujoFinancieroModel.find(match)
     .populate(financeFluxPopulate)

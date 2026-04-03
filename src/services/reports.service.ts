@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import ExcelJS from "exceljs";
 import moment from "moment-timezone";
+import { Types } from "mongoose";
 import { ReportsRepository } from "../repositories/reports.repository";
 import { variantFingerprint, variantLabel, variantsToEntries } from "../utils/variantKey";
 
@@ -36,6 +37,10 @@ type VariantRiskParams = {
   limit?: number;
   minCombinaciones?: number;
   minEspacioTeorico?: number;
+};
+
+type TemporarySellerSalesParams = {
+  sellerId: string;
 };
 
 type ExportComisionesParams = {
@@ -339,6 +344,18 @@ function buildProductoDisplayName(params: {
   }
 
   return `${baseName} - ${variantLabel}`;
+}
+
+function buildVariantDisplayName(params: {
+  producto?: unknown;
+  nombreVariante?: unknown;
+  variantes?: unknown;
+}) {
+  const baseName = String(params.producto || "").trim();
+  const nombreVariante = stripBaseProductPrefix(params.nombreVariante, baseName);
+  const desdeMapa = stripBaseProductPrefix(formatVariante(params.variantes), baseName);
+
+  return nombreVariante || desdeMapa || "Temporal";
 }
 
 function isVentaDirectaLike(params: { estado_pedido?: unknown; observaciones?: unknown }) {
@@ -3219,6 +3236,191 @@ async getEntregasSimplesResumen(params: { sellerIds?: string[]; months?: number[
       entregas_simples: totalesPorMes.reduce((sum, row) => sum + safeNum(row.entregas_simples), 0),
     },
   };
+},
+async getVentasTemporalesPorVendedor(params: TemporarySellerSalesParams) {
+  const sellerId = String(params?.sellerId || "").trim();
+  if (!Types.ObjectId.isValid(sellerId)) {
+    throw new Error("sellerId inválido");
+  }
+
+  const [sellerInfo, rawRows] = await Promise.all([
+    ReportsRepository.fetchSellerDisplayInfo(sellerId),
+    ReportsRepository.fetchVentasTemporalesPorVendedor({ sellerId }),
+  ]);
+
+  if (!sellerInfo) {
+    throw new Error("Vendedor no encontrado");
+  }
+
+  const detalle = (rawRows as Array<Record<string, any>>).map((row) => {
+    const fechaBase = row.fecha_pedido || row.hora_entrega_acordada || row.hora_entrega_real;
+    const fechaMoment = fechaBase ? moment.tz(fechaBase, TZ) : null;
+    const variante = buildVariantDisplayName({
+      producto: row.producto,
+      nombreVariante: row.nombre_variante,
+      variantes: row.variantes,
+    });
+    const cantidad = safeNum(row.cantidad);
+    const precioUnitario = safeNum(row.precio_unitario);
+    const subtotal = safeNum(row.subtotal_bs || cantidad * precioUnitario);
+    const utilidad = safeNum(row.utilidad_bs);
+
+    return {
+      id_venta: String(row.id_venta || ""),
+      id_pedido: String(row.id_pedido || ""),
+      id_producto: String(row.id_producto || ""),
+      id_vendedor: String(row.id_vendedor || sellerInfo.id_vendedor),
+      vendedor: String(row.vendedor || sellerInfo.vendedor),
+      fecha: fechaMoment?.isValid() ? fechaMoment.format("YYYY-MM-DD") : "",
+      hora: fechaMoment?.isValid() ? fechaMoment.format("HH:mm") : "",
+      fecha_pedido: row.fecha_pedido || null,
+      hora_entrega_acordada: row.hora_entrega_acordada || null,
+      hora_entrega_real: row.hora_entrega_real || null,
+      estado_pedido: String(row.estado_pedido || ""),
+      tipo_de_pago: String(row.tipo_de_pago || ""),
+      cliente: String(row.cliente || ""),
+      telefono_cliente: String(row.telefono_cliente || ""),
+      sucursal: String(row.sucursal || ""),
+      id_sucursal: String(row.id_sucursal || ""),
+      lugar_entrega: String(row.lugar_entrega || ""),
+      producto: String(row.producto || row.nombre_variante || "Producto temporal"),
+      variante,
+      producto_variante:
+        variante && variante !== "Temporal"
+          ? `${String(row.producto || row.nombre_variante || "Producto temporal")} - ${variante}`
+          : String(row.producto || row.nombre_variante || "Producto temporal"),
+      cantidad,
+      precio_unitario_bs: +precioUnitario.toFixed(2),
+      subtotal_bs: +subtotal.toFixed(2),
+      utilidad_bs: +utilidad.toFixed(2),
+      observaciones: String(row.observaciones || ""),
+    };
+  });
+
+  const resumenMap = new Map<
+    string,
+    {
+      producto: string;
+      variante: string;
+      producto_variante: string;
+      cantidad_total: number;
+      ventas: number;
+      pedidos: Set<string>;
+      total_vendido_bs: number;
+      utilidad_total_bs: number;
+    }
+  >();
+
+  for (const row of detalle) {
+    const key = `${normalizeText(row.producto)}|||${normalizeText(row.variante)}`;
+    const current = resumenMap.get(key) || {
+      producto: row.producto,
+      variante: row.variante,
+      producto_variante: row.producto_variante,
+      cantidad_total: 0,
+      ventas: 0,
+      pedidos: new Set<string>(),
+      total_vendido_bs: 0,
+      utilidad_total_bs: 0,
+    };
+
+    current.cantidad_total += safeNum(row.cantidad);
+    current.ventas += 1;
+    if (row.id_pedido) current.pedidos.add(row.id_pedido);
+    current.total_vendido_bs += safeNum(row.subtotal_bs);
+    current.utilidad_total_bs += safeNum(row.utilidad_bs);
+    resumenMap.set(key, current);
+  }
+
+  const resumenPorProducto = Array.from(resumenMap.values())
+    .map((row) => ({
+      producto: row.producto,
+      variante: row.variante,
+      producto_variante: row.producto_variante,
+      cantidad_total: row.cantidad_total,
+      ventas: row.ventas,
+      pedidos: row.pedidos.size,
+      total_vendido_bs: +row.total_vendido_bs.toFixed(2),
+      utilidad_total_bs: +row.utilidad_total_bs.toFixed(2),
+    }))
+    .sort((a, b) => b.cantidad_total - a.cantidad_total || b.total_vendido_bs - a.total_vendido_bs);
+
+  return {
+    filtros: { sellerId },
+    seller: sellerInfo,
+    criterio: {
+      incluido: "Solo ventas cuyo producto asociado es temporal (Producto.esTemporal = true).",
+      nota: "Cada fila del detalle representa una venta registrada; se muestran fecha, hora, producto, variante y cantidades.",
+    },
+    detalle,
+    resumenPorProducto,
+    totalGeneral: {
+      ventas: detalle.length,
+      pedidos: new Set(detalle.map((row) => row.id_pedido).filter(Boolean)).size,
+      cantidad_total: detalle.reduce((sum, row) => sum + safeNum(row.cantidad), 0),
+      total_vendido_bs: +detalle.reduce((sum, row) => sum + safeNum(row.subtotal_bs), 0).toFixed(2),
+      utilidad_total_bs: +detalle.reduce((sum, row) => sum + safeNum(row.utilidad_bs), 0).toFixed(2),
+    },
+  };
+},
+async exportVentasTemporalesPorVendedorXlsx(params: TemporarySellerSalesParams) {
+  const data = await this.getVentasTemporalesPorVendedor(params);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "TuPunto Reports";
+  wb.created = new Date();
+
+  const wsResumen = wb.addWorksheet("Resumen");
+  wsResumen.addRow([
+    "Vendedor",
+    "Id Vendedor",
+    "Ventas",
+    "Pedidos",
+    "Cantidad Total",
+    "Total Vendido Bs",
+    "Utilidad Total Bs",
+  ]);
+  wsResumen.getRow(1).font = { bold: true };
+  wsResumen.addRow([
+    data?.seller?.vendedor || "",
+    data?.seller?.id_vendedor || "",
+    data?.totalGeneral?.ventas || 0,
+    data?.totalGeneral?.pedidos || 0,
+    data?.totalGeneral?.cantidad_total || 0,
+    data?.totalGeneral?.total_vendido_bs || 0,
+    data?.totalGeneral?.utilidad_total_bs || 0,
+  ]);
+  wsResumen.addRow([]);
+
+  if (data.resumenPorProducto.length) {
+    const headersResumenProducto = Object.keys(data.resumenPorProducto[0]);
+    wsResumen.addRow(headersResumenProducto);
+    wsResumen.getRow(wsResumen.rowCount).font = { bold: true };
+    data.resumenPorProducto.forEach((row) =>
+      wsResumen.addRow(headersResumenProducto.map((header) => (row as any)[header])),
+    );
+  }
+  wsResumen.columns.forEach((column) => (column.width = 22));
+
+  const wsDetalle = wb.addWorksheet("Detalle");
+  if (data.detalle.length) {
+    const headersDetalle = Object.keys(data.detalle[0]);
+    wsDetalle.addRow(headersDetalle);
+    wsDetalle.getRow(1).font = { bold: true };
+    data.detalle.forEach((row) =>
+      wsDetalle.addRow(headersDetalle.map((header) => (row as any)[header])),
+    );
+    wsDetalle.columns.forEach((column) => (column.width = 22));
+  }
+
+  const safeSellerLabel = normalizeText(data?.seller?.vendedor || data?.seller?.id_vendedor || "vendedor")
+    .replace(/\s+/g, "_")
+    .slice(0, 60) || "vendedor";
+  const filename = `ventas_temporales_${safeSellerLabel}.xlsx`;
+  const outDir = path.join(process.cwd(), "reports");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const filePath = path.join(outDir, filename);
+  await wb.xlsx.writeFile(filePath);
+  return { filePath, filename };
 },
 async exportVentasQrXlsx({ meses, sucursalIds }: VentasQrParams) {
   // OJO: getVentasQr espera (mes, meses, sucursalIds) con Params

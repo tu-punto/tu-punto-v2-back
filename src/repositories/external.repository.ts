@@ -62,14 +62,23 @@ const getExternalSaleByID = async (id: string): Promise<IVentaExternaDocument | 
 
 const getExternalSalesByDateRange = async (
     from?: Date,
-    to?: Date
+    to?: Date,
+    sucursalIds?: string[]
 ): Promise<IVentaExternaDocument[]> => {
-    if (!from && !to) return await getAllExternalSales();
+    const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
+    if (!from && !to && !validSucursalIds.length) return await getAllExternalSales();
 
     const match: any = {};
-    match.fecha_pedido = {};
-    if (from) match.fecha_pedido.$gte = from;
-    if (to) match.fecha_pedido.$lte = to;
+    if (from || to) {
+        match.fecha_pedido = {};
+        if (from) match.fecha_pedido.$gte = from;
+        if (to) match.fecha_pedido.$lte = to;
+    }
+    if (validSucursalIds.length) {
+        match.sucursal = {
+            $in: validSucursalIds.map((id) => new Types.ObjectId(id))
+        };
+    }
 
     return await VentaExternaModel.find(match).populate('sucursal');
 }

@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
 import { FinanceFluxService } from "../services/financeFlux.service";
 
+const parseStringList = (value: unknown) => {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return undefined;
+};
+
 export const getFinanceFluxes = async (_: Request, res: Response) => {
   try {
     const fluxRecords = await FinanceFluxService.getAllFinanceFluxes();
@@ -87,10 +93,12 @@ export const getStatsController = async (_: Request, res: Response) => {
 export const getFinancialSummaryController = async (req: Request, res: Response) => {
   try {
     const { range, from, to, mode } = req.query as any;
+    const sucursalIds = parseStringList(req.query?.sucursalIds);
     if (mode === 'ranges' || mode === 'all') {
       const summaries = await FinanceFluxService.getFinancialSummaryRanges({
         from: typeof from === 'string' ? from : undefined,
         to: typeof to === 'string' ? to : undefined,
+        sucursalIds,
       });
       res.json(summaries);
       return;
@@ -100,6 +108,7 @@ export const getFinancialSummaryController = async (req: Request, res: Response)
       range: typeof range === 'string' ? range : undefined,
       from: typeof from === 'string' ? from : undefined,
       to: typeof to === 'string' ? to : undefined,
+      sucursalIds,
     });
     res.json(summary);
   } catch (err) {
@@ -110,10 +119,12 @@ export const getFinancialSummaryController = async (req: Request, res: Response)
 export const getCommissionController = async (req: Request, res: Response) => {
   try {
     const { range, from, to } = req.query as any;
+    const sucursalIds = parseStringList(req.query?.sucursalIds);
     const result = await FinanceFluxService.getCommissionTotal({
       range: typeof range === 'string' ? range : undefined,
       from: typeof from === 'string' ? from : undefined,
       to: typeof to === 'string' ? to : undefined,
+      sucursalIds,
     });
     res.json(result);
   } catch (err) {
@@ -124,10 +135,12 @@ export const getCommissionController = async (req: Request, res: Response) => {
 export const getMerchandiseSoldController = async (req: Request, res: Response) => {
   try {
     const { range, from, to } = req.query as any;
+    const sucursalIds = parseStringList(req.query?.sucursalIds);
     const result = await FinanceFluxService.getMerchandiseSoldTotal({
       range: typeof range === 'string' ? range : undefined,
       from: typeof from === 'string' ? from : undefined,
       to: typeof to === 'string' ? to : undefined,
+      sucursalIds,
     });
     res.json(result);
   } catch (err) {

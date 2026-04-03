@@ -30,8 +30,8 @@ const getShippingsList = async (params: {
   return await ShippingRepository.findList(params);
 };
 
-const getShippingsByDateRange = async (from?: Date, to?: Date) => {
-  return await ShippingRepository.findByDateRange(from, to);
+const getShippingsByDateRange = async (from?: Date, to?: Date, sucursalIds?: string[]) => {
+  return await ShippingRepository.findByDateRange(from, to, sucursalIds);
 };
 
 const getShippingByIds = async (shippingIds: string[]) => {

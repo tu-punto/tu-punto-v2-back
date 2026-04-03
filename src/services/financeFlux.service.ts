@@ -117,7 +117,48 @@ type CommissionRange = {
   range?: string;
   from?: string;
   to?: string;
+  sucursalIds?: string[];
 };
+
+const normalizeSucursalIds = (sucursalIds?: string[]) =>
+  Array.from(
+    new Set(
+      (sucursalIds || [])
+        .map((id) => String(id || "").trim())
+        .filter((id) => Types.ObjectId.isValid(id))
+    )
+  );
+
+const calculateSaleCommission = async (sale: any) => {
+  const storedCommission = Number(sale?.comision);
+  if (Number.isFinite(storedCommission) && storedCommission > 0) {
+    return storedCommission;
+  }
+
+  const vendedor = sale?.vendedor || (sale?.id_vendedor ? await VendedorModel.findById(sale.id_vendedor) : null);
+  const precioUnitario = Number(sale?.precio_unitario || 0);
+  const cantidad = Number(sale?.cantidad || 1);
+  const totalVenta = precioUnitario * cantidad;
+
+  let comisionVenta = 0;
+  if (vendedor) {
+    if (typeof vendedor.comision_porcentual === "number" && vendedor.comision_porcentual > 0) {
+      comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
+    }
+    if (typeof vendedor.comision_fija === "number" && vendedor.comision_fija > 0) {
+      comisionVenta += vendedor.comision_fija;
+    }
+  }
+
+  return comisionVenta;
+};
+
+const calculateSoldMerchandiseValue = (sales: any[]) =>
+  (sales || []).reduce((total, sale) => {
+    const cantidad = Number(sale?.cantidad || 0);
+    const precio = Number(sale?.precio_unitario || 0);
+    return total + cantidad * precio;
+  }, 0);
 
 const parseRangeToDates = ({ range, from, to }: CommissionRange): { fromDate?: Date; toDate?: Date } => {
   const now = new Date();
@@ -158,27 +199,15 @@ const parseRangeToDates = ({ range, from, to }: CommissionRange): { fromDate?: D
 
 const getCommissionTotal = async (opts: CommissionRange) => {
   const { fromDate, toDate } = parseRangeToDates(opts);
-  const sales = await SaleRepository.findByPedidoDateRange(fromDate, toDate);
+  const sales = await SaleRepository.findByPedidoDateRange(
+    fromDate,
+    toDate,
+    normalizeSucursalIds(opts.sucursalIds)
+  );
 
   let total = 0;
   for (const v of sales) {
-    let comisionVenta = (v as any).comision as number | undefined;
-    if (!comisionVenta) {
-      const vendedor = (v as any).vendedor || (await VendedorModel.findById((v as any).id_vendedor));
-      const precioUnitario = (v as any).precio_unitario || 0;
-      const cantidad = (v as any).cantidad || 1;
-      const totalVenta = precioUnitario * cantidad;
-      comisionVenta = 0;
-      if (vendedor) {
-        if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
-          comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
-        }
-        if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
-          comisionVenta += vendedor.comision_fija;
-        }
-      }
-    }
-    total += comisionVenta || 0;
+    total += await calculateSaleCommission(v);
   }
 
   return { comision: total };
@@ -186,29 +215,26 @@ const getCommissionTotal = async (opts: CommissionRange) => {
 
 const getMerchandiseSoldTotal = async (opts: CommissionRange) => {
   const { fromDate, toDate } = parseRangeToDates(opts);
-  const sales = await SaleRepository.findByPedidoDateRange(fromDate, toDate);
-
-  let total = 0;
-  for (const v of sales) {
-    const cantidad = (v as any).cantidad || 0;
-    const precio = (v as any).precio_unitario || 0;
-    total += cantidad * precio;
-  }
-
-  return { mercaderiaVendida: total };
+  const sales = await SaleRepository.findByPedidoDateRange(
+    fromDate,
+    toDate,
+    normalizeSucursalIds(opts.sucursalIds)
+  );
+  return { mercaderiaVendida: calculateSoldMerchandiseValue(sales) };
 };
 
-const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date) => {
+const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucursalIds?: string[]) => {
+  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
   const [
     fluxes,
     shippings,
     sales,
     externalSales
   ] = await Promise.all([
-    FinanceFluxRepository.findByDateRange(fromDate, toDate),
-    ShippingService.getShippingsByDateRange(fromDate, toDate),
-    SaleRepository.findByPedidoDateRange(fromDate, toDate),
-    ExternalSaleRepository.getExternalSalesByDateRange(fromDate, toDate)
+    FinanceFluxRepository.findByDateRange(fromDate, toDate, normalizedSucursalIds),
+    ShippingService.getShippingsByDateRange(fromDate, toDate, normalizedSucursalIds),
+    SaleRepository.findByPedidoDateRange(fromDate, toDate, normalizedSucursalIds),
+    ExternalSaleRepository.getExternalSalesByDateRange(fromDate, toDate, normalizedSucursalIds)
   ]);
 
   let ingresosFluxes = 0;
@@ -232,30 +258,15 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date) => {
   const balanceDelivery = montoCobradoDelivery - costoDelivery;
 
   for (const v of sales) {
-    let comisionVenta = v.comision;
-    if (!comisionVenta) {
-      // Calcula la comisión si no está guardada
-      const vendedor = v.vendedor || (await VendedorModel.findById(v.id_vendedor));
-      const precioUnitario = v.precio_unitario || 0;
-      const cantidad = v.cantidad || 1;
-      const totalVenta = precioUnitario * cantidad;
-      comisionVenta = 0;
-      if (vendedor) {
-        if (typeof vendedor.comision_porcentual === 'number' && vendedor.comision_porcentual > 0) {
-          comisionVenta += totalVenta * (vendedor.comision_porcentual / 100);
-        }
-        if (typeof vendedor.comision_fija === 'number' && vendedor.comision_fija > 0) {
-          comisionVenta += vendedor.comision_fija;
-        }
-      }
-    }
-    comision += comisionVenta || 0;
+    comision += await calculateSaleCommission(v);
   }
 
   // Suma ingresos por entregas externas
   for (const e of externalSales) {
     ingresosEntregasExternas += e.precio_total || 0;
   }
+
+  const mercaderiaVendida = calculateSoldMerchandiseValue(sales);
 
   // Ingresos = Flujos INGRESO + Comisiones + Ingresos por entregas externas
   const ingresos = ingresosFluxes + comision + ingresosEntregasExternas;
@@ -270,6 +281,11 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date) => {
     ingresos,
     gastos,
     inversiones,
+    comision,
+    mercaderiaVendida,
+    deliveryIncome: montoCobradoDelivery,
+    deliveryExpenses: costoDelivery,
+    externalDeliveryIncome: ingresosEntregasExternas,
     balanceDelivery,
     utilidad,
     caja
@@ -278,7 +294,7 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date) => {
 
 const getFinancialSummary = async (opts: CommissionRange = {}) => {
   const { fromDate, toDate } = parseRangeToDates(opts);
-  return await getFinancialSummaryForDates(fromDate, toDate);
+  return await getFinancialSummaryForDates(fromDate, toDate, opts.sucursalIds);
 };
 
 const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
@@ -296,13 +312,13 @@ const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
     last365Summary,
     customSummary
   ] = await Promise.all([
-    getFinancialSummaryForDates(),
-    getFinancialSummaryForDates(last7.fromDate, last7.toDate),
-    getFinancialSummaryForDates(last30.fromDate, last30.toDate),
-    getFinancialSummaryForDates(last90.fromDate, last90.toDate),
-    getFinancialSummaryForDates(last365.fromDate, last365.toDate),
+    getFinancialSummaryForDates(undefined, undefined, opts.sucursalIds),
+    getFinancialSummaryForDates(last7.fromDate, last7.toDate, opts.sucursalIds),
+    getFinancialSummaryForDates(last30.fromDate, last30.toDate, opts.sucursalIds),
+    getFinancialSummaryForDates(last90.fromDate, last90.toDate, opts.sucursalIds),
+    getFinancialSummaryForDates(last365.fromDate, last365.toDate, opts.sucursalIds),
     custom.fromDate || custom.toDate
-      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate)
+      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate, opts.sucursalIds)
       : Promise.resolve(null)
   ]);
 

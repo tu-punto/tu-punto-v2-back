@@ -399,5 +399,53 @@ export const getEntregasSimplesResumen = async (req: Request, res: Response) => 
   }
 };
 
+export const getVentasTemporalesPorVendedor = async (req: Request, res: Response) => {
+  try {
+    const sellerId = typeof req.query?.sellerId === "string" ? String(req.query.sellerId).trim() : "";
 
+    if (!sellerId) {
+      return res.status(400).json({ ok: false, msg: "sellerId es requerido" });
+    }
+
+    const data = await ReportsService.getVentasTemporalesPorVendedor({ sellerId });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getVentasTemporalesPorVendedor error:", err);
+
+    if (err?.message === "sellerId inválido") {
+      return res.status(400).json({ ok: false, msg: err.message });
+    }
+
+    if (err?.message === "Vendedor no encontrado") {
+      return res.status(404).json({ ok: false, msg: err.message });
+    }
+
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+
+export const exportVentasTemporalesPorVendedorXlsx = async (req: Request, res: Response) => {
+  try {
+    const sellerId = typeof req.query?.sellerId === "string" ? String(req.query.sellerId).trim() : "";
+
+    if (!sellerId) {
+      return res.status(400).json({ ok: false, msg: "sellerId es requerido" });
+    }
+
+    const { filePath, filename } = await ReportsService.exportVentasTemporalesPorVendedorXlsx({ sellerId });
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportVentasTemporalesPorVendedorXlsx error:", err);
+
+    if (err?.message === "sellerId inválido" || err?.message === "sellerId invÃ¡lido") {
+      return res.status(400).json({ ok: false, msg: err.message });
+    }
+
+    if (err?.message === "Vendedor no encontrado") {
+      return res.status(404).json({ ok: false, msg: err.message });
+    }
+
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
 
