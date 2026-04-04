@@ -3,6 +3,11 @@ import { verifyToken } from "../helpers/jwt";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { ALL_APP_ROLES } from "../constants/roles";
+import {
+  resolveSellerByUserId,
+  sellerHasSystemAccess,
+  SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
+} from "../helpers/sellerAccess";
 
 type AuthPayload = {
   id?: string;
@@ -11,6 +16,8 @@ type AuthPayload = {
   exp?: number;
   iat?: number;
 };
+
+const isSecure = process.env.NODE_ENV === "production";
 
 const getTokenFromRequest = (req: Request): string | null => {
   const cookieToken = req.cookies?.token;
@@ -26,24 +33,51 @@ const getTokenFromRequest = (req: Request): string | null => {
   return null;
 };
 
-export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  const token = getTokenFromRequest(req);
-  if (!token) {
-    return res.status(401).json({ success: false, msg: "No autenticado" });
+export const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = getTokenFromRequest(req);
+    if (!token) {
+      return res.status(401).json({ success: false, msg: "No autenticado" });
+    }
+
+    const decoded = verifyToken(token) as AuthPayload | null;
+    if (!decoded?.id || !decoded?.role) {
+      return res.status(401).json({ success: false, msg: "Token invalido o expirado" });
+    }
+
+    const role = String(decoded.role).toLowerCase();
+    const authData: Record<string, unknown> = {
+      id: decoded.id,
+      role,
+      sucursalId: decoded.sucursalId,
+    };
+
+    if (role === "seller") {
+      const seller = await resolveSellerByUserId(decoded.id);
+      if (seller?._id) {
+        authData.sellerId = String(seller._id);
+      }
+
+      if (seller && !sellerHasSystemAccess(seller.fecha_vigencia)) {
+        res.clearCookie("token", {
+          httpOnly: true,
+          secure: isSecure,
+          sameSite: isSecure ? "strict" : "lax",
+          path: "/",
+        });
+        return res.status(403).json({
+          success: false,
+          msg: SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
+        });
+      }
+    }
+
+    res.locals.auth = authData;
+    next();
+  } catch (error) {
+    console.error("Error validando autenticacion:", error);
+    return res.status(500).json({ success: false, msg: "Error validando la sesion" });
   }
-
-  const decoded = verifyToken(token) as AuthPayload | null;
-  if (!decoded?.id || !decoded?.role) {
-    return res.status(401).json({ success: false, msg: "Token inválido o expirado" });
-  }
-
-  res.locals.auth = {
-    id: decoded.id,
-    role: String(decoded.role).toLowerCase(),
-    sucursalId: decoded.sucursalId,
-  };
-
-  next();
 };
 
 export const requireRole = (...allowedRoles: string[]) => {

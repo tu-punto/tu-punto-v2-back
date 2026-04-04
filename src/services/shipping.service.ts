@@ -41,16 +41,17 @@ const normalizePaymentType = (value: unknown): string | undefined => {
 
 const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
   const normalizedType = normalizePaymentType(payload.tipo_de_pago ?? currentShipping?.tipo_de_pago);
-  const paidStatus = payload.esta_pagado ?? currentShipping?.esta_pagado;
   const nextStatus = payload.estado_pedido ?? currentShipping?.estado_pedido;
 
   if (normalizedType) {
     payload.tipo_de_pago = normalizedType;
   }
 
-  if (nextStatus === "Entregado" && paidStatus === "si") {
+  if (nextStatus === "Entregado") {
+    payload.esta_pagado = "si";
     payload.tipo_de_pago = PAYMENT_TYPE_LABEL_BY_CODE["3"];
     payload.pagado_al_vendedor = true;
+    payload.adelanto_cliente = 0;
     payload.subtotal_qr = 0;
     payload.subtotal_efectivo = 0;
     return;

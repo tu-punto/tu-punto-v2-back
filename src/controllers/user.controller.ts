@@ -8,11 +8,24 @@ import { generateToken } from "../helpers/jwt";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
 import { USER_ROLES } from "../constants/roles";
 import { canAccessSellerProductInfo } from "../utils";
+import {
+  resolveSellerByUserData,
+  sellerHasSystemAccess,
+  SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
+} from "../helpers/sellerAccess";
 
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
 const isSecure = process.env.NODE_ENV === "production";
+
+const clearAuthCookie = (res: Response) =>
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: isSecure ? "strict" : "lax",
+    path: "/",
+  });
 
 type SellerProductInfoAccessShape = {
   pago_sucursales?: {
@@ -65,26 +78,33 @@ export const loginUserController = async (req: Request, res: Response) => {
     const user = await UserService.findByEmailService(email);
 
     if (!user) {
-      return res.status(401).json({ error: "User with such email does not exist" });
+      return res.status(401).json({ success: false, msg: "Credenciales invalidas" });
     }
 
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: "Incorrect password" });
+      return res.status(401).json({ success: false, msg: "Credenciales invalidas" });
     }
-
-    const token = generateToken(user._id.toString(), user.role, sucursalId);
 
     let id_vendedor = null;
     let nombre_vendedor = null;
 
     if (user.role === "seller") {
-      const vendedor = await VendedorModel.findOne({ mail: user.email });
+      const vendedor = await resolveSellerByUserData(user);
       if (vendedor) {
+        if (!sellerHasSystemAccess(vendedor.fecha_vigencia)) {
+          clearAuthCookie(res);
+          return res.status(403).json({
+            success: false,
+            msg: SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
+          });
+        }
         id_vendedor = vendedor._id;
         nombre_vendedor = `${vendedor.nombre} ${vendedor.apellido}`;
       }
     }
+
+    const token = generateToken(user._id.toString(), user.role, sucursalId);
 
     res
       .cookie("token", token, {
@@ -95,6 +115,7 @@ export const loginUserController = async (req: Request, res: Response) => {
         path: "/",
       })
       .json({
+        success: true,
         ...user.toObject?.() || user,
         password: "",
         id_vendedor,

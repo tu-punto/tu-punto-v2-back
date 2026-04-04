@@ -13,6 +13,7 @@ import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 import { FinanceFluxService } from "./financeFlux.service";
 import { IFinanceFlux } from "../entities/IFinanceFlux";
 import { PaymentProofService } from "./paymentProof.service";
+import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -74,27 +75,6 @@ const getAllSellers = async (params?: SellerListFilters) => {
 
     return true;
   });
-};
-
-const getSellerLifecycleStatus = (fechaVigencia: unknown): "activo" | "debe_renovar" | "ya_no_es_cliente" => {
-  if (!fechaVigencia) return "ya_no_es_cliente";
-  if (
-    typeof fechaVigencia !== "string" &&
-    typeof fechaVigencia !== "number" &&
-    !(fechaVigencia instanceof Date) &&
-    !dayjs.isDayjs(fechaVigencia)
-  ) {
-    return "ya_no_es_cliente";
-  }
-
-  const today = dayjs().startOf("day");
-  const vigencia = dayjs(fechaVigencia).endOf("day");
-  if (!vigencia.isValid()) return "ya_no_es_cliente";
-
-  const diasVencido = today.diff(vigencia, "day");
-  if (diasVencido <= 0) return "activo";
-  if (diasVencido <= 20) return "debe_renovar";
-  return "ya_no_es_cliente";
 };
 
 const getAllSellersBasic = async (params?: {
