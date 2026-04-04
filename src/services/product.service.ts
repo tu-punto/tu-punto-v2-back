@@ -218,23 +218,35 @@ const updateStockInSucursal = async (
 };
 
 const updatePrice = async (
-  updates: {
+  updates:
+  | {
     productId: string;
-    sucursalId: string;
-    variantes: Record<string, string>;
+    variantKey?: string;
+    variantes?: Record<string, string>;
+    precio: number;
+  }
+  | {
+    productId: string;
+    variantKey?: string;
+    variantes?: Record<string, string>;
     precio: number;
   }[]
 ) => {
+  const normalizedUpdates = Array.isArray(updates) ? updates : [updates];
   const result = [];
-  for (const u of updates) {
+
+  for (const u of normalizedUpdates) {
     const updated = await ProductRepository.updatePriceInSucursal(
       u.productId,
-      u.sucursalId,
-      u.variantes,
-      u.precio
+      {
+        variantKey: u.variantKey,
+        variantes: u.variantes,
+        precio: u.precio
+      }
     );
     result.push(updated);
   }
+
   return result;
 };
 

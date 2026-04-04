@@ -91,53 +91,72 @@ const updateStockInSucursal = async (
 
 const updatePriceInSucursal = async (
   productId: string,
-  sucursalId: string,
-  variante: Record<string, string>,
-  nuevoPrecio: number
-): Promise<IProductoDocument | null> => {
+  params: {
+    variantKey?: string;
+    variantes?: Record<string, string>;
+    precio: number;
+  }
+): Promise<{ product: IProductoDocument; updatedBranches: number }> => {
   const producto = await ProductoModel.findById(productId);
   if (!producto) throw new Error("Producto no encontrado");
 
-  const sucursal = producto.sucursales.find(s => s.id_sucursal.equals(sucursalId));
-  if (!sucursal) throw new Error("Sucursal no encontrada");
+  const normalizedInputVariants = Object.fromEntries(
+    Object.entries(params.variantes || {}).map(([key, value]) => [
+      String(key).trim(),
+      String(value ?? "").trim()
+    ])
+  );
 
-  console.log("🔍 Buscando combinación con variantes:", variante);
-  console.log("📦 Combinaciones disponibles:");
-  sucursal.combinaciones.forEach((c, i) => {
-    console.log(`🧪 Combinación #${i + 1}:`, c.variantes);
-  });
-
-  let combinacion = sucursal.combinaciones.find(c => {
+  const matchesVariant = (candidate: Record<string, string> | Map<string, string>) => {
     const variantesPlanas = Object.fromEntries(
-      c.variantes instanceof Map ? c.variantes : Object.entries(c.variantes || {})
+      candidate instanceof Map ? candidate : Object.entries(candidate || {})
     );
     const combKeys = Object.keys(variantesPlanas);
-    const inputKeys = Object.keys(variante);
+    const inputKeys = Object.keys(normalizedInputVariants);
 
     if (combKeys.length !== inputKeys.length) return false;
 
     return inputKeys.every(key =>
-      (variantesPlanas[key] || "").toLowerCase() === (variante[key] || "").toLowerCase()
+      String(variantesPlanas[key] || "").trim().toLowerCase() ===
+      String(normalizedInputVariants[key] || "").trim().toLowerCase()
     );
-  });
+  };
 
-  if (!combinacion) {
-    // Si no existe, la creamos con precio y stock inicial 0
-    combinacion = {
-      variantes: variante,
-      variantKey: createVariantKey(productId, variante),
-      precio: nuevoPrecio,
-      stock: 0
-    };
-    sucursal.combinaciones.push(combinacion);
-    console.log("🆕 Combinación nueva creada:", combinacion);
-  } else {
-    // Si existe, simplemente actualizamos el precio
-    combinacion.precio = nuevoPrecio;
-    console.log("✅ Precio actualizado en combinación existente.");
+  let updatedBranches = 0;
+
+  for (const sucursal of producto.sucursales || []) {
+    const combinacion = sucursal.combinaciones.find((item) => {
+      if (params.variantKey && item.variantKey) {
+        return item.variantKey === params.variantKey;
+      }
+
+      if (params.variantKey && !item.variantKey) {
+        return createVariantKey(productId, item.variantes) === params.variantKey;
+      }
+
+      if (!Object.keys(normalizedInputVariants).length) {
+        return false;
+      }
+
+      return matchesVariant(item.variantes);
+    });
+
+    if (!combinacion) continue;
+
+    combinacion.precio = params.precio;
+    updatedBranches += 1;
   }
 
-  return await producto.save();
+  if (!updatedBranches) {
+    throw new Error("No se encontró la variante para actualizar el precio");
+  }
+
+  producto.markModified("sucursales");
+  const savedProduct = await producto.save();
+  return {
+    product: savedProduct,
+    updatedBranches
+  };
 };
 
 

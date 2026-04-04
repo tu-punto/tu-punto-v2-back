@@ -5,6 +5,7 @@ export interface IPedido {
 
   cliente: string;
   telefono_cliente: string;
+  carnet_cliente?: string;
   tipo_de_pago: string;
 
   fecha_pedido: Date;

@@ -30,16 +30,15 @@ const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
   return await CierreCajaModel.findByIdAndUpdate(id, updates, { new: true });
 };
 
-const findLatestBySucursalWithinRange = async (
+const findLatestBySucursalBefore = async (
   sucursalId: string,
-  from: Date,
-  to: Date
+  before: Date
 ): Promise<ICierreCaja | null> => {
   if (!Types.ObjectId.isValid(sucursalId)) return null;
 
   return await CierreCajaModel.findOne({
     id_sucursal: new Types.ObjectId(sucursalId),
-    created_at: { $gte: from, $lte: to },
+    created_at: { $lt: before },
   })
     .sort({ created_at: -1 })
     .lean()
@@ -51,5 +50,5 @@ export const BoxCloseRepository = {
   registerBoxClose,
   getBoxCloseById,
   updateBoxClose,
-  findLatestBySucursalWithinRange,
+  findLatestBySucursalBefore,
 };

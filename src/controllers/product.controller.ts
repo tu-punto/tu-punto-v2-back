@@ -633,7 +633,8 @@ export const getAllStockByProductId = async (req: Request, res: Response) => {
 
 export const updatePrice = async (req: Request, res: Response) => {
   try {
-    const updated = await ProductService.updatePrice(req.body.priceUpdates);
+    const payload = req.body?.priceUpdates ?? req.body;
+    const updated = await ProductService.updatePrice(payload);
     res.json({ success: true, updated });
   } catch (error) {
     console.error(error);

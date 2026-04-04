@@ -10,6 +10,11 @@ const PedidoSchema = new Schema({
     type: String,
     required: false
   },
+  carnet_cliente: {
+    type: String,
+    required: false,
+    default: ""
+  },
   tipo_de_pago: {
     type: String,
     required: false

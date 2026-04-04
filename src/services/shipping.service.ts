@@ -17,6 +17,52 @@ const getAllShippings = async () => {
   return await ShippingRepository.findAll();
 };
 
+const PAYMENT_TYPE_LABEL_BY_CODE: Record<string, string> = {
+  "1": "Transferencia o QR",
+  "2": "Efectivo",
+  "3": "Pagado al dueño",
+  "4": "Efectivo + QR"
+};
+
+const normalizePaymentType = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (PAYMENT_TYPE_LABEL_BY_CODE[trimmed]) return PAYMENT_TYPE_LABEL_BY_CODE[trimmed];
+
+  const normalized = trimmed.toLowerCase();
+  const existingLabel = Object.values(PAYMENT_TYPE_LABEL_BY_CODE).find(
+    (label) => label.toLowerCase() === normalized
+  );
+
+  return existingLabel || trimmed;
+};
+
+const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
+  const normalizedType = normalizePaymentType(payload.tipo_de_pago ?? currentShipping?.tipo_de_pago);
+  const paidStatus = payload.esta_pagado ?? currentShipping?.esta_pagado;
+  const nextStatus = payload.estado_pedido ?? currentShipping?.estado_pedido;
+
+  if (normalizedType) {
+    payload.tipo_de_pago = normalizedType;
+  }
+
+  if (nextStatus === "Entregado" && paidStatus === "si") {
+    payload.tipo_de_pago = PAYMENT_TYPE_LABEL_BY_CODE["3"];
+    payload.pagado_al_vendedor = true;
+    payload.subtotal_qr = 0;
+    payload.subtotal_efectivo = 0;
+    return;
+  }
+
+  if ((payload.tipo_de_pago || normalizedType) === PAYMENT_TYPE_LABEL_BY_CODE["3"]) {
+    payload.pagado_al_vendedor = true;
+    payload.subtotal_qr = 0;
+    payload.subtotal_efectivo = 0;
+  }
+};
+
 const getShippingsList = async (params: {
   page?: number;
   limit?: number;
@@ -42,6 +88,8 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
+  normalizeOrderPaymentData(shipping);
+
   if (shipping.fecha_pedido) {
     shipping.fecha_pedido = moment.tz(shipping.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
@@ -213,6 +261,8 @@ const updateShipping = async (newData: any, shippingId: string) => {
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
 
+  normalizeOrderPaymentData(newData, shipping);
+
   if ('fecha_pedido' in newData) {
     delete newData.fecha_pedido;
   }
@@ -376,8 +426,13 @@ const getDailySalesHistory = async (
 ) => {
   const nowLaPaz = moment.tz("America/La_Paz");
   const baseMoment = date
-    ? moment.tz(date, "America/La_Paz")
+    ? moment.tz(date, ["YYYY-MM-DD", moment.ISO_8601], "America/La_Paz")
     : nowLaPaz.clone();
+
+  if (!baseMoment.isValid()) {
+    throw new Error("Invalid date received for sales history");
+  }
+
   const startOfDay = baseMoment.clone().startOf("day").toDate();
   const endOfSelectedDay = baseMoment.clone().endOf("day");
   const isToday = baseMoment.isSame(nowLaPaz, "day");
@@ -402,19 +457,15 @@ const getDailySalesHistory = async (
   };
 
   if (fromLastClose) {
-    let periodStart = startOfDay;
-
-    const lastClose = await BoxCloseRepository.findLatestBySucursalWithinRange(
+    const lastClose = await BoxCloseRepository.findLatestBySucursalBefore(
       sucursalId,
-      startOfDay,
       periodEnd
     );
 
-    if (lastClose?.created_at) {
-      periodStart = new Date(lastClose.created_at);
-    }
+    const periodStart = lastClose?.created_at
+      ? new Date(lastClose.created_at)
+      : startOfDay;
 
-    delete filter.estado_pedido;
     filter.$and = [
       {
         $or: [

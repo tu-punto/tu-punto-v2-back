@@ -38,6 +38,8 @@ type ShippingListParams = {
   client?: string;
 };
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const findList = async (params: ShippingListParams) => {
   const safePage = Math.max(1, Number(params.page) || 1);
   const safeLimit = Math.min(200, Math.max(1, Number(params.limit) || 50));
@@ -60,7 +62,21 @@ const findList = async (params: ShippingListParams) => {
   }
 
   if (params.client) {
-    filter.cliente = { $regex: params.client, $options: "i" };
+    const searchRegex = new RegExp(escapeRegex(params.client), "i");
+    const clientMatch = {
+      $or: [
+        { cliente: searchRegex },
+        { telefono_cliente: searchRegex },
+        { carnet_cliente: searchRegex }
+      ]
+    };
+
+    if (filter.$or) {
+      filter.$and = [...(filter.$and || []), { $or: filter.$or }, clientMatch];
+      delete filter.$or;
+    } else {
+      filter.$and = [...(filter.$and || []), clientMatch];
+    }
   }
 
   if (params.sellerId && Types.ObjectId.isValid(params.sellerId)) {
@@ -80,10 +96,10 @@ const findList = async (params: ShippingListParams) => {
     };
 
     if (filter.$or) {
-      filter.$and = [{ $or: filter.$or }, sellerMatch];
+      filter.$and = [...(filter.$and || []), { $or: filter.$or }, sellerMatch];
       delete filter.$or;
     } else {
-      Object.assign(filter, sellerMatch);
+      filter.$and = [...(filter.$and || []), sellerMatch];
     }
   }
 
