@@ -18,6 +18,7 @@ import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";
 import externalSaleRouter from "./routes/external.routes";
 import financeFluxCategoryRouter from "./routes/financeFluxCategory.routes";
+import recurringExpenseRouter from "./routes/recurringExpense.routes";
 import qr from "./routes/qr.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
@@ -37,6 +38,7 @@ router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller"),
 router.use("/sucursal", sucursalRouter);
 router.use("/financeFlux", requireAuth, requireRole("admin"), financeFluxRouter);
 router.use("/financeFlux/category", requireAuth, requireRole("admin"), financeFluxCategoryRouter);
+router.use("/recurringExpense", requireAuth, requireRole("admin"), recurringExpenseRouter);
 router.use("/worker", requireAuth, requireRole("admin"), workerRouter);
 router.use("/pdf", requireAuth, requireRole("admin"), pdfRouter);
 router.use("/paymentProof", requireAuth, requireRole("admin", "seller"), paymentProofRouter);

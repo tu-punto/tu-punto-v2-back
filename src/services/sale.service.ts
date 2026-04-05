@@ -309,6 +309,8 @@ const getProductsBySellerId = async (sellerId: string) => {
 
     const base = {
       nombre_variante: sale.nombre_variante,
+      variantes: sale.variantes ?? null,
+      variantKey: sale.variantKey || "",
       precio_unitario: sale.precio_unitario,
       cantidad: sale.cantidad,
       utilidad: sale.utilidad,
