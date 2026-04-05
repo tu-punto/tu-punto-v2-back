@@ -33,6 +33,12 @@ productRouter.get(
   requireRole("admin"),
   ProductController.getAdminSellerProductInfoList
 );
+productRouter.get(
+  "/superadmin/variant-inventory",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.getSuperadminVariantInventoryList
+);
 productRouter.get("/features/:id", ProductController.getFeatures);
 productRouter.get("/category/:id", ProductController.getProductCategory);
 productRouter.get("/seller/:id", requireSellerOwnership("id"), ProductController.getAllProductsEntryAmountBySellerId);
@@ -72,11 +78,29 @@ productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF
 
   //PATCH
 productRouter.patch(
+  "/superadmin/variant-stock",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.updateVariantStockByBranchForSuperadmin
+);
+productRouter.patch(
+  "/superadmin/variant-rename",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.renameVariantForSuperadmin
+);
+productRouter.patch(
   "/:productId/sucursal/:sucursalId/variant/:variantKey/extras",
   requireAuth,
   requireRole("seller"),
   uploadVariantImages.array("imagenes", 4),
   ProductController.updateVariantExtrasBySeller
+);
+productRouter.delete(
+  "/superadmin/variant",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.deleteVariantForSuperadmin
 );
 
 export default productRouter;

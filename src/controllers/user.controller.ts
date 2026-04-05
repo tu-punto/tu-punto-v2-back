@@ -6,7 +6,12 @@ import { comparePassword, hashPassword } from "../helpers/auth";
 import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
-import { USER_ROLES } from "../constants/roles";
+import {
+  ASSIGNABLE_USER_ROLES,
+  getPublicUserRole,
+  isSuperadminRole,
+  normalizeUserRole,
+} from "../constants/roles";
 import { canAccessSellerProductInfo } from "../utils";
 import {
   resolveSellerByUserData,
@@ -38,12 +43,25 @@ type SellerProductInfoAccessShape = {
   comision_porcentual?: number;
   comision_fija?: number;
 };
+
+const serializeUserForClient = (user: any) => {
+  const userObj = user?.toObject?.() || { ...(user || {}) };
+  delete userObj.password;
+
+  const actualRole = normalizeUserRole(userObj.role);
+
+  return {
+    ...userObj,
+    role: getPublicUserRole(actualRole),
+    is_superadmin: actualRole === "superadmin",
+  };
+};
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   console.log("User:",user)
   try {
     const normalizedRole = String(user?.role || "").toLowerCase();
-    if (!USER_ROLES.includes(normalizedRole as any)) {
+    if (!ASSIGNABLE_USER_ROLES.includes(normalizedRole as any)) {
       return res.status(400).json({ error: "Rol inválido" });
     }
 
@@ -62,7 +80,7 @@ export const registerUserController = async (req: Request, res: Response) => {
     });
     res.json({
       status: true,
-      user: { ...newUser, password: "" },
+      user: serializeUserForClient(newUser),
     });
     console.log("Usuario registrado");
   } catch (error) {
@@ -89,7 +107,9 @@ export const loginUserController = async (req: Request, res: Response) => {
     let id_vendedor = null;
     let nombre_vendedor = null;
 
-    if (user.role === "seller") {
+    const actualRole = normalizeUserRole(user.role);
+
+    if (actualRole === "seller") {
       const vendedor = await resolveSellerByUserData(user);
       if (vendedor) {
         if (!sellerHasSystemAccess(vendedor.fecha_vigencia)) {
@@ -104,7 +124,7 @@ export const loginUserController = async (req: Request, res: Response) => {
       }
     }
 
-    const token = generateToken(user._id.toString(), user.role, sucursalId);
+    const token = generateToken(user._id.toString(), actualRole, sucursalId);
 
     res
       .cookie("token", token, {
@@ -116,8 +136,7 @@ export const loginUserController = async (req: Request, res: Response) => {
       })
       .json({
         success: true,
-        ...user.toObject?.() || user,
-        password: "",
+        ...serializeUserForClient(user),
         id_vendedor,
         nombre_vendedor, 
       });
@@ -141,10 +160,9 @@ export const getUserInfoController = async (req: Request, res: Response) => {
       return res.status(404).json({ msg: "Usuario no encontrado" });
     }
 
-    const userObj = user.toObject?.() || user;
-    delete userObj.password;
+    const userObj = serializeUserForClient(user);
 
-  if (userObj.role === "seller") {
+  if (normalizeUserRole(user.role) === "seller") {
     const vendedor = await VendedorModel.findOne({ mail: userObj.email });
     if (vendedor) {
       const sellerAccessData = vendedor.toObject?.() as SellerProductInfoAccessShape | undefined;
@@ -184,7 +202,7 @@ export const logoutUserController = async (req: Request, res: Response) => {
 export const getAllUsersController = async (req: Request, res: Response) => {
   try {
     const users = await UserService.getAllUsers();
-    res.json({ success: true, data: users });
+    res.json({ success: true, data: users.map((user) => serializeUserForClient(user)) });
   } catch (error) {
     res.status(500).json({ success: false, msg: "Error al obtener usuarios" });
   }
@@ -220,24 +238,34 @@ export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { email, role, password } = req.body;
+    const authRole = normalizeUserRole(res.locals.auth?.role);
+    const existingUser = await UserService.getUserByIdService(id);
+
+    if (!existingUser) {
+      return res.status(404).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    const existingRole = normalizeUserRole(existingUser.role);
+    if (existingRole === "superadmin" && authRole !== "superadmin") {
+      return res.status(403).json({ success: false, msg: "No se puede modificar este usuario" });
+    }
 
     const normalizedRole = String(role || "").toLowerCase();
-    if (!USER_ROLES.includes(normalizedRole as any)) {
+    if (!ASSIGNABLE_USER_ROLES.includes(normalizedRole as any)) {
       return res.status(400).json({ success: false, msg: "Rol inválido" });
     }
     
-    const updateData: any = { email, role: normalizedRole };
+    const updateData: any = {
+      email,
+      role: existingRole === "superadmin" ? "superadmin" : normalizedRole,
+    };
     
     if (password) {
       updateData.password = await hashPassword(password);
     }
 
     const updatedUser = await UserService.updateUser(id, updateData);
-    if (!updatedUser) {
-      return res.status(404).json({ success: false, msg: "Usuario no encontrado" });
-    }
-
-    res.json({ success: true, data: updatedUser });
+    res.json({ success: true, data: serializeUserForClient(updatedUser) });
   } catch (error) {
     res.status(500).json({ success: false, msg: "Error al actualizar usuario" });
   }
@@ -246,6 +274,17 @@ export const updateUserController = async (req: Request, res: Response) => {
 export const deleteUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const authRole = normalizeUserRole(res.locals.auth?.role);
+    const existingUser = await UserService.getUserByIdService(id);
+
+    if (!existingUser) {
+      return res.status(404).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    if (isSuperadminRole(existingUser.role) && authRole !== "superadmin") {
+      return res.status(403).json({ success: false, msg: "No se puede eliminar este usuario" });
+    }
+
     await UserService.deleteUser(id);
     res.json({ success: true, msg: "Usuario eliminado" });
   } catch (error) {

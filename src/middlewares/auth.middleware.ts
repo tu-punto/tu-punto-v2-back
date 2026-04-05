@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { verifyToken } from "../helpers/jwt";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
-import { ALL_APP_ROLES } from "../constants/roles";
+import { ALL_APP_ROLES, normalizeUserRole, roleSatisfies } from "../constants/roles";
 import {
   resolveSellerByUserId,
   sellerHasSystemAccess,
@@ -45,7 +45,11 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ success: false, msg: "Token invalido o expirado" });
     }
 
-    const role = String(decoded.role).toLowerCase();
+    const role = normalizeUserRole(decoded.role);
+    if (!role) {
+      return res.status(401).json({ success: false, msg: "Token invalido o expirado" });
+    }
+
     const authData: Record<string, unknown> = {
       id: decoded.id,
       role,
@@ -81,15 +85,13 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
 };
 
 export const requireRole = (...allowedRoles: string[]) => {
-  const normalizedAllowedRoles = allowedRoles.map((role) => role.toLowerCase());
-
   return (_req: Request, res: Response, next: NextFunction) => {
     const currentRole = String(res.locals.auth?.role || "").toLowerCase();
     if (!currentRole) {
       return res.status(401).json({ success: false, msg: "No autenticado" });
     }
 
-    if (!normalizedAllowedRoles.includes(currentRole)) {
+    if (!roleSatisfies(currentRole, allowedRoles)) {
       return res.status(403).json({ success: false, msg: "No autorizado para este recurso" });
     }
 

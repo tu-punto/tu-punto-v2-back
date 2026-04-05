@@ -91,6 +91,33 @@ const buildSellerProductInfoQueryParams = (req: Request, sellerId: string) => ({
   sortOrder: req.query.sortOrder === "desc" ? "desc" : ("asc" as "asc" | "desc"),
 });
 
+const parseVariantScope = (value: unknown): "branch" | "all" => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "branch" ? "branch" : "all";
+};
+
+const getSellerBranchOptions = async (sellerId: string) => {
+  const seller = await VendedorModel.findById(sellerId)
+    .select("nombre apellido pago_sucursales")
+    .lean();
+
+  if (!seller) {
+    return null;
+  }
+
+  return {
+    sellerName:
+      `${String((seller as any)?.nombre || "").trim()} ${String((seller as any)?.apellido || "").trim()}`.trim() ||
+      "Vendedor",
+    branches: (Array.isArray((seller as any)?.pago_sucursales) ? (seller as any).pago_sucursales : []).map(
+      (branch: any) => ({
+        sucursalId: String(branch?.id_sucursal || "").trim(),
+        sucursalName: String(branch?.sucursalName || "Sucursal").trim() || "Sucursal"
+      })
+    )
+  };
+};
+
 export const getProduct = async (req: Request, res: Response) => {
   try {
     const products = await ProductService.getAllProducts();
@@ -879,7 +906,7 @@ export const getSellerProductInfoList = async (req: Request, res: Response) => {
 export const getAdminSellerProductInfoList = async (req: Request, res: Response) => {
   try {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
-    if (authRole !== "admin") {
+    if (!["admin", "superadmin"].includes(authRole)) {
       return res.status(403).json({
         success: false,
         message: "Solo un administrador puede consultar esta informacion"
@@ -915,6 +942,132 @@ export const getAdminSellerProductInfoList = async (req: Request, res: Response)
     return res.status(500).json({
       success: false,
       message: "Error al obtener informacion de productos del vendedor para administrador"
+    });
+  }
+};
+
+export const getSuperadminVariantInventoryList = async (req: Request, res: Response) => {
+  try {
+    const sellerId = String(req.query.sellerId || "").trim();
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "sellerId es requerido"
+      });
+    }
+
+    const sellerMeta = await getSellerBranchOptions(sellerId);
+    if (!sellerMeta) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendedor no encontrado"
+      });
+    }
+
+    const result = await ProductService.getSuperadminVariantInventoryPage({
+      sellerId,
+      q: String(req.query.q || "").trim() || undefined,
+      inStock: parseBooleanQuery(req.query.inStock),
+      page: Number(req.query.page || 1),
+      limit: Number(req.query.limit || 20),
+      sortOrder: req.query.sortOrder === "desc" ? "desc" : "asc"
+    });
+
+    return res.json({
+      success: true,
+      sellerName: sellerMeta.sellerName,
+      branches: sellerMeta.branches,
+      ...result
+    });
+  } catch (error) {
+    console.error("Error en getSuperadminVariantInventoryList:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener variantes del vendedor"
+    });
+  }
+};
+
+export const updateVariantStockByBranchForSuperadmin = async (req: Request, res: Response) => {
+  try {
+    const { productId, sellerId, variantKey, sucursalId, stock } = req.body || {};
+
+    const result = await ProductService.updateVariantStockByBranchForSuperadmin({
+      productId: String(productId || "").trim(),
+      sellerId: String(sellerId || "").trim(),
+      variantKey: String(variantKey || "").trim(),
+      sucursalId: String(sucursalId || "").trim(),
+      stock: Number(stock)
+    });
+
+    return res.json({
+      success: true,
+      message: "Stock actualizado correctamente",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en updateVariantStockByBranchForSuperadmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al actualizar el stock"
+    });
+  }
+};
+
+export const renameVariantForSuperadmin = async (req: Request, res: Response) => {
+  try {
+    const { productId, sellerId, variantKey, sucursalId, scope, variantAttributes } = req.body || {};
+
+    const result = await ProductService.renameVariantForSuperadmin({
+      productId: String(productId || "").trim(),
+      sellerId: String(sellerId || "").trim(),
+      variantKey: String(variantKey || "").trim(),
+      sucursalId: String(sucursalId || "").trim() || undefined,
+      scope: parseVariantScope(scope),
+      variantAttributes:
+        variantAttributes && typeof variantAttributes === "object" && !Array.isArray(variantAttributes)
+          ? variantAttributes
+          : {}
+    });
+
+    return res.json({
+      success: true,
+      message: "Variante actualizada correctamente",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en renameVariantForSuperadmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al actualizar la variante"
+    });
+  }
+};
+
+export const deleteVariantForSuperadmin = async (req: Request, res: Response) => {
+  try {
+    const payload = req.body || {};
+
+    const result = await ProductService.deleteVariantForSuperadmin({
+      productId: String(payload.productId || "").trim(),
+      sellerId: String(payload.sellerId || "").trim(),
+      variantKey: String(payload.variantKey || "").trim(),
+      sucursalId: String(payload.sucursalId || "").trim() || undefined,
+      scope: parseVariantScope(payload.scope)
+    });
+
+    return res.json({
+      success: true,
+      message: result?.deletedProduct
+        ? "Producto eliminado completamente porque no quedaron variantes"
+        : "Variante eliminada correctamente",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en deleteVariantForSuperadmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al eliminar la variante"
     });
   }
 };
@@ -1140,6 +1293,10 @@ export const ProductController = {
   getSellerInventoryList,
   getSellerProductInfoList,
   getAdminSellerProductInfoList,
+  getSuperadminVariantInventoryList,
+  updateVariantStockByBranchForSuperadmin,
+  renameVariantForSuperadmin,
+  deleteVariantForSuperadmin,
   getProductQR,
   regenerateProductQR,
   findProductByQR,

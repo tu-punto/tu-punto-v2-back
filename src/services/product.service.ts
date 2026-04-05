@@ -447,6 +447,17 @@ const getSellerProductInfoListPage = async (params: {
   return await ProductRepository.findSellerProductInfoListPage(params);
 };
 
+const getSuperadminVariantInventoryPage = async (params: {
+  sellerId: string;
+  q?: string;
+  inStock?: boolean;
+  page?: number;
+  limit?: number;
+  sortOrder?: "asc" | "desc";
+}) => {
+  return await ProductRepository.findSuperadminVariantInventoryPage(params);
+};
+
 const updateVariantExtrasBySeller = async ({
   productId,
   sucursalId,
@@ -531,6 +542,87 @@ const getSellerVariantImages = async ({
   });
 };
 
+const updateVariantStockByBranchForSuperadmin = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  stock
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId: string;
+  stock: number;
+}) => {
+  if (!Number.isFinite(Number(stock)) || Number(stock) < 0) {
+    throw new Error("El stock debe ser un número mayor o igual a 0");
+  }
+
+  return await ProductRepository.updateVariantStockByBranchForSuperadmin({
+    productId,
+    sellerId,
+    variantKey,
+    sucursalId,
+    stock: Math.floor(Number(stock))
+  });
+};
+
+const renameVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope,
+  variantAttributes
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+  variantAttributes: Record<string, string>;
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para editar solo una sucursal");
+  }
+
+  return await ProductRepository.renameVariantForSuperadmin({
+    productId,
+    sellerId,
+    variantKey,
+    sucursalId,
+    scope,
+    variantAttributes
+  });
+};
+
+const deleteVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para eliminar solo una sucursal");
+  }
+
+  return await ProductRepository.deleteVariantForSuperadmin({
+    productId,
+    sellerId,
+    variantKey,
+    sucursalId,
+    scope
+  });
+};
+
 export const ProductService = {
   getAllProducts,
   registerProduct,
@@ -551,10 +643,14 @@ export const ProductService = {
   getFlatProductList,
   getFlatProductListPage,
   getSellerProductInfoListPage,
+  getSuperadminVariantInventoryPage,
   regenerateProductQR,
   getProductQR,
   findProductByQRCode,
   updateVariantExtrasBySeller,
-  getSellerVariantImages
+  getSellerVariantImages,
+  updateVariantStockByBranchForSuperadmin,
+  renameVariantForSuperadmin,
+  deleteVariantForSuperadmin
 };
 

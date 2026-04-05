@@ -25,7 +25,7 @@ const getUserById = async (id: string): Promise<IUserDocument | null> => {
 };
 
 const getAdmins = async () => {
-  return await UserModel.find({ role: "admin" }).select("_id email");
+  return await UserModel.find({ role: { $in: ["admin", "superadmin"] } }).select("_id email");
 };
 
 

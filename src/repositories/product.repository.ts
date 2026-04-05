@@ -304,6 +304,56 @@ type SellerProductInfoStatusSummary = {
   productInfoStatus: "empty" | "partial" | "complete";
 };
 
+type SuperadminVariantInventoryParams = {
+  sellerId: string;
+  q?: string;
+  inStock?: boolean;
+  page?: number;
+  limit?: number;
+  sortOrder?: "asc" | "desc";
+};
+
+const normalizeVariantRecord = (variantes: Record<string, string> | Map<string, string> | undefined | null) => {
+  const sourceEntries =
+    variantes instanceof Map ? Array.from(variantes.entries()) : Object.entries(variantes || {});
+
+  return Object.fromEntries(
+    sourceEntries.map(([key, value]) => [String(key).trim(), String(value ?? "").trim()])
+  );
+};
+
+const variantMatchesKey = (
+  productId: string,
+  combinacion: { variantKey?: string; variantes: Record<string, string> | Map<string, string> },
+  targetVariantKey: string
+) => {
+  if (combinacion.variantKey && combinacion.variantKey === targetVariantKey) {
+    return true;
+  }
+
+  return createVariantKey(productId, normalizeVariantRecord(combinacion.variantes)) === targetVariantKey;
+};
+
+const variantRecordsEqual = (
+  left: Record<string, string> | Map<string, string> | undefined | null,
+  right: Record<string, string> | Map<string, string> | undefined | null
+) => {
+  const normalizedLeft = normalizeVariantRecord(left);
+  const normalizedRight = normalizeVariantRecord(right);
+
+  const leftKeys = Object.keys(normalizedLeft);
+  const rightKeys = Object.keys(normalizedRight);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every(
+    (key) =>
+      normalizedRight[key] !== undefined &&
+      normalizedLeft[key].toLowerCase() === normalizedRight[key].toLowerCase()
+  );
+};
+
 const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
   const sucursalId = params?.sucursalId;
   const sellerId = params?.sellerId;
@@ -730,6 +780,152 @@ const findSellerProductInfoListPage = async (params: SellerProductInfoParams) =>
   };
 };
 
+const findSuperadminVariantInventoryPage = async (params: SuperadminVariantInventoryParams) => {
+  const safePage = Math.max(1, Number(params.page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(params.limit) || 20));
+  const sortDirection = params.sortOrder === "desc" ? -1 : 1;
+  const search = String(params.q || "").trim();
+
+  const variantLabelExpression = {
+    $reduce: {
+      input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+      initialValue: "",
+      in: {
+        $cond: [
+          { $eq: ["$$value", ""] },
+          "$$this.v",
+          { $concat: ["$$value", " / ", "$$this.v"] }
+        ]
+      }
+    }
+  };
+
+  const pipeline: any[] = [
+    {
+      $match: {
+        esTemporal: { $ne: true },
+        id_vendedor: new Types.ObjectId(params.sellerId)
+      }
+    },
+    { $unwind: "$sucursales" },
+    { $unwind: "$sucursales.combinaciones" },
+    {
+      $addFields: {
+        _variantLabel: variantLabelExpression,
+        _resolvedVariantKey: {
+          $ifNull: ["$sucursales.combinaciones.variantKey", variantLabelExpression]
+        },
+        _displayName: {
+          $cond: [
+            { $gt: [{ $strLenCP: variantLabelExpression }, 0] },
+            { $concat: ["$nombre_producto", " - ", variantLabelExpression] },
+            "$nombre_producto"
+          ]
+        }
+      }
+    }
+  ];
+
+  if (search) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { nombre_producto: { $regex: search, $options: "i" } },
+          { _variantLabel: { $regex: search, $options: "i" } },
+          { _displayName: { $regex: search, $options: "i" } }
+        ]
+      }
+    });
+  }
+
+  pipeline.push(
+    {
+      $group: {
+        _id: {
+          productId: "$_id",
+          variantKey: "$_resolvedVariantKey"
+        },
+        productId: { $first: { $toString: "$_id" } },
+        productName: { $first: "$nombre_producto" },
+        variantKey: { $first: "$_resolvedVariantKey" },
+        variantLabel: { $first: "$_variantLabel" },
+        displayName: { $first: "$_displayName" },
+        variantAttributes: { $first: "$sucursales.combinaciones.variantes" },
+        categoryId: { $first: "$id_categoria" },
+        totalStock: { $sum: "$sucursales.combinaciones.stock" },
+        branchStocks: {
+          $push: {
+            sucursalId: { $toString: "$sucursales.id_sucursal" },
+            stock: "$sucursales.combinaciones.stock"
+          }
+        }
+      }
+    }
+  );
+
+  if (params.inStock !== undefined) {
+    pipeline.push({
+      $match: {
+        totalStock: params.inStock ? { $gt: 0 } : { $lte: 0 }
+      }
+    });
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: "Categoria",
+        localField: "categoryId",
+        foreignField: "_id",
+        as: "categoria_info"
+      }
+    },
+    {
+      $addFields: {
+        displayNameSortable: { $toLower: "$displayName" },
+        categoryName: { $arrayElemAt: ["$categoria_info.categoria", 0] }
+      }
+    }
+  );
+
+  const result = await ProductoModel.aggregate([
+    ...pipeline,
+    { $sort: { displayNameSortable: sortDirection, productId: 1 } },
+    {
+      $facet: {
+        rows: [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }],
+        total: [{ $count: "count" }]
+      }
+    }
+  ]);
+
+  const rows = (result?.[0]?.rows || []).map((row: any) => ({
+    productId: String(row.productId),
+    productName: String(row.productName || ""),
+    variantKey: String(row.variantKey || ""),
+    variantLabel: String(row.variantLabel || ""),
+    displayName: String(row.displayName || row.productName || ""),
+    variantAttributes: normalizeVariantRecord(row.variantAttributes),
+    categoryName: row.categoryName ? String(row.categoryName) : null,
+    totalStock: Number(row.totalStock || 0),
+    branchStocks: Array.isArray(row.branchStocks)
+      ? row.branchStocks.map((branch: any) => ({
+          sucursalId: String(branch?.sucursalId || ""),
+          stock: Number(branch?.stock || 0)
+        }))
+      : []
+  }));
+  const total = Number(result?.[0]?.total?.[0]?.count || 0);
+
+  return {
+    rows,
+    total,
+    page: safePage,
+    limit: safeLimit,
+    pages: Math.max(1, Math.ceil(total / safeLimit))
+  };
+};
+
 const findSellerProductInfoStatusBySellerIds = async (
   sellerIds: string[]
 ): Promise<SellerProductInfoStatusSummary[]> => {
@@ -1024,6 +1220,220 @@ const findVariantImagesBySeller = async ({
   throw new Error("Combinación no encontrada");
 };
 
+const updateVariantStockByBranchForSuperadmin = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  stock
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId: string;
+  stock: number;
+}) => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const sucursal = producto.sucursales.find((item) => String(item.id_sucursal) === sucursalId);
+  if (!sucursal) {
+    throw new Error("Sucursal no encontrada");
+  }
+
+  const combinacion = sucursal.combinaciones.find((item) =>
+    variantMatchesKey(String(producto._id), item as any, variantKey)
+  );
+
+  if (!combinacion) {
+    throw new Error("Variante no encontrada en la sucursal seleccionada");
+  }
+
+  combinacion.stock = stock;
+  producto.markModified("sucursales");
+  await producto.save();
+
+  return {
+    productId: String(producto._id),
+    variantKey: combinacion.variantKey || createVariantKey(String(producto._id), combinacion.variantes),
+    sucursalId,
+    stock: combinacion.stock
+  };
+};
+
+const renameVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope,
+  variantAttributes
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+  variantAttributes: Record<string, string>;
+}) => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const normalizedVariantAttributes = normalizeVariantRecord(variantAttributes);
+  const attributeKeys = Object.keys(normalizedVariantAttributes);
+  if (!attributeKeys.length || attributeKeys.some((key) => !normalizedVariantAttributes[key])) {
+    throw new Error("Debes completar todos los valores de la variante");
+  }
+
+  const targetBranches =
+    scope === "branch"
+      ? producto.sucursales.filter((item) => String(item.id_sucursal) === String(sucursalId || ""))
+      : producto.sucursales;
+
+  if (!targetBranches.length) {
+    throw new Error("No se encontró la sucursal objetivo");
+  }
+
+  const nextVariantKey = createVariantKey(String(producto._id), normalizedVariantAttributes);
+  const targetCombinations: Array<{ branch: any; combination: any }> = [];
+
+  for (const branch of targetBranches) {
+    const combination = branch.combinaciones.find((item: any) =>
+      variantMatchesKey(String(producto._id), item, variantKey)
+    );
+
+    if (!combination) {
+      if (scope === "branch") {
+        throw new Error("La variante no existe en la sucursal seleccionada");
+      }
+      continue;
+    }
+
+    const hasDuplicate = branch.combinaciones.some((item: any) => {
+      if (item === combination) return false;
+      return (
+        variantMatchesKey(String(producto._id), item, nextVariantKey) ||
+        variantRecordsEqual(item.variantes, normalizedVariantAttributes)
+      );
+    });
+
+    if (hasDuplicate) {
+      throw new Error("Ya existe una variante con esos valores en una de las sucursales objetivo");
+    }
+
+    targetCombinations.push({ branch, combination });
+  }
+
+  if (!targetCombinations.length) {
+    throw new Error("No se encontró la variante solicitada");
+  }
+
+  for (const { combination } of targetCombinations) {
+    combination.variantes = normalizedVariantAttributes;
+    combination.variantKey = nextVariantKey;
+  }
+
+  producto.markModified("sucursales");
+  await producto.save();
+
+  return {
+    productId: String(producto._id),
+    previousVariantKey: variantKey,
+    variantKey: nextVariantKey,
+    updatedBranches: targetCombinations.map(({ branch }) => String(branch.id_sucursal))
+  };
+};
+
+const deleteVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+}) => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const targetBranches =
+    scope === "branch"
+      ? producto.sucursales.filter((item) => String(item.id_sucursal) === String(sucursalId || ""))
+      : producto.sucursales;
+
+  if (!targetBranches.length) {
+    throw new Error("No se encontró la sucursal objetivo");
+  }
+
+  let removedCount = 0;
+  const affectedBranchIds = new Set<string>();
+
+  for (const branch of targetBranches) {
+    const beforeCount = branch.combinaciones.length;
+    branch.combinaciones = branch.combinaciones.filter(
+      (item: any) => !variantMatchesKey(String(producto._id), item, variantKey)
+    );
+    const removedInBranch = beforeCount - branch.combinaciones.length;
+
+    if (removedInBranch > 0) {
+      removedCount += removedInBranch;
+      affectedBranchIds.add(String(branch.id_sucursal));
+    }
+  }
+
+  if (!removedCount) {
+    throw new Error("No se encontró la variante solicitada");
+  }
+
+  producto.sucursales = producto.sucursales.filter(
+    (branch: any) => Array.isArray(branch.combinaciones) && branch.combinaciones.length > 0
+  ) as any;
+
+  const hasVariantsLeft = producto.sucursales.some(
+    (branch: any) => Array.isArray(branch.combinaciones) && branch.combinaciones.length > 0
+  );
+
+  if (!hasVariantsLeft) {
+    await ProductoModel.deleteOne({ _id: producto._id });
+    return {
+      productId: String(producto._id),
+      deletedProduct: true,
+      affectedBranchIds: Array.from(affectedBranchIds)
+    };
+  }
+
+  producto.markModified("sucursales");
+  await producto.save();
+
+  return {
+    productId: String(producto._id),
+    deletedProduct: false,
+    affectedBranchIds: Array.from(affectedBranchIds)
+  };
+};
+
 export const ProductRepository = {
   findAll,
   findById,
@@ -1043,10 +1453,14 @@ export const ProductRepository = {
   findFlatProductList,
   findFlatProductListPage,
   findSellerProductInfoListPage,
+  findSuperadminVariantInventoryPage,
   findSellerProductInfoStatusBySellerIds,
   findByQRCode,
   updateVariantExtrasBySeller,
-  findVariantImagesBySeller
+  findVariantImagesBySeller,
+  updateVariantStockByBranchForSuperadmin,
+  renameVariantForSuperadmin,
+  deleteVariantForSuperadmin
   
 };
 
