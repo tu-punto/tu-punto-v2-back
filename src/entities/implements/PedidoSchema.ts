@@ -44,10 +44,19 @@ const PedidoSchema = new Schema({
     ref: 'Sucursal',
     required: false
   },
+  tipo_destino: {
+    type: String,
+    enum: ["sucursal", "otro_lugar"],
+    default: "otro_lugar"
+  },
 
   lugar_entrega: {
     type: String,
     required: true
+  },
+  ubicacion_link: {
+    type: String,
+    default: ""
   },
   costo_delivery: {
     type: Number,

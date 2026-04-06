@@ -15,7 +15,9 @@ export interface IPedido {
 
   observaciones: string;
   lugar_origen?: Types.ObjectId; 
+  tipo_destino?: 'sucursal' | 'otro_lugar';
   lugar_entrega: string;
+  ubicacion_link?: string;
 
   costo_delivery: number;
   cargo_delivery: number;

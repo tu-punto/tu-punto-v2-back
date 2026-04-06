@@ -34,6 +34,7 @@ type ShippingListParams = {
   from?: Date;
   to?: Date;
   originId?: string;
+  branchContextId?: string;
   sellerId?: string;
   client?: string;
 };
@@ -57,8 +58,20 @@ const findList = async (params: ShippingListParams) => {
   }
 
   if (params.originId && Types.ObjectId.isValid(params.originId)) {
-    const originObjectId = new Types.ObjectId(params.originId);
-    filter.$or = [{ lugar_origen: originObjectId }, { sucursal: originObjectId }];
+    filter.lugar_origen = new Types.ObjectId(params.originId);
+  }
+
+  if (params.branchContextId && Types.ObjectId.isValid(params.branchContextId)) {
+    const branchObjectId = new Types.ObjectId(params.branchContextId);
+    const branchVisibilityMatch = {
+      $or: [{ lugar_origen: branchObjectId }, { sucursal: branchObjectId }]
+    };
+
+    if (filter.$and) {
+      filter.$and.push(branchVisibilityMatch);
+    } else {
+      filter.$and = [branchVisibilityMatch];
+    }
   }
 
   if (params.client) {
@@ -71,12 +84,7 @@ const findList = async (params: ShippingListParams) => {
       ]
     };
 
-    if (filter.$or) {
-      filter.$and = [...(filter.$and || []), { $or: filter.$or }, clientMatch];
-      delete filter.$or;
-    } else {
-      filter.$and = [...(filter.$and || []), clientMatch];
-    }
+    filter.$and = [...(filter.$and || []), clientMatch];
   }
 
   if (params.sellerId && Types.ObjectId.isValid(params.sellerId)) {
@@ -95,12 +103,7 @@ const findList = async (params: ShippingListParams) => {
       ]
     };
 
-    if (filter.$or) {
-      filter.$and = [...(filter.$and || []), { $or: filter.$or }, sellerMatch];
-      delete filter.$or;
-    } else {
-      filter.$and = [...(filter.$and || []), sellerMatch];
-    }
+    filter.$and = [...(filter.$and || []), sellerMatch];
   }
 
   const [rows, total] = await Promise.all([

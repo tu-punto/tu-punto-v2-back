@@ -6,6 +6,7 @@ import { ShippingRepository } from "../repositories/shipping.repository";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { SaleService } from "./sale.service";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 import dayjs from 'dayjs';
 import moment from 'moment-timezone';
 import { v4 as uuidv4 } from "uuid";
@@ -42,25 +43,123 @@ const normalizePaymentType = (value: unknown): string | undefined => {
 const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
   const normalizedType = normalizePaymentType(payload.tipo_de_pago ?? currentShipping?.tipo_de_pago);
   const nextStatus = payload.estado_pedido ?? currentShipping?.estado_pedido;
+  const nextPaidStatus = payload.esta_pagado ?? currentShipping?.esta_pagado;
 
   if (normalizedType) {
     payload.tipo_de_pago = normalizedType;
   }
 
-  if (nextStatus === "Entregado") {
-    payload.esta_pagado = "si";
+  if (nextStatus === "Entregado" && nextPaidStatus === "si") {
     payload.tipo_de_pago = PAYMENT_TYPE_LABEL_BY_CODE["3"];
-    payload.pagado_al_vendedor = true;
-    payload.adelanto_cliente = 0;
-    payload.subtotal_qr = 0;
-    payload.subtotal_efectivo = 0;
-    return;
   }
 
   if ((payload.tipo_de_pago || normalizedType) === PAYMENT_TYPE_LABEL_BY_CODE["3"]) {
     payload.pagado_al_vendedor = true;
+    payload.adelanto_cliente = 0;
     payload.subtotal_qr = 0;
     payload.subtotal_efectivo = 0;
+  } else if ("pagado_al_vendedor" in payload && nextPaidStatus !== "si") {
+    payload.pagado_al_vendedor = false;
+  }
+};
+
+const normalizeTextValue = (value: unknown): string => String(value ?? "").trim();
+const normalizeBranchName = (value: unknown): string =>
+  normalizeTextValue(value).toLowerCase().replace(/\s+/g, " ");
+
+const resolveBranchId = (value: any): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    return String(value?._id || value?.id_sucursal || value?.$oid || "");
+  }
+  return "";
+};
+
+const buildGoogleMapsSearchUrl = (query: string): string => {
+  if (!query) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+};
+
+const normalizeDestinationType = (value: unknown): "sucursal" | "otro_lugar" =>
+  value === "sucursal" ? "sucursal" : "otro_lugar";
+
+const findBranchByName = async (value: unknown) => {
+  const normalizedName = normalizeBranchName(value);
+  if (!normalizedName) return null;
+
+  const branches = await SucursalModel.find({}, { _id: 1, nombre: 1 }).lean();
+  return (
+    branches.find((branch: any) => normalizeBranchName(branch?.nombre) === normalizedName) ||
+    null
+  );
+};
+
+const resolvePaymentBranchId = (shipping: any): string =>
+  resolveBranchId(shipping?.sucursal) || resolveBranchId(shipping?.lugar_origen);
+
+const resolveOriginBranchId = (shipping: any): string => resolveBranchId(shipping?.lugar_origen);
+
+const canMarkDeliveredFromBranch = (shipping: any, branchId?: string | null): boolean => {
+  if (!branchId) return true;
+  const paymentBranchId = resolvePaymentBranchId(shipping);
+  return !paymentBranchId || paymentBranchId === String(branchId);
+};
+
+const normalizeShippingBranches = async (payload: any, currentShipping?: any) => {
+  const originId = resolveBranchId(
+    payload?.lugar_origen ?? currentShipping?.lugar_origen
+  );
+  const requestedPaymentBranchId = resolveBranchId(
+    payload?.sucursal ?? payload?.id_sucursal ?? currentShipping?.sucursal
+  );
+  const lugarEntrega = normalizeTextValue(
+    payload?.lugar_entrega ?? currentShipping?.lugar_entrega
+  );
+  const ubicacionLinkRaw = normalizeTextValue(
+    payload?.ubicacion_link ?? currentShipping?.ubicacion_link
+  );
+  const storedDestinationType = payload?.tipo_destino ?? currentShipping?.tipo_destino;
+  const matchedBranchByName = await findBranchByName(lugarEntrega);
+  const legacyDestinationBranchId = resolveBranchId(matchedBranchByName?._id);
+  const destinationType = storedDestinationType
+    ? normalizeDestinationType(storedDestinationType)
+    : ((requestedPaymentBranchId && requestedPaymentBranchId !== originId) || legacyDestinationBranchId
+      ? "sucursal"
+      : "otro_lugar");
+  const destinationBranchId =
+    destinationType === "sucursal"
+      ? (
+        (requestedPaymentBranchId && requestedPaymentBranchId !== originId
+          ? requestedPaymentBranchId
+          : "") ||
+        legacyDestinationBranchId ||
+        requestedPaymentBranchId ||
+        originId
+      )
+      : originId;
+  const resolvedLugarEntrega: string =
+    destinationType === "sucursal"
+      ? normalizeTextValue(matchedBranchByName?.nombre) || lugarEntrega
+      : lugarEntrega;
+
+  payload.tipo_destino = destinationType;
+  payload.lugar_entrega = resolvedLugarEntrega;
+  payload.ubicacion_link =
+    ubicacionLinkRaw ||
+    (destinationType === "otro_lugar" ? buildGoogleMapsSearchUrl(resolvedLugarEntrega) : "");
+
+  if (originId) {
+    payload.lugar_origen = originId;
+  }
+
+  if (destinationType === "sucursal" && destinationBranchId) {
+    payload.sucursal = destinationBranchId;
+    return;
+  }
+
+  if (originId) {
+    payload.sucursal = originId;
   }
 };
 
@@ -71,6 +170,7 @@ const getShippingsList = async (params: {
   from?: Date;
   to?: Date;
   originId?: string;
+  branchContextId?: string;
   sellerId?: string;
   client?: string;
 }) => {
@@ -90,6 +190,7 @@ const getShippingByIds = async (shippingIds: string[]) => {
 
 const registerShipping = async (shipping: any) => {
   normalizeOrderPaymentData(shipping);
+  await normalizeShippingBranches(shipping);
 
   if (shipping.fecha_pedido) {
     shipping.fecha_pedido = moment.tz(shipping.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
@@ -257,12 +358,17 @@ const registerSaleToShipping = async (
   return created[0];
 };
 
-const updateShipping = async (newData: any, shippingId: string) => {
+const updateShipping = async (
+  newData: any,
+  shippingId: string,
+  options?: { currentBranchId?: string | null }
+) => {
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
 
   normalizeOrderPaymentData(newData, shipping);
+  await normalizeShippingBranches(newData, shipping);
 
   if ('fecha_pedido' in newData) {
     delete newData.fecha_pedido;
@@ -292,6 +398,14 @@ const updateShipping = async (newData: any, shippingId: string) => {
 
   const wasDelivered = shipping.estado_pedido === "Entregado";
   const willBeDelivered = newData.estado_pedido === "Entregado";
+  const nextShippingState = {
+    ...(typeof (shipping as any)?.toObject === "function" ? (shipping as any).toObject() : shipping),
+    ...newData,
+  };
+
+  if (willBeDelivered && !canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId)) {
+    throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
+  }
 
   if (willBeDelivered && !wasDelivered) {
     const sales = await SaleService.getSalesByShippingId(shippingId);
@@ -443,10 +557,6 @@ const getDailySalesHistory = async (
   ).toDate();
 
   const filter: any = {
-    $or: [
-      { sucursal: sucursalId },
-      { lugar_origen: sucursalId }
-    ],
     estado_pedido: { $ne: "En Espera" }
   };
 
@@ -498,7 +608,19 @@ const getDailySalesHistory = async (
     .sort(fromLastClose ? { hora_entrega_real: -1, fecha_pedido: -1 } : { hora_entrega_acordada: -1 })
     .lean();
 
-  const resumen = pedidos.map(p => {
+  const pedidosFiltrados = pedidos.filter((pedido: any) => {
+    const estado = String(pedido?.estado_pedido || "").trim().toLowerCase();
+    const paymentBranchId = resolvePaymentBranchId(pedido);
+    const originBranchId = resolveOriginBranchId(pedido);
+
+    if (estado === "interno") {
+      return paymentBranchId === sucursalId || originBranchId === sucursalId;
+    }
+
+    return paymentBranchId === sucursalId;
+  });
+
+  const resumen = pedidosFiltrados.map(p => {
     const ventasNormales = (Array.isArray(p.venta) ? p.venta : []).filter((v: any) =>
       v && typeof v === 'object' &&
       typeof v.precio_unitario === 'number' &&
@@ -624,6 +746,7 @@ const transitionShippingStatusByQR = async (params: {
   shippingCode?: string;
   shippingId?: string;
   toStatus: string;
+  currentBranchId?: string;
   changedBy?: string;
   note?: string;
 }) => {
@@ -666,7 +789,9 @@ const transitionShippingStatusByQR = async (params: {
       .format("YYYY-MM-DD HH:mm:ss");
   }
 
-  await updateShipping(updateData, String(shipping._id));
+  await updateShipping(updateData, String(shipping._id), {
+    currentBranchId: params.currentBranchId
+  });
 
   await ShippingStatusHistoryModel.create({
     shippingId: shipping._id,

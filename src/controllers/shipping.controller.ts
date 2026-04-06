@@ -13,6 +13,8 @@ export const getShipping = async (req: Request, res: Response) => {
 
 export const getShippingList = async (req: Request, res: Response) => {
   try {
+    const auth = res.locals.auth as { role?: string; sucursalId?: string } | undefined;
+    const authRole = String(auth?.role || "").toLowerCase();
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 50);
     const status = (req.query.status as string | undefined) || undefined;
@@ -32,6 +34,10 @@ export const getShippingList = async (req: Request, res: Response) => {
       from,
       to,
       originId,
+      branchContextId:
+        authRole === "admin" || authRole === "operator"
+          ? auth?.sucursalId
+          : undefined,
       sellerId,
       client
     });
@@ -97,7 +103,10 @@ const updateShipping = async (req: Request, res: Response) => {
   const newData = req.body;
 
   try {
-    const shippingUpdated = await ShippingService.updateShipping(newData, id);
+    const auth = res.locals.auth as { sucursalId?: string } | undefined;
+    const shippingUpdated = await ShippingService.updateShipping(newData, id, {
+      currentBranchId: auth?.sucursalId
+    });
     res.json({ success: true, shippingUpdated });
   } catch (error) {
     console.error(error);
@@ -241,11 +250,13 @@ export const transitionShippingStatusByQRController = async (req: Request, res: 
   }
 
   try {
+    const auth = res.locals.auth as { sucursalId?: string } | undefined;
     const result = await ShippingService.transitionShippingStatusByQR({
       payload,
       shippingCode,
       shippingId,
       toStatus,
+      currentBranchId: auth?.sucursalId,
       changedBy,
       note
     });
