@@ -82,7 +82,7 @@ const buildGoogleMapsSearchUrl = (query: string): string => {
 };
 
 const normalizeDestinationType = (value: unknown): "sucursal" | "otro_lugar" =>
-  value === "sucursal" ? "sucursal" : "otro_lugar";
+  value === "sucursal" || value === "esta_sucursal" ? "sucursal" : "otro_lugar";
 
 const findBranchByName = async (value: unknown) => {
   const normalizedName = normalizeBranchName(value);
