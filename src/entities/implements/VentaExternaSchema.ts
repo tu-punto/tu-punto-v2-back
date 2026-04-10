@@ -2,6 +2,11 @@ import { Schema, model, Types } from 'mongoose';
 import { IVentaExternaDocument } from '../documents/IVentaExternaDocument';
 
 const VentaExternaSchema = new Schema({
+    id_vendedor: {
+        type: Types.ObjectId,
+        ref: 'Vendedor',
+        required: false
+    },
     carnet_vendedor: {
         type: String,
         required: true,
@@ -38,6 +43,36 @@ const VentaExternaSchema = new Schema({
     fecha_pedido: {
         type: Date,
         required: true
+    },
+    service_origin: {
+        type: String,
+        enum: ["external", "simple_package"],
+        default: "external"
+    },
+    package_size: {
+        type: String,
+        enum: ["estandar", "grande"],
+        default: "estandar"
+    },
+    precio_paquete_unitario: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    amortizacion_vendedor: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    deuda_comprador: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    metodo_pago: {
+        type: String,
+        enum: ["", "efectivo", "qr"],
+        default: ""
     },
     direccion_delivery: {
         type: String,

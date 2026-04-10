@@ -3,18 +3,23 @@ import { ReportsService } from "../services/reports.service";
 
 export const getOperacionMensual = async (req: Request, res: Response) => {
   try {
-    const { mes, meses, sucursales, modoTop, reportes, columnas } = req.body || {};
+    const { mes, meses, sucursales, modoTop, ticketPromedioModo, reportes, columnas } = req.body || {};
     const sucursalIds = Array.isArray(sucursales) ? sucursales : undefined;
     const mesesArr = Array.isArray(meses)
       ? meses
       : (typeof meses === "string" ? meses.split(",").map((m: string) => m.trim()).filter(Boolean) : undefined);
     const modo = (modoTop === "vendedores" ? "vendedores" : "clientes") as "clientes"|"vendedores";
+    const ticketMode =
+      ticketPromedioModo === "comision" || ticketPromedioModo === "pago_fijo_mas_comision"
+        ? ticketPromedioModo
+        : "pago_fijo";
 
     const data = await ReportsService.getOperacionMensual({
       mes,
       meses: mesesArr,
       sucursalIds,
       modoTop: modo,
+      ticketPromedioModo: ticketMode,
       reportes,
       columnas
     });
@@ -86,6 +91,10 @@ export const exportOperacionMensualXlsx = async (req: Request, res: Response) =>
     const mesesParam = typeof req.query.meses === "string" ? String(req.query.meses) : "";
     const mesesArr = mesesParam ? mesesParam.split(",").map(s => s.trim()).filter(Boolean) : undefined;
     const modoTop = (req.query.modoTop === "vendedores" ? "vendedores" : "clientes") as "clientes"|"vendedores";
+    const ticketPromedioModo: "pago_fijo" | "comision" | "pago_fijo_mas_comision" =
+      req.query.ticketPromedioModo === "comision" || req.query.ticketPromedioModo === "pago_fijo_mas_comision"
+        ? (String(req.query.ticketPromedioModo) as "comision" | "pago_fijo_mas_comision")
+        : "pago_fijo";
     const sucursalesParam = typeof req.query.sucursales === "string" ? String(req.query.sucursales) : "";
     const sucursalIds = sucursalesParam ? sucursalesParam.split(",").map(s => s.trim()) : undefined;
     const reportesParam = typeof req.query.reportes === "string" ? String(req.query.reportes) : "";
@@ -105,6 +114,7 @@ export const exportOperacionMensualXlsx = async (req: Request, res: Response) =>
       meses: mesesArr,
       sucursalIds,
       modoTop,
+      ticketPromedioModo,
       reportes,
       columnas
     });
@@ -389,13 +399,32 @@ export const exportClientesStatusXlsx = async (_: Request, res: Response) => {
 
 export const getEntregasSimplesResumen = async (req: Request, res: Response) => {
   try {
-    const sellerIds = parseStringArrayInput(req.query?.sellerIds);
-    const months = parseNumberArrayInput(req.query?.months);
-    const data = await ReportsService.getEntregasSimplesResumen({ sellerIds, months });
+    const sellerId = typeof req.query?.sellerId === "string" ? String(req.query.sellerId).trim() : "";
+    const sellerIdsFromQuery = parseStringArrayInput(req.query?.sellerIds);
+    const meses = parseStringArrayInput(req.query?.meses);
+    const sellerIds = sellerId ? [sellerId] : sellerIdsFromQuery;
+    const data = await ReportsService.getEntregasSimplesResumen({ sellerIds, meses });
     return res.json({ ok: true, ...data });
   } catch (err: any) {
     console.error("getEntregasSimplesResumen error:", err);
     return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+
+export const exportEntregasSimplesResumenXlsx = async (req: Request, res: Response) => {
+  try {
+    const sellerId = typeof req.query?.sellerId === "string" ? String(req.query.sellerId).trim() : "";
+    const sellerIdsFromQuery = parseStringArrayInput(req.query?.sellerIds);
+    const meses = parseStringArrayInput(req.query?.meses);
+    const sellerIds = sellerId ? [sellerId] : sellerIdsFromQuery;
+    const { filePath, filename } = await ReportsService.exportEntregasSimplesResumenXlsx({
+      sellerIds,
+      meses,
+    });
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportEntregasSimplesResumenXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
 
@@ -448,4 +477,3 @@ export const exportVentasTemporalesPorVendedorXlsx = async (req: Request, res: R
     return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
-

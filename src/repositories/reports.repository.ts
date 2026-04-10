@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { VentaModel } from "../entities/implements/VentaSchema";
+import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
 import { FlujoFinancieroModel } from "../entities/implements/FlujoFinancieroSchema"; // 👈 asegúrate de tenerlo
 import { VendedorModel } from "../entities/implements/VendedorSchema"; // 👈 asegúrate de tenerlo
 export const ReportsRepository = {
@@ -294,6 +295,61 @@ export const ReportsRepository = {
       },
     )
       .populate([{ path: "id_sucursal", select: "nombre" }])
+      .lean()
+      .exec();
+  },
+
+  async fetchEntregasExternasRealizadasEnRango(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+    const { start, end, sucursalIds } = opts;
+
+    const deliveredDateMatch: any = {};
+    if (start) deliveredDateMatch.$gte = start;
+    if (end) deliveredDateMatch.$lt = end;
+
+    const filter: any = {
+      $and: [
+        {
+          $or: [
+            { service_origin: { $exists: false } },
+            { service_origin: "external" },
+          ],
+        },
+        {
+          $or: [
+            { delivered: true },
+            { estado_pedido: "Entregado" },
+          ],
+        },
+        {
+          $or: [
+            { hora_entrega_real: deliveredDateMatch },
+            { hora_entrega_real: { $exists: false }, fecha_pedido: deliveredDateMatch },
+            { hora_entrega_real: null, fecha_pedido: deliveredDateMatch },
+          ],
+        },
+      ],
+    };
+
+    if (sucursalIds?.length) {
+      filter.sucursal = { $in: sucursalIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    return await VentaExternaModel.find(
+      filter,
+      {
+        fecha_pedido: 1,
+        hora_entrega_real: 1,
+        sucursal: 1,
+        numero_paquete: 1,
+        precio_paquete: 1,
+        monto_paga_vendedor: 1,
+        monto_paga_comprador: 1,
+        saldo_cobrar: 1,
+        estado_pedido: 1,
+        delivered: 1,
+      },
+    )
+      .populate([{ path: "sucursal", select: "nombre" }])
       .lean()
       .exec();
   },
@@ -1015,103 +1071,67 @@ async fetchVentasTemporalesPorVendedor(opts: { sellerId: string }) {
   ]).exec();
 },
 
-async fetchEntregasSimplesPorVendedorYMes(opts: { sellerIds: string[]; months?: number[] }) {
+async fetchEntregasSimplesPorVendedorYMes(opts: { sellerIds?: string[]; meses?: string[] }) {
   const sellerIds = (opts.sellerIds || []).filter((id) => Types.ObjectId.isValid(id));
-  if (!sellerIds.length) return [];
-
-  const sellerObjectIds = sellerIds.map((id) => new Types.ObjectId(id));
-  const months = Array.isArray(opts.months)
-    ? opts.months.map((m) => Number(m)).filter((m) => Number.isInteger(m) && m >= 1 && m <= 12)
+  const meses = Array.isArray(opts.meses)
+    ? Array.from(new Set(opts.meses.map((mes) => String(mes).trim()).filter((mes) => /^\d{4}-\d{2}$/.test(mes))))
     : [];
 
+  const match: any = {
+    service_origin: "simple_package",
+  };
+
+  if (sellerIds.length) {
+    match.id_vendedor = { $in: sellerIds.map((id) => new Types.ObjectId(id)) };
+  }
+
   const pipeline: any[] = [
-    { $match: { estado_pedido: "Entregado" } },
-    {
-      $lookup: {
-        from: "Venta",
-        localField: "venta",
-        foreignField: "_id",
-        as: "ventasInfo",
-        pipeline: [{ $project: { _id: 0, vendedor: 1 } }],
-      },
-    },
+    { $match: match },
     {
       $addFields: {
-        sellerIds: {
-          $setUnion: [
-            {
-              $map: {
-                input: { $ifNull: ["$ventasInfo", []] },
-                as: "v",
-                in: "$$v.vendedor",
-              },
-            },
-            {
-              $map: {
-                input: { $ifNull: ["$productos_temporales", []] },
-                as: "t",
-                in: "$$t.id_vendedor",
-              },
-            },
-          ],
-        },
-        fechaBase: { $ifNull: ["$hora_entrega_real", "$fecha_pedido"] },
-      },
-    },
-    {
-      $addFields: {
-        sellerIds: {
-          $filter: {
-            input: "$sellerIds",
-            as: "sellerId",
-            cond: { $ne: ["$$sellerId", null] },
+        mes: {
+          $dateToString: {
+            format: "%Y-%m",
+            date: "$fecha_pedido",
+            timezone: "America/La_Paz",
           },
         },
-        month: {
-          $toInt: {
-            $dateToString: {
-              format: "%m",
-              date: "$fechaBase",
-              timezone: "America/La_Paz",
-            },
-          },
-        },
-      },
-    },
-    {
-      $match: {
-        $expr: { $gt: [{ $size: "$sellerIds" }, 0] },
       },
     },
   ];
 
-  if (months.length) {
-    pipeline.push({ $match: { month: { $in: months } } });
+  if (meses.length) {
+    pipeline.push({ $match: { mes: { $in: meses } } });
   }
 
   pipeline.push(
-    { $unwind: "$sellerIds" },
-    { $match: { sellerIds: { $in: sellerObjectIds } } },
-    {
-      $group: {
-        _id: { seller: "$sellerIds", month: "$month" },
-        entregas_simples: { $sum: 1 },
-      },
-    },
     {
       $lookup: {
         from: "Vendedor",
-        localField: "_id.seller",
+        localField: "id_vendedor",
         foreignField: "_id",
         as: "sellerInfo",
-        pipeline: [{ $project: { _id: 0, nombre: 1, apellido: 1 } }],
+        pipeline: [{ $project: { _id: 1, nombre: 1, apellido: 1 } }],
       },
     },
     { $unwind: { path: "$sellerInfo", preserveNullAndEmptyArrays: true } },
     {
+      $lookup: {
+        from: "Sucursal",
+        localField: "sucursal",
+        foreignField: "_id",
+        as: "branchInfo",
+        pipeline: [{ $project: { _id: 1, nombre: 1 } }],
+      },
+    },
+    { $unwind: { path: "$branchInfo", preserveNullAndEmptyArrays: true } },
+    {
       $project: {
         _id: 0,
-        id_vendedor: { $toString: "$_id.seller" },
+        id_paquete: { $toString: "$_id" },
+        id_vendedor: {
+          $convert: { input: "$id_vendedor", to: "string", onError: "", onNull: "" },
+        },
         vendedor: {
           $trim: {
             input: {
@@ -1123,14 +1143,33 @@ async fetchEntregasSimplesPorVendedorYMes(opts: { sellerIds: string[]; months?: 
             },
           },
         },
-        month: "$_id.month",
-        entregas_simples: 1,
+        vendedor_cargado: { $ifNull: ["$vendedor", ""] },
+        mes: "$mes",
+        fecha_pedido: "$fecha_pedido",
+        numero_paquete: { $ifNull: ["$numero_paquete", 0] },
+        comprador: { $ifNull: ["$comprador", ""] },
+        telefono_comprador: {
+          $convert: { input: "$telefono_comprador", to: "string", onError: "", onNull: "" },
+        },
+        descripcion_paquete: { $ifNull: ["$descripcion_paquete", ""] },
+        package_size: { $ifNull: ["$package_size", "estandar"] },
+        precio_paquete: { $round: [{ $ifNull: ["$precio_paquete", 0] }, 2] },
+        amortizacion_vendedor: { $round: [{ $ifNull: ["$amortizacion_vendedor", 0] }, 2] },
+        deuda_comprador: { $round: [{ $ifNull: ["$deuda_comprador", 0] }, 2] },
+        esta_pagado: { $ifNull: ["$esta_pagado", "no"] },
+        metodo_pago: { $ifNull: ["$metodo_pago", ""] },
+        estado_pedido: { $ifNull: ["$estado_pedido", "En Espera"] },
+        delivered: { $ifNull: ["$delivered", false] },
+        id_sucursal: {
+          $convert: { input: "$sucursal", to: "string", onError: "", onNull: "" },
+        },
+        sucursal: { $ifNull: ["$branchInfo.nombre", ""] },
       },
     },
-    { $sort: { month: 1, vendedor: 1, id_vendedor: 1 } },
+    { $sort: { mes: 1, vendedor: 1, fecha_pedido: 1, numero_paquete: 1 } },
   );
 
-  return await PedidoModel.aggregate(pipeline).exec();
+  return await VentaExternaModel.aggregate(pipeline).exec();
 },
 
 

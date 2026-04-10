@@ -36,6 +36,7 @@ export interface IPedido {
   shipping_qr_code?: string;
   shipping_qr_payload?: string;
   shipping_qr_image_path?: string;
+  buyer_tracking_code?: string;
 
   venta: Types.ObjectId[];
 

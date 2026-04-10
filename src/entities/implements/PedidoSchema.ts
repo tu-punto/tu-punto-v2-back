@@ -117,6 +117,11 @@ const PedidoSchema = new Schema({
     type: String,
     default: ""
   },
+  buyer_tracking_code: {
+    type: String,
+    default: "",
+    index: true,
+  },
   venta: [{
     type: Types.ObjectId,
     ref: 'Venta'

@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import { QRService } from "./qr.service";
 import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatusHistorySchema";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
+import { NotificationService } from "./notification.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -211,7 +212,20 @@ const registerShipping = async (shipping: any) => {
   if (!shipping.hora_entrega_real) {
     shipping.hora_entrega_real = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
-  return await ShippingRepository.registerShipping(shipping);
+  const savedShipping = await ShippingRepository.registerShipping(shipping);
+  const trackingCode = await NotificationService.ensureBuyerTrackingCode(savedShipping);
+
+  if (savedShipping && !(savedShipping as any).buyer_tracking_code) {
+    (savedShipping as any).buyer_tracking_code = trackingCode;
+  }
+
+  void NotificationService.handleShippingCreated(
+    typeof (savedShipping as any)?.toObject === "function"
+      ? (savedShipping as any).toObject()
+      : savedShipping
+  );
+
+  return savedShipping;
 };
 const getShippingById = async (id: string) => {
   return await ShippingRepository.findById(id);
@@ -361,7 +375,12 @@ const registerSaleToShipping = async (
 const updateShipping = async (
   newData: any,
   shippingId: string,
-  options?: { currentBranchId?: string | null }
+  options?: {
+    currentBranchId?: string | null;
+    source?: "qr" | "manual" | "system";
+    changedBy?: string;
+    note?: string;
+  }
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
@@ -398,6 +417,8 @@ const updateShipping = async (
 
   const wasDelivered = shipping.estado_pedido === "Entregado";
   const willBeDelivered = newData.estado_pedido === "Entregado";
+  const fromStatus = shipping.estado_pedido || "En Espera";
+  const toStatus = newData.estado_pedido || fromStatus;
   const nextShippingState = {
     ...(typeof (shipping as any)?.toObject === "function" ? (shipping as any).toObject() : shipping),
     ...newData,
@@ -428,6 +449,29 @@ const updateShipping = async (
   }
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
+
+  if (resShip && toStatus !== fromStatus) {
+    await ShippingStatusHistoryModel.create({
+      shippingId: shipping._id,
+      fromStatus,
+      toStatus,
+      changedBy: options?.changedBy,
+      note: options?.note,
+      source: options?.source || "manual",
+    });
+
+    void NotificationService.handleShippingStatusChange({
+      before:
+        typeof (shipping as any)?.toObject === "function"
+          ? (shipping as any).toObject()
+          : shipping,
+      after:
+        typeof (resShip as any)?.toObject === "function"
+          ? (resShip as any).toObject()
+          : resShip,
+    });
+  }
+
   return resShip;
 };
 
@@ -790,16 +834,10 @@ const transitionShippingStatusByQR = async (params: {
   }
 
   await updateShipping(updateData, String(shipping._id), {
-    currentBranchId: params.currentBranchId
-  });
-
-  await ShippingStatusHistoryModel.create({
-    shippingId: shipping._id,
-    fromStatus,
-    toStatus,
+    currentBranchId: params.currentBranchId,
+    source: "qr",
     changedBy: params.changedBy,
     note: params.note,
-    source: "qr"
   });
 
   return {

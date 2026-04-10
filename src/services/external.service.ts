@@ -135,6 +135,7 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
   );
 
   return {
+    id_vendedor: input.id_vendedor,
     carnet_vendedor: toTrimmed(input.carnet_vendedor ?? input.carnet ?? "SN"),
     vendedor: toTrimmed(input.vendedor ?? input.nombre_vendedor ?? "Externo"),
     telefono_vendedor: toTrimmed(input.telefono_vendedor) || undefined,
@@ -144,6 +145,12 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
     telefono_comprador: buyerPhone || undefined,
     fecha_pedido: normalizeExternalDate(input.fecha_pedido) as unknown as Date,
     sucursal: input.sucursal ?? input.id_sucursal,
+    service_origin: "external",
+    package_size: "estandar",
+    precio_paquete_unitario: packagePrice,
+    amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
+    deuda_comprador: toNumber(input.deuda_comprador ?? input.monto_paga_comprador ?? packagePrice, packagePrice),
+    metodo_pago: "",
     precio_paquete: packagePrice,
     precio_total: packagePrice,
     esta_pagado: paid,
@@ -248,6 +255,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     estado_pedido: status,
     delivered,
     is_external: true,
+    service_origin: "external",
   };
 
   if (externalSale.fecha_pedido) {

@@ -3,8 +3,15 @@ import { IVentaExterna } from "../entities/IVentaExterna";
 import { IVentaExternaDocument } from "../entities/documents/IVentaExternaDocument";
 import { Types } from "mongoose";
 
+const EXTERNAL_SERVICE_FILTER = {
+    $or: [
+        { service_origin: { $exists: false } },
+        { service_origin: "external" }
+    ]
+};
+
 const getAllExternalSales = async (): Promise<IVentaExternaDocument[]> => {
-    return await VentaExternaModel.find().populate(
+    return await VentaExternaModel.find(EXTERNAL_SERVICE_FILTER).populate(
         'sucursal'
     );
 }
@@ -21,7 +28,7 @@ const getExternalSalesList = async (params: {
     const safePage = Math.max(1, Number(params.page) || 1);
     const safeLimit = Math.min(200, Math.max(1, Number(params.limit) || 50));
 
-    const match: any = {};
+    const match: any = { ...EXTERNAL_SERVICE_FILTER };
     if (params.status) {
         match.estado_pedido = params.status;
     }
@@ -57,7 +64,11 @@ const getExternalSalesList = async (params: {
 }
 
 const getExternalSaleByID = async (id: string): Promise<IVentaExternaDocument | null> => {
-    return await VentaExternaModel.findById(id).populate('sucursal');
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await VentaExternaModel.findOne({
+        _id: new Types.ObjectId(id),
+        ...EXTERNAL_SERVICE_FILTER
+    }).populate('sucursal');
 }
 
 const getExternalSalesByDateRange = async (
@@ -68,7 +79,7 @@ const getExternalSalesByDateRange = async (
     const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
     if (!from && !to && !validSucursalIds.length) return await getAllExternalSales();
 
-    const match: any = {};
+    const match: any = { ...EXTERNAL_SERVICE_FILTER };
     if (from || to) {
         match.fecha_pedido = {};
         if (from) match.fecha_pedido.$gte = from;
@@ -97,12 +108,20 @@ const registerExternalSales = async (externalSales: IVentaExterna[]): Promise<IV
 }
 
 const deleteExternalSaleByID = async (externalSaleID: string) => {
-    return await VentaExternaModel.findByIdAndDelete(externalSaleID);
+    if (!Types.ObjectId.isValid(externalSaleID)) return null;
+    return await VentaExternaModel.findOneAndDelete({
+        _id: new Types.ObjectId(externalSaleID),
+        ...EXTERNAL_SERVICE_FILTER
+    });
 }
 
 const updateExternalSaleByID = async (id: string, externalSale: IVentaExterna): Promise<IVentaExternaDocument | null> => {
-    return await VentaExternaModel.findByIdAndUpdate(
-        id,
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await VentaExternaModel.findOneAndUpdate(
+        {
+            _id: new Types.ObjectId(id),
+            ...EXTERNAL_SERVICE_FILTER
+        },
         externalSale,
         { new: true }
     ).populate('sucursal');

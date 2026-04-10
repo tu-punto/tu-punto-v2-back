@@ -18,6 +18,12 @@ import {
   sellerHasSystemAccess,
   SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
 } from "../helpers/sellerAccess";
+import {
+  hasCommissionServiceEnabled,
+  hasSimplePackageServiceEnabled,
+  hasConfiguredCommissionService,
+  hasConfiguredSimplePackageService,
+} from "../utils/seller.utils";
 
 dotenv.config();
 
@@ -42,6 +48,8 @@ type SellerProductInfoAccessShape = {
   }[];
   comision_porcentual?: number;
   comision_fija?: number;
+  amortizacion?: number;
+  precio_paquete?: number;
 };
 
 const serializeUserForClient = (user: any) => {
@@ -175,6 +183,19 @@ export const getUserInfoController = async (req: Request, res: Response) => {
         comision_porcentual: Number(sellerAccessData?.comision_porcentual ?? 0),
         comision_fija: Number(sellerAccessData?.comision_fija ?? 0),
       });
+      userObj.seller_has_commission_service = hasConfiguredCommissionService({
+        pago_sucursales: Array.isArray(sellerAccessData?.pago_sucursales)
+          ? sellerAccessData.pago_sucursales
+          : [],
+      });
+      userObj.seller_has_simple_package_service = hasConfiguredSimplePackageService({
+        pago_sucursales: Array.isArray(sellerAccessData?.pago_sucursales)
+          ? sellerAccessData.pago_sucursales
+          : [],
+      });
+      userObj.seller_can_access_inventory = !userObj.seller_has_simple_package_service;
+      userObj.seller_amortizacion = Number(sellerAccessData?.amortizacion ?? 0);
+      userObj.seller_precio_paquete = Number(sellerAccessData?.precio_paquete ?? 0);
     }
   }
     //console.log("Enviando al frontend:", userObj);

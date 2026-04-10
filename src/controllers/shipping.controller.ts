@@ -103,9 +103,11 @@ const updateShipping = async (req: Request, res: Response) => {
   const newData = req.body;
 
   try {
-    const auth = res.locals.auth as { sucursalId?: string } | undefined;
+    const auth = res.locals.auth as { id?: string; role?: string; sucursalId?: string } | undefined;
     const shippingUpdated = await ShippingService.updateShipping(newData, id, {
-      currentBranchId: auth?.sucursalId
+      currentBranchId: auth?.sucursalId,
+      source: "manual",
+      changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
     });
     res.json({ success: true, shippingUpdated });
   } catch (error) {
@@ -250,14 +252,14 @@ export const transitionShippingStatusByQRController = async (req: Request, res: 
   }
 
   try {
-    const auth = res.locals.auth as { sucursalId?: string } | undefined;
+    const auth = res.locals.auth as { id?: string; role?: string; sucursalId?: string } | undefined;
     const result = await ShippingService.transitionShippingStatusByQR({
       payload,
       shippingCode,
       shippingId,
       toStatus,
       currentBranchId: auth?.sucursalId,
-      changedBy,
+      changedBy: changedBy || (auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined),
       note
     });
 

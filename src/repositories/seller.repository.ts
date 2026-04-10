@@ -45,6 +45,8 @@ const findAllBasic = async (params?: {
     mail: 1,
     comision_porcentual: 1,
     comision_fija: 1,
+    amortizacion: 1,
+    precio_paquete: 1,
     fecha_vigencia: 1,
     pago_sucursales: 1,
     saldo_pendiente: 1,

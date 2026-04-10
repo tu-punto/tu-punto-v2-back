@@ -15,6 +15,8 @@ export interface PagoSucursal {
   activo?: boolean;
 }
 
+const isActiveBranchPayment = (payment: PagoSucursal) => payment?.activo !== false;
+
 export const calcSucursalSubtotal = (p: PagoSucursal): number =>
   (p.alquiler ?? 0) +
   (p.exhibicion ?? 0) +
@@ -25,14 +27,14 @@ export const calcSellerDebt = (sellerLike: {
   pago_sucursales: PagoSucursal[];
 }): number =>
   sellerLike.pago_sucursales
-    .filter((p) => p.activo)
+    .filter((p) => isActiveBranchPayment(p))
     .reduce((tot, p) => tot + calcSucursalSubtotal(p), 0);
 
 export const calcPagoMensual = (seller: {
   pago_sucursales: PagoSucursal[];
 }): number =>
   seller.pago_sucursales
-    .filter((p) => p.activo)
+    .filter((p) => isActiveBranchPayment(p))
     .reduce(
       (tot, p) =>
         tot +
@@ -43,13 +45,45 @@ export const calcPagoMensual = (seller: {
       0
     );
 
+export const hasCommissionServiceEnabled = (seller: {
+  pago_sucursales: PagoSucursal[];
+}): boolean =>
+  (seller?.pago_sucursales || []).some(
+    (payment) =>
+      isActiveBranchPayment(payment) &&
+      Number(payment?.alquiler ?? 0) > 0 &&
+      Number(payment?.exhibicion ?? 0) > 0
+  );
+
+export const hasSimplePackageServiceEnabled = (seller: {
+  pago_sucursales: PagoSucursal[];
+}): boolean =>
+  (seller?.pago_sucursales || []).some(
+    (payment) => isActiveBranchPayment(payment) && Number(payment?.entrega_simple ?? 0) > 0
+  );
+
+export const hasConfiguredCommissionService = (seller: {
+  pago_sucursales: PagoSucursal[];
+}): boolean =>
+  (seller?.pago_sucursales || []).some(
+    (payment) =>
+      Number(payment?.alquiler ?? 0) > 0 &&
+      Number(payment?.exhibicion ?? 0) > 0
+  );
+
+export const hasConfiguredSimplePackageService = (seller: {
+  pago_sucursales: PagoSucursal[];
+}): boolean =>
+  (seller?.pago_sucursales || []).some(
+    (payment) => Number(payment?.entrega_simple ?? 0) > 0
+  );
+
 export const canAccessSellerProductInfo = (seller: {
   pago_sucursales: PagoSucursal[];
   comision_porcentual?: number;
   comision_fija?: number;
 }): boolean => {
-  const pagoMensual = calcPagoMensual(seller);
-  const hasMonthlyPayment = pagoMensual > 0;
+  const hasMonthlyPayment = hasCommissionServiceEnabled(seller);
   const hasCommission =
     Number(seller.comision_porcentual ?? 0) > 0 || Number(seller.comision_fija ?? 0) > 0;
 

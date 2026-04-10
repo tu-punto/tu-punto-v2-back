@@ -20,6 +20,10 @@ import externalSaleRouter from "./routes/external.routes";
 import financeFluxCategoryRouter from "./routes/financeFluxCategory.routes";
 import recurringExpenseRouter from "./routes/recurringExpense.routes";
 import qr from "./routes/qr.routes";
+import notificationRouter from "./routes/notification.routes";
+import trackingRouter from "./routes/tracking.routes";
+import serviceAnnouncementRouter from "./routes/serviceAnnouncement.routes";
+import simplePackageRouter from "./routes/simplePackage.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -44,10 +48,14 @@ router.use("/pdf", requireAuth, requireRole("admin"), pdfRouter);
 router.use("/paymentProof", requireAuth, requireRole("admin", "seller"), paymentProofRouter);
 router.use("/entry", requireAuth, requireRole("admin", "operator", "seller"), entryRouter);
 router.use("/user", userRouter);
+  router.use("/notification", notificationRouter);
+  router.use("/tracking", trackingRouter);
+  router.use("/service-announcements", serviceAnnouncementRouter);
 router.use("/whats", requireAuth, requireRole("admin"), whatsRouter);
 router.use("/boxClose", requireAuth, requireRole("admin", "operator"), boxCloseRouter);
 router.use("/dailyEffective", requireAuth, requireRole("admin", "operator"), dailyEffectiveRouter);
 router.use("/external", requireAuth, requireRole("admin", "operator"), externalSaleRouter)
+router.use("/simple-packages", requireAuth, requireRole("admin", "operator", "seller"), simplePackageRouter)
 
 router.use("/qr", qr);
 

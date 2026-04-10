@@ -1,7 +1,15 @@
 import { SellerRepository } from "../repositories/seller.repository";
 import { ProductRepository } from "../repositories/product.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
-import { calcPagoMensual, calcSellerDebt, canAccessSellerProductInfo } from "../utils";
+import {
+  calcPagoMensual,
+  calcSellerDebt,
+  canAccessSellerProductInfo,
+  hasConfiguredCommissionService,
+  hasConfiguredSimplePackageService,
+  hasCommissionServiceEnabled,
+  hasSimplePackageServiceEnabled,
+} from "../utils";
 import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { Types } from "mongoose";
 import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
@@ -131,6 +139,23 @@ const getAllSellersBasic = async (params?: {
   });
 };
 
+const normalizeSellerServiceValues = (seller: any) => {
+  const hasCommissionService = hasConfiguredCommissionService({
+    pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
+  });
+  const hasSimplePackageService = hasConfiguredSimplePackageService({
+    pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
+  });
+
+  return {
+    ...seller,
+    comision_porcentual: hasCommissionService ? Number(seller?.comision_porcentual ?? 0) : 0,
+    comision_fija: hasCommissionService ? Number(seller?.comision_fija ?? 0) : 0,
+    amortizacion: hasSimplePackageService ? Number(seller?.amortizacion ?? 0) : 0,
+    precio_paquete: hasSimplePackageService ? Number(seller?.precio_paquete ?? 0) : 0,
+  };
+};
+
 const getSeller = async (sellerId: string) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) {
@@ -146,10 +171,11 @@ const getSeller = async (sellerId: string) => {
 };
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
+  const normalizedSeller = normalizeSellerServiceValues(seller);
   const montoTotal = calcSellerDebt(seller);
-  const deuda = seller.esDeuda ? montoTotal : 0;
+  const deuda = normalizedSeller.esDeuda ? montoTotal : 0;
 
-  const nuevo = await SellerRepository.registerSeller({ ...seller, deuda });
+  const nuevo = await SellerRepository.registerSeller({ ...normalizedSeller, deuda });
 
   await saveFlux({
     tipo: "INGRESO",
@@ -159,7 +185,7 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
     )}`,
     monto: montoTotal,
     fecha: new Date(),
-    esDeuda: seller.esDeuda,
+    esDeuda: normalizedSeller.esDeuda,
     id_vendedor: new Types.ObjectId(nuevo._id),
   });
 
@@ -167,7 +193,7 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
 };
 
 const updateSeller = async (id: string, data: any) => {
-  return await SellerRepository.updateSeller(id, data.newData);
+  return await SellerRepository.updateSeller(id, normalizeSellerServiceValues(data.newData));
 };
 const syncSellerProductBranches = async (
   sellerId: string,

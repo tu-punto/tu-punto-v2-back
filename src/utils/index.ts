@@ -3,5 +3,9 @@ export {
   calcSellerDebt,
   calcSucursalSubtotal,
   calcPagoMensual,
-  canAccessSellerProductInfo
+  canAccessSellerProductInfo,
+  hasCommissionServiceEnabled,
+  hasSimplePackageServiceEnabled,
+  hasConfiguredCommissionService,
+  hasConfiguredSimplePackageService
 } from './seller.utils';
