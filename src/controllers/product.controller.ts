@@ -7,18 +7,19 @@ import { ProductVariantKeyService } from "../services/productVariantKey.service"
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { deleteFileFromS3, uploadVariantImageToS3 } from "../helpers/S3Client";
-import { canAccessSellerProductInfo } from "../utils";
+import { canAccessSellerProductInfoByCommission } from "../utils";
 
 type SellerProductInfoAccessShape = {
   pago_sucursales?: {
     alquiler?: number;
     exhibicion?: number;
     delivery?: number;
-    entrega_simple?: number;
-    activo?: boolean;
+  entrega_simple?: number;
+  activo?: boolean;
   }[];
   comision_porcentual?: number;
   comision_fija?: number;
+  fecha_vigencia?: unknown;
 };
 
 const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null> => {
@@ -51,12 +52,10 @@ const canAuthenticatedSellerAccessProductInfo = async (sellerId: string): Promis
   }
 
   const sellerAccessData = seller as unknown as SellerProductInfoAccessShape;
-  return canAccessSellerProductInfo({
-    pago_sucursales: Array.isArray(sellerAccessData.pago_sucursales)
-      ? sellerAccessData.pago_sucursales
-      : [],
+  return canAccessSellerProductInfoByCommission({
     comision_porcentual: Number(sellerAccessData.comision_porcentual ?? 0),
     comision_fija: Number(sellerAccessData.comision_fija ?? 0),
+    fecha_vigencia: sellerAccessData.fecha_vigencia,
   });
 };
 
@@ -880,10 +879,10 @@ export const getSellerProductInfoList = async (req: Request, res: Response) => {
     }
     const hasAccess = await canAuthenticatedSellerAccessProductInfo(sellerId);
     if (!hasAccess) {
-      return res.status(403).json({
-        success: false,
-        message: "Esta funcion requiere pago mensual y comision activos"
-      });
+        return res.status(403).json({
+          success: false,
+          message: "Esta funcion requiere vigencia y comision activas"
+        });
     }
 
     const result = await ProductService.getSellerProductInfoListPage(
@@ -923,10 +922,10 @@ export const getAdminSellerProductInfoList = async (req: Request, res: Response)
 
     const hasAccess = await canAuthenticatedSellerAccessProductInfo(sellerId);
     if (!hasAccess) {
-      return res.status(403).json({
-        success: false,
-        message: "El vendedor seleccionado no tiene habilitada esta funcion"
-      });
+        return res.status(403).json({
+          success: false,
+          message: "El vendedor seleccionado no tiene vigencia o comision habilitadas"
+        });
     }
 
     const result = await ProductService.getSellerProductInfoListPage(
@@ -1091,10 +1090,10 @@ export const updateVariantExtrasBySeller = async (req: Request, res: Response) =
     }
     const hasAccess = await canAuthenticatedSellerAccessProductInfo(sellerId);
     if (!hasAccess) {
-      return res.status(403).json({
-        success: false,
-        message: "Esta funcion requiere pago mensual y comision activos"
-      });
+        return res.status(403).json({
+          success: false,
+          message: "Esta funcion requiere vigencia y comision activas"
+        });
     }
     const { productId, sucursalId, variantKey } = req.params;
     const { descripcion, uso } = req.body;

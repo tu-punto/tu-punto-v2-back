@@ -12,7 +12,7 @@ import {
   isSuperadminRole,
   normalizeUserRole,
 } from "../constants/roles";
-import { canAccessSellerProductInfo } from "../utils";
+import { canAccessSellerProductInfoByCommission } from "../utils";
 import {
   resolveSellerByUserData,
   sellerHasSystemAccess,
@@ -50,6 +50,7 @@ type SellerProductInfoAccessShape = {
   comision_fija?: number;
   amortizacion?: number;
   precio_paquete?: number;
+  fecha_vigencia?: unknown;
 };
 
 const serializeUserForClient = (user: any) => {
@@ -176,12 +177,10 @@ export const getUserInfoController = async (req: Request, res: Response) => {
       const sellerAccessData = vendedor.toObject?.() as SellerProductInfoAccessShape | undefined;
       userObj.id_vendedor = vendedor._id;
       userObj.nombre_vendedor = `${vendedor.nombre} ${vendedor.apellido}`;
-      userObj.can_access_seller_product_info = canAccessSellerProductInfo({
-        pago_sucursales: Array.isArray(sellerAccessData?.pago_sucursales)
-          ? sellerAccessData.pago_sucursales
-          : [],
+      userObj.can_access_seller_product_info = canAccessSellerProductInfoByCommission({
         comision_porcentual: Number(sellerAccessData?.comision_porcentual ?? 0),
         comision_fija: Number(sellerAccessData?.comision_fija ?? 0),
+        fecha_vigencia: sellerAccessData?.fecha_vigencia,
       });
       userObj.seller_has_commission_service = hasConfiguredCommissionService({
         pago_sucursales: Array.isArray(sellerAccessData?.pago_sucursales)

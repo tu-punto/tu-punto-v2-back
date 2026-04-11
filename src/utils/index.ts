@@ -4,6 +4,7 @@ export {
   calcSucursalSubtotal,
   calcPagoMensual,
   canAccessSellerProductInfo,
+  canAccessSellerProductInfoByCommission,
   hasCommissionServiceEnabled,
   hasSimplePackageServiceEnabled,
   hasConfiguredCommissionService,

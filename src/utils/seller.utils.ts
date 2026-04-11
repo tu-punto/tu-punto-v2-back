@@ -6,6 +6,7 @@ import { IVenta } from "../entities/IVenta";
 import { FinanceFluxService } from "../services/financeFlux.service";
 import { SaleService } from "../services/sale.service";
 import { SellerService } from "../services/seller.service";
+import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 
 export interface PagoSucursal {
   alquiler?: number;
@@ -88,6 +89,19 @@ export const canAccessSellerProductInfo = (seller: {
     Number(seller.comision_porcentual ?? 0) > 0 || Number(seller.comision_fija ?? 0) > 0;
 
   return hasMonthlyPayment && hasCommission;
+};
+
+export const canAccessSellerProductInfoByCommission = (seller: {
+  comision_porcentual?: number;
+  comision_fija?: number;
+  fecha_vigencia?: unknown;
+}): boolean => {
+  const lifecycleStatus = getSellerLifecycleStatus(seller?.fecha_vigencia);
+  const hasValidLifecycle = lifecycleStatus === "activo" || lifecycleStatus === "debe_renovar";
+  const hasCommission =
+    Number(seller?.comision_porcentual ?? 0) > 0 || Number(seller?.comision_fija ?? 0) > 0;
+
+  return hasValidLifecycle && hasCommission;
 };
 
 export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {

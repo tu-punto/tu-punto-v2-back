@@ -4,7 +4,7 @@ import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import {
   calcPagoMensual,
   calcSellerDebt,
-  canAccessSellerProductInfo,
+  canAccessSellerProductInfoByCommission,
   hasConfiguredCommissionService,
   hasConfiguredSimplePackageService,
   hasCommissionServiceEnabled,
@@ -96,10 +96,10 @@ const getAllSellersBasic = async (params?: {
   const sellersWithProductInfoAccess = !params?.onlyProductInfoAccess
     ? sellers
     : sellers.filter((seller: any) =>
-        canAccessSellerProductInfo({
-          pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
+        canAccessSellerProductInfoByCommission({
           comision_porcentual: Number(seller?.comision_porcentual ?? 0),
           comision_fija: Number(seller?.comision_fija ?? 0),
+          fecha_vigencia: seller?.fecha_vigencia,
         })
       );
 
