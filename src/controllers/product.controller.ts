@@ -44,7 +44,7 @@ const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null>
 
 const canAuthenticatedSellerAccessProductInfo = async (sellerId: string): Promise<boolean> => {
   const seller = await VendedorModel.findById(sellerId)
-    .select("pago_sucursales comision_porcentual comision_fija")
+    .select("pago_sucursales comision_porcentual comision_fija fecha_vigencia")
     .lean();
 
   if (!seller) {
