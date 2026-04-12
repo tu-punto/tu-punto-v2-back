@@ -69,6 +69,11 @@ const VentaExternaSchema = new Schema({
         required: false,
         default: 0
     },
+    saldo_por_paquete: {
+        type: Number,
+        required: false,
+        default: 0
+    },
     metodo_pago: {
         type: String,
         enum: ["", "efectivo", "qr"],
@@ -87,6 +92,16 @@ const VentaExternaSchema = new Schema({
         ref: 'Sucursal',
         required: false
     },
+    origen_sucursal: {
+        type: Schema.Types.ObjectId,
+        ref: 'Sucursal',
+        required: false
+    },
+    destino_sucursal: {
+        type: Schema.Types.ObjectId,
+        ref: 'Sucursal',
+        required: false
+    },
     nombre_flota: {
         type: String,
         required: false
@@ -99,6 +114,11 @@ const VentaExternaSchema = new Schema({
     precio_paquete: {
         type: Number,
         required: true,
+        default: 0
+    },
+    precio_entre_sucursal: {
+        type: Number,
+        required: false,
         default: 0
     },
 

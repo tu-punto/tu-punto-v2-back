@@ -24,8 +24,10 @@ export interface IVentaExterna {
     precio_paquete_unitario?: number;
     amortizacion_vendedor?: number;
     deuda_comprador?: number;
+    saldo_por_paquete?: number;
     metodo_pago?: PackagePaymentMethod;
     precio_paquete: number;
+    precio_entre_sucursal?: number;
     precio_total: number;
     esta_pagado: ExternalPaidStatus;
     monto_paga_vendedor?: number;
@@ -42,6 +44,8 @@ export interface IVentaExterna {
     direccion_delivery?: string;
     ciudad_envio?: string;
     sucursal?: Types.ObjectId;
+    origen_sucursal?: Types.ObjectId;
+    destino_sucursal?: Types.ObjectId;
     nombre_flota?: string;
     precio_servicio?: number;
 }

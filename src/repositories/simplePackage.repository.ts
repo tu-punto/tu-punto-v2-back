@@ -33,7 +33,23 @@ const getSimplePackagesList = async (params: {
   return await VentaExternaModel.find(match)
     .sort({ fecha_pedido: -1, numero_paquete: 1 })
     .populate({ path: "sucursal", select: "_id nombre" })
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" })
     .lean();
+};
+
+const getNextPackageNumberForSeller = async (sellerId: string) => {
+  if (!Types.ObjectId.isValid(sellerId)) return 1;
+
+  const lastRow = await VentaExternaModel.findOne({
+    ...SIMPLE_PACKAGE_FILTER,
+    id_vendedor: new Types.ObjectId(sellerId),
+  })
+    .sort({ numero_paquete: -1 })
+    .select("numero_paquete")
+    .lean();
+
+  return Number(lastRow?.numero_paquete || 0) + 1;
 };
 
 const registerSimplePackages = async (rows: IVentaExterna[]): Promise<IVentaExternaDocument[]> => {
@@ -54,7 +70,10 @@ const updateSimplePackageByID = async (
     },
     payload,
     { new: true }
-  ).populate("sucursal");
+  )
+    .populate("sucursal")
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" });
 };
 
 const deleteSimplePackageByID = async (id: string) => {
@@ -86,6 +105,7 @@ const getUploadedSimplePackageSellers = async () => {
 export const SimplePackageRepository = {
   getSimplePackageByID,
   getSimplePackagesList,
+  getNextPackageNumberForSeller,
   registerSimplePackages,
   updateSimplePackageByID,
   deleteSimplePackageByID,

@@ -153,6 +153,7 @@ const normalizeSellerServiceValues = (seller: any) => {
     comision_fija: hasCommissionService ? Number(seller?.comision_fija ?? 0) : 0,
     amortizacion: hasSimplePackageService ? Number(seller?.amortizacion ?? 0) : 0,
     precio_paquete: hasSimplePackageService ? Number(seller?.precio_paquete ?? 0) : 0,
+    saldo_por_paquete: hasSimplePackageService ? Number(seller?.saldo_por_paquete ?? 0) : 0,
   };
 };
 
