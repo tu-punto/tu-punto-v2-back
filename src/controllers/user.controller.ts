@@ -50,7 +50,6 @@ type SellerProductInfoAccessShape = {
   comision_fija?: number;
   amortizacion?: number;
   precio_paquete?: number;
-  saldo_por_paquete?: number;
   fecha_vigencia?: unknown;
 };
 
@@ -196,7 +195,6 @@ export const getUserInfoController = async (req: Request, res: Response) => {
       userObj.seller_can_access_inventory = !userObj.seller_has_simple_package_service;
       userObj.seller_amortizacion = Number(sellerAccessData?.amortizacion ?? 0);
       userObj.seller_precio_paquete = Number(sellerAccessData?.precio_paquete ?? 0);
-      userObj.seller_saldo_por_paquete = Number(sellerAccessData?.saldo_por_paquete ?? 0);
     }
   }
     //console.log("Enviando al frontend:", userObj);

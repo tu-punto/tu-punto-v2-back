@@ -36,7 +36,6 @@ export interface IVendedor {
     comision_fija: number;
     amortizacion: number;
     precio_paquete: number;
-    saldo_por_paquete: number;
     fecha: Date;
     fecha_vigencia: Date;
     almacen_caja: number;

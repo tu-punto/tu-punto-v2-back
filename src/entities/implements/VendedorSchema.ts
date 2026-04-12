@@ -97,10 +97,6 @@ export const VendedorSchema = new Schema({
     type: Number,
     default: 0
   },
-  saldo_por_paquete: {
-    type: Number,
-    default: 0
-  },
   fecha: {
     type: Date,
     default: Date.now

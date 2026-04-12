@@ -1,6 +1,7 @@
 import moment from "moment-timezone";
 import { Types } from "mongoose";
 import { IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { SellerRepository } from "../repositories/seller.repository";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
@@ -92,6 +93,17 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
     };
   }
 
+  if (String(originBranchId) === String(destinationBranchId)) {
+    const branch = await SucursalModel.findById(originBranchId).select("nombre").lean();
+    const originBranchName = String((branch as any)?.nombre || "").trim();
+
+    return {
+      precio_entre_sucursal: 0,
+      originBranchName,
+      destinationBranchName: originBranchName,
+    };
+  }
+
   const route = await SimplePackageBranchPriceRepository.findPriceByRoute(originBranchId, destinationBranchId);
   if (!route) {
     throw new Error("No existe un precio configurado entre las sucursales seleccionadas");
@@ -145,6 +157,7 @@ const buildSimplePackageRecord = async (params: {
   ensureDescription(row);
 
   const packageSize = normalizePackageSize(row?.package_size ?? row?.tamano);
+  const saldoPorPaquete = roundCurrency(Math.max(0, toNumber(row?.saldo_por_paquete ?? 0)));
   const destinationBranchId = toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal);
   if (!destinationBranchId) {
     throw new Error(`Paquete ${index + 1}: debe seleccionar una sucursal destino`);
@@ -154,7 +167,7 @@ const buildSimplePackageRecord = async (params: {
   const pricing = buildPackagePricing(
     toNumber(seller?.precio_paquete ?? 0),
     toNumber(seller?.amortizacion ?? 0),
-    toNumber(seller?.saldo_por_paquete ?? 0),
+    saldoPorPaquete,
     packageSize,
     branchRoutePricing.precio_entre_sucursal
   );
@@ -305,11 +318,20 @@ const updateSimplePackageByID = async (params: {
       (existing as any)?.destino_sucursal?._id ??
       existing.destino_sucursal
   );
+  const nextSaldoPorPaquete = roundCurrency(
+    Math.max(
+      0,
+      toNumber(
+        role === "seller" ? params.payload?.saldo_por_paquete ?? existing.saldo_por_paquete : existing.saldo_por_paquete,
+        0
+      )
+    )
+  );
   const branchRoutePricing = await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
   const pricing = buildPackagePricing(
     toNumber(existing.precio_paquete_unitario, 0),
     toNumber(existing.amortizacion_vendedor, 0),
-    toNumber(existing.saldo_por_paquete, 0),
+    nextSaldoPorPaquete,
     nextPackageSize,
     branchRoutePricing.precio_entre_sucursal
   );
@@ -337,6 +359,7 @@ const updateSimplePackageByID = async (params: {
     updatePayload.comprador = nextBuyer || undefined;
     updatePayload.telefono_comprador = nextPhone || undefined;
     updatePayload.descripcion_paquete = nextDescription;
+    updatePayload.saldo_por_paquete = nextSaldoPorPaquete;
   }
 
   if (isPrivileged) {
