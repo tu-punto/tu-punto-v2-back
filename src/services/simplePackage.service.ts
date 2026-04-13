@@ -84,6 +84,26 @@ const resolveSeller = async (sellerId: string) => {
   return seller;
 };
 
+const getSellerSimpleBranchIds = (seller: any) =>
+  new Set(
+    (Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [])
+      .filter((payment: any) => Number(payment?.entrega_simple ?? 0) > 0)
+      .map((payment: any) => String(payment?.id_sucursal?._id || payment?.id_sucursal || "").trim())
+      .filter(Boolean)
+  );
+
+const ensureSellerSimpleBranch = (seller: any, branchId?: string, label = "La sucursal") => {
+  const normalizedBranchId = toTrimmed(branchId);
+  if (!normalizedBranchId) {
+    throw new Error(`${label} es obligatoria`);
+  }
+
+  const allowedBranches = getSellerSimpleBranchIds(seller);
+  if (!allowedBranches.has(normalizedBranchId)) {
+    throw new Error(`${label} no esta habilitada para entregas simples en este vendedor`);
+  }
+};
+
 const resolveBranchRoutePricing = async (originBranchId?: string, destinationBranchId?: string) => {
   if (!originBranchId || !destinationBranchId) {
     return {
@@ -151,10 +171,12 @@ const buildSimplePackageRecord = async (params: {
   seller: any;
   sellerId: string;
   originBranchId?: string;
+  allowManualBranchPrice?: boolean;
 }) => {
-  const { row, index, packageNumber, seller, sellerId, originBranchId } = params;
+  const { row, index, packageNumber, seller, sellerId, originBranchId, allowManualBranchPrice } = params;
   ensureBuyerIdentity(row);
   ensureDescription(row);
+  ensureSellerSimpleBranch(seller, originBranchId, "La sucursal de origen");
 
   const packageSize = normalizePackageSize(row?.package_size ?? row?.tamano);
   const saldoPorPaquete = roundCurrency(Math.max(0, toNumber(row?.saldo_por_paquete ?? 0)));
@@ -162,14 +184,24 @@ const buildSimplePackageRecord = async (params: {
   if (!destinationBranchId) {
     throw new Error(`Paquete ${index + 1}: debe seleccionar una sucursal destino`);
   }
+  ensureSellerSimpleBranch(seller, destinationBranchId, "La sucursal destino");
 
   const branchRoutePricing = await resolveBranchRoutePricing(originBranchId, destinationBranchId);
+  const branchRoutePrice =
+    String(originBranchId || "") === String(destinationBranchId || "")
+      ? 0
+      : allowManualBranchPrice &&
+          row?.precio_entre_sucursal !== undefined &&
+          row?.precio_entre_sucursal !== null &&
+          String(row?.precio_entre_sucursal).trim() !== ""
+        ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, branchRoutePricing.precio_entre_sucursal)))
+        : branchRoutePricing.precio_entre_sucursal;
   const pricing = buildPackagePricing(
     toNumber(seller?.precio_paquete ?? 0),
     toNumber(seller?.amortizacion ?? 0),
     saldoPorPaquete,
     packageSize,
-    branchRoutePricing.precio_entre_sucursal
+    branchRoutePrice
   );
 
   const paid = normalizePaidStatus(row?.esta_pagado);
@@ -216,8 +248,9 @@ const registerSimplePackages = async (params: {
   sellerId: string;
   paquetes: any[];
   originBranchId?: string;
+  role?: string;
 }) => {
-  const { sellerId, paquetes, originBranchId } = params;
+  const { sellerId, paquetes, originBranchId, role } = params;
   if (!Array.isArray(paquetes) || !paquetes.length) {
     throw new Error("Debe enviar al menos un paquete");
   }
@@ -233,6 +266,7 @@ const registerSimplePackages = async (params: {
         seller,
         sellerId,
         originBranchId,
+        allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
       })
     )
   );
@@ -247,14 +281,15 @@ const registerSimplePackages = async (params: {
 
 const getSimplePackagesList = async (params: {
   sellerId: string;
+  originBranchId?: string;
   from?: Date;
   to?: Date;
 }) => {
   return await SimplePackageRepository.getSimplePackagesList(params);
 };
 
-const getUploadedSimplePackageSellers = async () => {
-  return await SimplePackageRepository.getUploadedSimplePackageSellers();
+const getUploadedSimplePackageSellers = async (originBranchId?: string) => {
+  return await SimplePackageRepository.getUploadedSimplePackageSellers(originBranchId);
 };
 
 const getSimplePackageBranchPrices = async (originBranchId?: string) => {
@@ -303,6 +338,7 @@ const updateSimplePackageByID = async (params: {
   }
 
   const isPrivileged = role === "admin" || role === "operator" || role === "superadmin";
+  const seller = await resolveSeller(existingSellerId);
   const nextPackageSize = normalizePackageSize(params.payload?.package_size ?? existing.package_size);
   const nextOriginBranchId = toTrimmed(
     params.payload?.origen_sucursal_id ??
@@ -318,6 +354,8 @@ const updateSimplePackageByID = async (params: {
       (existing as any)?.destino_sucursal?._id ??
       existing.destino_sucursal
   );
+  ensureSellerSimpleBranch(seller, nextOriginBranchId, "La sucursal de origen");
+  ensureSellerSimpleBranch(seller, nextDestinationBranchId, "La sucursal destino");
   const nextSaldoPorPaquete = roundCurrency(
     Math.max(
       0,
@@ -327,13 +365,34 @@ const updateSimplePackageByID = async (params: {
       )
     )
   );
-  const branchRoutePricing = await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+  const manualBranchRoutePriceRaw = isPrivileged ? params.payload?.precio_entre_sucursal : undefined;
+  const hasManualBranchRoutePrice =
+    manualBranchRoutePriceRaw !== undefined &&
+    manualBranchRoutePriceRaw !== null &&
+    String(manualBranchRoutePriceRaw).trim() !== "";
+  const nextBranchRoutePrice =
+    String(nextOriginBranchId) === String(nextDestinationBranchId)
+      ? 0
+      : roundCurrency(
+          hasManualBranchRoutePrice
+            ? Math.max(0, toNumber(manualBranchRoutePriceRaw, Number(existing.precio_entre_sucursal || 0)))
+            : toNumber((await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)).precio_entre_sucursal, 0)
+        );
+  const branchRoutePricing =
+    String(nextOriginBranchId) === String(nextDestinationBranchId)
+      ? await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)
+      : hasManualBranchRoutePrice
+        ? {
+            ...(await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)),
+            precio_entre_sucursal: nextBranchRoutePrice,
+          }
+        : await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
   const pricing = buildPackagePricing(
     toNumber(existing.precio_paquete_unitario, 0),
     toNumber(existing.amortizacion_vendedor, 0),
     nextSaldoPorPaquete,
     nextPackageSize,
-    branchRoutePricing.precio_entre_sucursal
+    nextBranchRoutePrice
   );
 
   const updatePayload: Partial<IVentaExterna> = {
@@ -368,6 +427,7 @@ const updateSimplePackageByID = async (params: {
     updatePayload.esta_pagado = paid;
     updatePayload.metodo_pago = method;
     updatePayload.saldo_cobrar = paid === "si" ? 0 : pricing.deuda_comprador;
+    updatePayload.precio_entre_sucursal = pricing.precio_entre_sucursal;
   }
 
   return await SimplePackageRepository.updateSimplePackageByID(params.id, updatePayload);

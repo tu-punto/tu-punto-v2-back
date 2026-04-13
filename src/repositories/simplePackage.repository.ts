@@ -15,6 +15,7 @@ const getSimplePackageByID = async (id: string): Promise<IVentaExternaDocument |
 
 const getSimplePackagesList = async (params: {
   sellerId?: string;
+  originBranchId?: string;
   from?: Date;
   to?: Date;
 }) => {
@@ -22,6 +23,10 @@ const getSimplePackagesList = async (params: {
 
   if (params.sellerId && Types.ObjectId.isValid(params.sellerId)) {
     match.id_vendedor = new Types.ObjectId(params.sellerId);
+  }
+
+  if (params.originBranchId && Types.ObjectId.isValid(params.originBranchId)) {
+    match.origen_sucursal = new Types.ObjectId(params.originBranchId);
   }
 
   if (params.from || params.to) {
@@ -84,9 +89,14 @@ const deleteSimplePackageByID = async (id: string) => {
   });
 };
 
-const getUploadedSimplePackageSellers = async () => {
+const getUploadedSimplePackageSellers = async (originBranchId?: string) => {
+  const match: any = { ...SIMPLE_PACKAGE_FILTER };
+  if (originBranchId && Types.ObjectId.isValid(originBranchId)) {
+    match.origen_sucursal = new Types.ObjectId(originBranchId);
+  }
+
   return await VentaExternaModel.aggregate([
-    { $match: SIMPLE_PACKAGE_FILTER },
+    { $match: match },
     {
       $group: {
         _id: "$id_vendedor",

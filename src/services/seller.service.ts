@@ -89,6 +89,7 @@ const getAllSellersBasic = async (params?: {
   sucursalId?: string;
   sellerId?: string;
   onlyProductInfoAccess?: boolean;
+  onlySimplePackageAccess?: boolean;
   includeProductInfoStatus?: boolean;
   onlyActiveOrRenewal?: boolean;
 }) => {
@@ -103,9 +104,25 @@ const getAllSellersBasic = async (params?: {
         })
       );
 
-  const filteredSellers = !params?.onlyActiveOrRenewal
+  const sellersWithSimplePackageAccess = !params?.onlySimplePackageAccess
     ? sellersWithProductInfoAccess
     : sellersWithProductInfoAccess.filter((seller: any) => {
+        const status = getSellerLifecycleStatus(seller?.fecha_vigencia);
+        if (status !== "activo" && status !== "debe_renovar") return false;
+
+        const payments = Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [];
+        return payments.some((payment: any) => {
+          const branchId = String(payment?.id_sucursal?._id || payment?.id_sucursal || "");
+          const hasSimpleService = Number(payment?.entrega_simple ?? 0) > 0;
+          if (!hasSimpleService) return false;
+          if (!params?.sucursalId) return true;
+          return String(branchId) === String(params.sucursalId);
+        });
+      });
+
+  const filteredSellers = !params?.onlyActiveOrRenewal
+    ? sellersWithSimplePackageAccess
+    : sellersWithSimplePackageAccess.filter((seller: any) => {
         const status = getSellerLifecycleStatus(seller?.fecha_vigencia);
         return status === "activo" || status === "debe_renovar";
       });

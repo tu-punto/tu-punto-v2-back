@@ -4,6 +4,7 @@ import { SimplePackageService } from "../services/simplePackage.service";
 const resolveActor = (res: Response) => ({
   role: String(res.locals.auth?.role || "").toLowerCase(),
   sellerId: String(res.locals.auth?.sellerId || ""),
+  sucursalId: String(res.locals.auth?.sucursalId || ""),
 });
 
 export const registerSimplePackages = async (req: Request, res: Response) => {
@@ -17,9 +18,12 @@ export const registerSimplePackages = async (req: Request, res: Response) => {
     const created = await SimplePackageService.registerSimplePackages({
       sellerId: targetSellerId,
       paquetes: Array.isArray(req.body?.paquetes) ? req.body.paquetes : [],
-      originBranchId:
-        String(req.body?.originBranchId || req.body?.origen_sucursal_id || req.body?.sucursalId || req.body?.id_sucursal || "").trim() ||
-        undefined,
+      role: actor.role,
+      originBranchId: (
+        actor.role === "seller"
+          ? String(req.body?.originBranchId || req.body?.origen_sucursal_id || req.body?.sucursalId || req.body?.id_sucursal || "")
+          : actor.sucursalId || String(req.body?.originBranchId || req.body?.origen_sucursal_id || req.body?.sucursalId || req.body?.id_sucursal || "")
+      ).trim() || undefined,
     });
 
     res.json({
@@ -96,6 +100,7 @@ export const getSimplePackagesList = async (req: Request, res: Response) => {
     const toRaw = String(req.query.to || "").trim();
     const rows = await SimplePackageService.getSimplePackagesList({
       sellerId: targetSellerId,
+      originBranchId: actor.role === "seller" ? undefined : actor.sucursalId || undefined,
       from: fromRaw ? new Date(fromRaw) : undefined,
       to: toRaw ? new Date(toRaw) : undefined,
     });
@@ -112,7 +117,10 @@ export const getSimplePackagesList = async (req: Request, res: Response) => {
 
 export const getUploadedSimplePackageSellers = async (_req: Request, res: Response) => {
   try {
-    const rows = await SimplePackageService.getUploadedSimplePackageSellers();
+    const actor = resolveActor(res);
+    const rows = await SimplePackageService.getUploadedSimplePackageSellers(
+      actor.role === "seller" ? undefined : actor.sucursalId || undefined
+    );
     return res.json({ success: true, rows });
   } catch (error: any) {
     console.error(error);

@@ -76,6 +76,8 @@ export const getSellersBasic = async (req: Request, res: Response) => {
     const sucursalId = (req.query.sucursalId as string | undefined) || undefined;
     const onlyProductInfoAccess =
       String(req.query.onlyProductInfoAccess || "").trim().toLowerCase() === "true";
+    const onlySimplePackageAccess =
+      String(req.query.onlySimplePackageAccess || "").trim().toLowerCase() === "true";
     const includeProductInfoStatus =
       String(req.query.includeProductInfoStatus || "").trim().toLowerCase() === "true";
     const onlyActiveOrRenewal =
@@ -90,6 +92,7 @@ export const getSellersBasic = async (req: Request, res: Response) => {
         sellerId,
         sucursalId,
         onlyProductInfoAccess,
+        onlySimplePackageAccess,
         includeProductInfoStatus,
         onlyActiveOrRenewal,
       });
@@ -99,6 +102,7 @@ export const getSellersBasic = async (req: Request, res: Response) => {
     const sellerList = await SellerService.getAllSellersBasic({
       sucursalId,
       onlyProductInfoAccess,
+      onlySimplePackageAccess,
       includeProductInfoStatus,
       onlyActiveOrRenewal,
     });
