@@ -147,7 +147,7 @@ const buildPackagePricing = (
   const precioPaqueteUnitario = roundCurrency(unitPrice);
   const precioPaquete = roundCurrency(precioPaqueteUnitario * priceMultiplier);
   const deudaVendedor = roundCurrency(amortizacion);
-  const deudaComprador = roundCurrency(Math.max(0, precioPaquete - deudaVendedor));
+  const deudaComprador = roundCurrency(Math.max(0, precioPaquete + branchRoutePrice - deudaVendedor));
   const precioEntreSucursal = roundCurrency(branchRoutePrice);
   const precioTotal = roundCurrency(precioPaquete + precioEntreSucursal);
 
@@ -216,9 +216,18 @@ const buildSimplePackageRecord = async (params: {
           String(row?.precio_entre_sucursal).trim() !== ""
         ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, branchRoutePricing.precio_entre_sucursal)))
         : branchRoutePricing.precio_entre_sucursal;
+  const precioPaqueteUnitario = toNumber(seller?.precio_paquete ?? 0);
+  const precioPaquete = roundCurrency(precioPaqueteUnitario * (packageSize === "grande" ? 2 : 1));
+  const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
+  if (amortizacionVendedor <= 0) {
+    throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor debe ser mayor a 0`);
+  }
+  if (amortizacionVendedor > precioPaquete) {
+    throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser mayor al precio del paquete`);
+  }
   const pricing = buildPackagePricing(
-    toNumber(seller?.precio_paquete ?? 0),
-    toNumber(seller?.amortizacion ?? 0),
+    precioPaqueteUnitario,
+    amortizacionVendedor,
     saldoPorPaquete,
     packageSize,
     branchRoutePrice
@@ -413,9 +422,26 @@ const updateSimplePackageByID = async (params: {
             precio_entre_sucursal: nextBranchRoutePrice,
           }
         : await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+  const nextPrecioPaquete = roundCurrency(
+    toNumber(existing.precio_paquete_unitario, 0) * (nextPackageSize === "grande" ? 2 : 1)
+  );
+  const nextAmortizacionVendedor = roundCurrency(
+    toNumber(
+      role === "seller"
+        ? params.payload?.amortizacion_vendedor ?? existing.amortizacion_vendedor
+        : existing.amortizacion_vendedor,
+      0
+    )
+  );
+  if (nextAmortizacionVendedor <= 0) {
+    throw new Error("El monto que cubrira el vendedor debe ser mayor a 0");
+  }
+  if (nextAmortizacionVendedor > nextPrecioPaquete) {
+    throw new Error("El monto que cubrira el vendedor no puede ser mayor al precio del paquete");
+  }
   const pricing = buildPackagePricing(
     toNumber(existing.precio_paquete_unitario, 0),
-    toNumber(existing.amortizacion_vendedor, 0),
+    nextAmortizacionVendedor,
     nextSaldoPorPaquete,
     nextPackageSize,
     nextBranchRoutePrice
@@ -444,6 +470,7 @@ const updateSimplePackageByID = async (params: {
     updatePayload.comprador = nextBuyer || undefined;
     updatePayload.telefono_comprador = nextPhone || undefined;
     updatePayload.descripcion_paquete = nextDescription;
+    updatePayload.amortizacion_vendedor = nextAmortizacionVendedor;
     updatePayload.saldo_por_paquete = nextSaldoPorPaquete;
   }
 

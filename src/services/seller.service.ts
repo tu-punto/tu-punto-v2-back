@@ -165,13 +165,19 @@ const normalizeSellerServiceValues = (seller: any) => {
   const hasSimplePackageService = hasConfiguredSimplePackageService({
     pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
   });
+  const amortizacion = hasSimplePackageService ? Number(seller?.amortizacion ?? 0) : 0;
+  const precioPaquete = hasSimplePackageService ? Number(seller?.precio_paquete ?? 0) : 0;
+
+  if (hasSimplePackageService && amortizacion > precioPaquete) {
+    throw new Error("La amortizacion no puede ser mayor al precio por paquete");
+  }
 
   return {
     ...seller,
     comision_porcentual: hasCommissionService ? Number(seller?.comision_porcentual ?? 0) : 0,
     comision_fija: hasCommissionService ? Number(seller?.comision_fija ?? 0) : 0,
-    amortizacion: hasSimplePackageService ? Number(seller?.amortizacion ?? 0) : 0,
-    precio_paquete: hasSimplePackageService ? Number(seller?.precio_paquete ?? 0) : 0,
+    amortizacion,
+    precio_paquete: precioPaquete,
   };
 };
 
