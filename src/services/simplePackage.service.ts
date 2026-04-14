@@ -428,6 +428,9 @@ const updateSimplePackageByID = async (params: {
     updatePayload.metodo_pago = method;
     updatePayload.saldo_cobrar = paid === "si" ? 0 : pricing.deuda_comprador;
     updatePayload.precio_entre_sucursal = pricing.precio_entre_sucursal;
+    if (typeof params.payload?.is_external === "boolean") {
+      updatePayload.is_external = params.payload.is_external;
+    }
   }
 
   return await SimplePackageRepository.updateSimplePackageByID(params.id, updatePayload);

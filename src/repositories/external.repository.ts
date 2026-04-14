@@ -6,7 +6,8 @@ import { Types } from "mongoose";
 const EXTERNAL_SERVICE_FILTER = {
     $or: [
         { service_origin: { $exists: false } },
-        { service_origin: "external" }
+        { service_origin: "external" },
+        { service_origin: "simple_package", is_external: true }
     ]
 };
 
