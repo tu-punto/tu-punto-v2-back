@@ -177,6 +177,10 @@ const VentaExternaSchema = new Schema({
     seller_balance_applied: {
         type: Boolean,
         default: false,
+    },
+    deposito_realizado: {
+        type: Boolean,
+        default: false,
     }
 }, {
     collection: 'VentaExterna',

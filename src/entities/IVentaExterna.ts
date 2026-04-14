@@ -39,6 +39,7 @@ export interface IVentaExterna {
     is_external?: boolean;
     delivered: boolean;
     seller_balance_applied?: boolean;
+    deposito_realizado?: boolean;
 
     hora_entrega_real?: Date;
     lugar_entrega?: string;

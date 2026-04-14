@@ -131,6 +131,29 @@ export const getUploadedSimplePackageSellers = async (_req: Request, res: Respon
   }
 };
 
+export const getSellerAccountingSimplePackages = async (req: Request, res: Response) => {
+  try {
+    const actor = resolveActor(res);
+    const targetSellerId =
+      actor.role === "seller"
+        ? actor.sellerId
+        : String(req.query.sellerId || req.params.sellerId || "").trim();
+
+    if (!targetSellerId) {
+      return res.json({ success: true, rows: [] });
+    }
+
+    const rows = await SimplePackageService.getSellerAccountingSimplePackages(targetSellerId);
+    return res.json({ success: true, rows });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "No se pudo obtener la contabilidad de paquetes simples",
+    });
+  }
+};
+
 export const updateSimplePackageByID = async (req: Request, res: Response) => {
   try {
     const actor = resolveActor(res);

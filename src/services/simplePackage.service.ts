@@ -166,6 +166,24 @@ const buildPackagePricing = (
   };
 };
 
+const buildAccountingAmount = (row: any) =>
+  roundCurrency(
+    Number(row?.precio_paquete || 0) +
+      Number(row?.saldo_por_paquete || 0) -
+      Number(row?.amortizacion_vendedor || 0)
+  );
+
+const buildTotalAmountToCharge = (row: any) =>
+  roundCurrency(
+    Math.max(
+      0,
+      Number(row?.precio_paquete || 0) +
+        Number(row?.saldo_por_paquete || 0) +
+        Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0) -
+        Number(row?.amortizacion_vendedor || 0)
+    )
+  );
+
 const buildSimplePackageRecord = async (params: {
   row: any;
   index: number;
@@ -225,7 +243,7 @@ const buildSimplePackageRecord = async (params: {
     package_size: packageSize,
     metodo_pago: paymentMethod,
     esta_pagado: paid,
-    saldo_cobrar: paid === "si" ? 0 : pricing.deuda_comprador,
+    saldo_cobrar: paid === "si" ? 0 : buildTotalAmountToCharge(pricing),
     estado_pedido: "En Espera",
     delivered: false,
     is_external: false,
@@ -289,6 +307,15 @@ const getSimplePackagesList = async (params: {
 
 const getUploadedSimplePackageSellers = async (originBranchId?: string) => {
   return await SimplePackageRepository.getUploadedSimplePackageSellers(originBranchId);
+};
+
+const getSellerAccountingSimplePackages = async (sellerId: string) => {
+  const rows = await SimplePackageRepository.getSellerAccountingSimplePackages(sellerId);
+
+  return rows.map((row: any) => ({
+    ...row,
+    accounting_amount: buildAccountingAmount(row),
+  }));
 };
 
 const getSimplePackageBranchPrices = async (originBranchId?: string) => {
@@ -425,7 +452,7 @@ const updateSimplePackageByID = async (params: {
     const method = paid === "si" ? normalizePaymentMethod(params.payload?.metodo_pago ?? existing.metodo_pago) : "";
     updatePayload.esta_pagado = paid;
     updatePayload.metodo_pago = method;
-    updatePayload.saldo_cobrar = paid === "si" ? 0 : pricing.deuda_comprador;
+    updatePayload.saldo_cobrar = paid === "si" ? 0 : buildTotalAmountToCharge(pricing);
     updatePayload.precio_entre_sucursal = pricing.precio_entre_sucursal;
     if (typeof params.payload?.is_external === "boolean") {
       updatePayload.is_external = params.payload.is_external;
@@ -458,12 +485,18 @@ const deleteSimplePackageByID = async (params: {
   return deleted;
 };
 
+const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => {
+  return await SimplePackageRepository.markSellerAccountingSimplePackagesDeposited(sellerId);
+};
+
 export const SimplePackageService = {
   registerSimplePackages,
   getSimplePackagesList,
   getUploadedSimplePackageSellers,
+  getSellerAccountingSimplePackages,
   getSimplePackageBranchPrices,
   upsertSimplePackageBranchPrice,
   updateSimplePackageByID,
   deleteSimplePackageByID,
+  markSellerAccountingSimplePackagesDeposited,
 };

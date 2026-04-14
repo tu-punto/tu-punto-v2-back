@@ -55,6 +55,26 @@ const normalizeOrderStatus = (value: unknown, delivered: boolean): string => {
   return delivered ? "Entregado" : "En Espera";
 };
 
+const getSimplePackageFinancials = (input: any) => {
+  const packagePrice = roundCurrency(toNumber(input?.precio_paquete ?? input?.precio_total, 0));
+  const shippingPrice = roundCurrency(toNumber(input?.precio_entre_sucursal ?? input?.cargo_delivery, 0));
+  const packageSaldo = roundCurrency(toNumber(input?.saldo_por_paquete, 0));
+  const amortizacion = roundCurrency(toNumber(input?.amortizacion_vendedor, 0));
+  const totalServicePrice = roundCurrency(packagePrice + shippingPrice);
+  const totalToCharge = roundCurrency(Math.max(0, packagePrice + packageSaldo + shippingPrice - amortizacion));
+  const sellerPending = roundCurrency(packagePrice + packageSaldo - amortizacion);
+
+  return {
+    packagePrice,
+    shippingPrice,
+    packageSaldo,
+    amortizacion,
+    totalServicePrice,
+    totalToCharge,
+    sellerPending,
+  };
+};
+
 const adjustSellerSaldoPendiente = async (sellerId: string, delta: number) => {
   const safeDelta = roundCurrency(delta);
   if (!sellerId || !Number.isFinite(safeDelta) || safeDelta === 0) return;
@@ -255,7 +275,16 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
       0
     )
   );
-  const totalPrice = roundCurrency(price + (serviceOrigin === "simple_package" ? branchRoutePrice : 0));
+  const simplePackageFinancials = getSimplePackageFinancials({
+    ...existing,
+    ...externalSale,
+    precio_paquete: price,
+    precio_entre_sucursal: branchRoutePrice,
+  });
+  const amountToCharge =
+    serviceOrigin === "simple_package" ? simplePackageFinancials.totalToCharge : price;
+  const totalPrice =
+    serviceOrigin === "simple_package" ? simplePackageFinancials.totalServicePrice : price;
   const paid = normalizePaidStatus(externalSale.esta_pagado ?? existing.esta_pagado);
   const status = normalizeOrderStatus(
     externalSale.estado_pedido ?? existing.estado_pedido,
@@ -266,7 +295,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,
-    price,
+    amountToCharge,
     externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
     externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
   );
@@ -281,6 +310,10 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     monto_paga_vendedor: montoPagaVendedor,
     monto_paga_comprador: montoPagaComprador,
     saldo_cobrar: saldoCobrar,
+    deuda_comprador:
+      serviceOrigin === "simple_package"
+        ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
+        : toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador ?? amountToCharge, amountToCharge),
     estado_pedido: status,
     delivered,
     is_external: true,
@@ -308,26 +341,29 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   }
 
   const sellerId = String(existing.id_vendedor || "");
-  const packageSaldo = roundCurrency(toNumber(existing.saldo_por_paquete, 0));
+  const sellerPendingDelta = roundCurrency(simplePackageFinancials.sellerPending);
   const shouldApplySellerBalance =
     serviceOrigin === "simple_package" &&
     delivered &&
     !existing.seller_balance_applied &&
-    packageSaldo > 0;
+    sellerPendingDelta !== 0;
   const shouldRevertSellerBalance =
     serviceOrigin === "simple_package" &&
     !delivered &&
     existing.seller_balance_applied &&
-    packageSaldo > 0;
+    sellerPendingDelta !== 0;
 
   if (shouldApplySellerBalance) {
-    await adjustSellerSaldoPendiente(sellerId, packageSaldo);
+    await adjustSellerSaldoPendiente(sellerId, sellerPendingDelta);
     updatePayload.seller_balance_applied = true;
+    updatePayload.deposito_realizado = false;
   } else if (shouldRevertSellerBalance) {
-    await adjustSellerSaldoPendiente(sellerId, -packageSaldo);
+    await adjustSellerSaldoPendiente(sellerId, -sellerPendingDelta);
     updatePayload.seller_balance_applied = false;
+    updatePayload.deposito_realizado = false;
   } else if (serviceOrigin === "simple_package") {
     updatePayload.seller_balance_applied = !!existing.seller_balance_applied;
+    updatePayload.deposito_realizado = !!existing.deposito_realizado;
   }
 
   if (!delivered && existingDelivered && serviceOrigin !== "simple_package") {

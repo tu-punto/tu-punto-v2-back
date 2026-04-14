@@ -22,6 +22,7 @@ import { FinanceFluxService } from "./financeFlux.service";
 import { IFinanceFlux } from "../entities/IFinanceFlux";
 import { PaymentProofService } from "./paymentProof.service";
 import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
+import { SimplePackageService } from "./simplePackage.service";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -374,6 +375,7 @@ const paySellerDebt = async (id: string, payAll: boolean) => {
     await FinanceFluxRepository.markFinanceFluxAsPaid(id);
   }
   await SellerRepository.markSalesAsDeposited(id);
+  await SimplePackageService.markSellerAccountingSimplePackagesDeposited(id);
 
   const updatedSeller = await SellerRepository.updateSeller(id, update);
   if (!updateSeller) {
