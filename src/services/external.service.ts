@@ -1,6 +1,7 @@
 import moment from "moment-timezone";
 import { ExternalPaidStatus, IVentaExterna } from "../entities/IVentaExterna";
 import { ExternalSaleRepository } from "../repositories/external.repository";
+import { SellerRepository } from "../repositories/seller.repository";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -29,6 +30,8 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
+
 const normalizeExternalDate = (value: unknown) => {
   if (value) {
     return moment.tz(value as string, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
@@ -50,6 +53,18 @@ const normalizePaidStatus = (value: unknown): ExternalPaidStatus => {
 const normalizeOrderStatus = (value: unknown, delivered: boolean): string => {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   return delivered ? "Entregado" : "En Espera";
+};
+
+const adjustSellerSaldoPendiente = async (sellerId: string, delta: number) => {
+  const safeDelta = roundCurrency(delta);
+  if (!sellerId || !Number.isFinite(safeDelta) || safeDelta === 0) return;
+
+  const seller = await SellerRepository.findById(sellerId);
+  if (!seller) return;
+
+  await SellerRepository.updateSeller(sellerId, {
+    saldo_pendiente: roundCurrency(Number(seller?.saldo_pendiente || 0) + safeDelta),
+  });
 };
 
 const validateBuyerIdentity = (input: any) => {
@@ -228,12 +243,26 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.precio_paquete ?? existing.precio_paquete ?? externalSale.precio_total ?? existing.precio_total,
     0
   );
+  const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
+    | "external"
+    | "simple_package";
+  const branchRoutePrice = roundCurrency(
+    toNumber(
+      externalSale.precio_entre_sucursal ??
+        existing.precio_entre_sucursal ??
+        externalSale.cargo_delivery ??
+        existing.cargo_delivery,
+      0
+    )
+  );
+  const totalPrice = roundCurrency(price + (serviceOrigin === "simple_package" ? branchRoutePrice : 0));
   const paid = normalizePaidStatus(externalSale.esta_pagado ?? existing.esta_pagado);
   const status = normalizeOrderStatus(
     externalSale.estado_pedido ?? existing.estado_pedido,
     externalSale.delivered === true || existing.delivered === true
   );
   const delivered = status === "Entregado";
+  const existingDelivered = existing.estado_pedido === "Entregado";
 
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,
@@ -247,7 +276,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     comprador: buyerName || undefined,
     telefono_comprador: buyerPhone || undefined,
     precio_paquete: price,
-    precio_total: price,
+    precio_total: totalPrice,
     esta_pagado: paid,
     monto_paga_vendedor: montoPagaVendedor,
     monto_paga_comprador: montoPagaComprador,
@@ -255,8 +284,14 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     estado_pedido: status,
     delivered,
     is_external: true,
-    service_origin: "external",
+    service_origin: serviceOrigin,
   };
+
+  if (serviceOrigin === "simple_package") {
+    updatePayload.precio_entre_sucursal = branchRoutePrice;
+    updatePayload.cargo_delivery = branchRoutePrice;
+    updatePayload.costo_delivery = toNumber(externalSale.costo_delivery ?? existing.costo_delivery, 0);
+  }
 
   if (externalSale.fecha_pedido) {
     updatePayload.fecha_pedido = normalizeExternalDate(externalSale.fecha_pedido);
@@ -270,6 +305,33 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   if (externalSale.id_sucursal) {
     updatePayload.sucursal = externalSale.id_sucursal;
+  }
+
+  const sellerId = String(existing.id_vendedor || "");
+  const packageSaldo = roundCurrency(toNumber(existing.saldo_por_paquete, 0));
+  const shouldApplySellerBalance =
+    serviceOrigin === "simple_package" &&
+    delivered &&
+    !existing.seller_balance_applied &&
+    packageSaldo > 0;
+  const shouldRevertSellerBalance =
+    serviceOrigin === "simple_package" &&
+    !delivered &&
+    existing.seller_balance_applied &&
+    packageSaldo > 0;
+
+  if (shouldApplySellerBalance) {
+    await adjustSellerSaldoPendiente(sellerId, packageSaldo);
+    updatePayload.seller_balance_applied = true;
+  } else if (shouldRevertSellerBalance) {
+    await adjustSellerSaldoPendiente(sellerId, -packageSaldo);
+    updatePayload.seller_balance_applied = false;
+  } else if (serviceOrigin === "simple_package") {
+    updatePayload.seller_balance_applied = !!existing.seller_balance_applied;
+  }
+
+  if (!delivered && existingDelivered && serviceOrigin !== "simple_package") {
+    updatePayload.hora_entrega_real = undefined;
   }
 
   return await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);

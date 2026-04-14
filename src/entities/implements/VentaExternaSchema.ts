@@ -126,6 +126,16 @@ const VentaExternaSchema = new Schema({
         type: Number,
         required: true
     },
+    cargo_delivery: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    costo_delivery: {
+        type: Number,
+        required: false,
+        default: 0
+    },
     esta_pagado: {
         type: String,
         enum: ["si", "no", "mixto"],
@@ -161,6 +171,10 @@ const VentaExternaSchema = new Schema({
     },
 
     delivered: {
+        type: Boolean,
+        default: false,
+    },
+    seller_balance_applied: {
         type: Boolean,
         default: false,
     }

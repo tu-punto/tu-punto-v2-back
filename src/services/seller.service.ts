@@ -113,6 +113,7 @@ const getAllSellersBasic = async (params?: {
         const payments = Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [];
         return payments.some((payment: any) => {
           const branchId = String(payment?.id_sucursal?._id || payment?.id_sucursal || "");
+          if (payment?.activo === false) return false;
           const hasSimpleService = Number(payment?.entrega_simple ?? 0) > 0;
           if (!hasSimpleService) return false;
           if (!params?.sucursalId) return true;

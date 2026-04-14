@@ -29,6 +29,8 @@ export interface IVentaExterna {
     precio_paquete: number;
     precio_entre_sucursal?: number;
     precio_total: number;
+    cargo_delivery?: number;
+    costo_delivery?: number;
     esta_pagado: ExternalPaidStatus;
     monto_paga_vendedor?: number;
     monto_paga_comprador?: number;
@@ -36,6 +38,7 @@ export interface IVentaExterna {
     estado_pedido: string;
     is_external?: boolean;
     delivered: boolean;
+    seller_balance_applied?: boolean;
 
     hora_entrega_real?: Date;
     lugar_entrega?: string;

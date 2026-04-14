@@ -87,7 +87,7 @@ const resolveSeller = async (sellerId: string) => {
 const getSellerSimpleBranchIds = (seller: any) =>
   new Set(
     (Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [])
-      .filter((payment: any) => Number(payment?.entrega_simple ?? 0) > 0)
+      .filter((payment: any) => payment?.activo !== false && Number(payment?.entrega_simple ?? 0) > 0)
       .map((payment: any) => String(payment?.id_sucursal?._id || payment?.id_sucursal || "").trim())
       .filter(Boolean)
   );
@@ -158,6 +158,8 @@ const buildPackagePricing = (
     precio_paquete: precioPaquete,
     precio_entre_sucursal: precioEntreSucursal,
     precio_total: precioTotal,
+    cargo_delivery: precioEntreSucursal,
+    costo_delivery: 0,
     deuda_comprador: deudaComprador,
     monto_paga_vendedor: deudaVendedor,
     monto_paga_comprador: deudaComprador,
@@ -227,6 +229,7 @@ const buildSimplePackageRecord = async (params: {
     estado_pedido: "En Espera",
     delivered: false,
     is_external: false,
+    seller_balance_applied: false,
     sucursal: toObjectIdOrUndefined(originBranchId),
     origen_sucursal: toObjectIdOrUndefined(originBranchId),
     destino_sucursal: toObjectIdOrUndefined(destinationBranchId),
@@ -272,10 +275,6 @@ const registerSimplePackages = async (params: {
   );
 
   const created = await SimplePackageRepository.registerSimplePackages(rows);
-  const saldoDelta = roundCurrency(
-    rows.reduce((acc, row) => acc + Number(row?.saldo_por_paquete || 0), 0)
-  );
-  await adjustSellerSaldoPendiente(sellerId, saldoDelta);
   return created;
 };
 
@@ -452,7 +451,9 @@ const deleteSimplePackageByID = async (params: {
 
   const deleted = await SimplePackageRepository.deleteSimplePackageByID(params.id);
   if (deleted) {
-    await adjustSellerSaldoPendiente(existingSellerId, -roundCurrency(Number(existing.saldo_por_paquete || 0)));
+    if (existing.seller_balance_applied) {
+      await adjustSellerSaldoPendiente(existingSellerId, -roundCurrency(Number(existing.saldo_por_paquete || 0)));
+    }
   }
   return deleted;
 };
