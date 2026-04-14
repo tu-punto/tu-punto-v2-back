@@ -19,7 +19,7 @@ const getSimplePackagesList = async (params: {
   from?: Date;
   to?: Date;
 }) => {
-  const match: any = { ...SIMPLE_PACKAGE_FILTER };
+  const match: any = { ...SIMPLE_PACKAGE_FILTER, is_external: { $ne: true } };
 
   if (params.sellerId && Types.ObjectId.isValid(params.sellerId)) {
     match.id_vendedor = new Types.ObjectId(params.sellerId);
@@ -90,7 +90,7 @@ const deleteSimplePackageByID = async (id: string) => {
 };
 
 const getUploadedSimplePackageSellers = async (originBranchId?: string) => {
-  const match: any = { ...SIMPLE_PACKAGE_FILTER };
+  const match: any = { ...SIMPLE_PACKAGE_FILTER, is_external: { $ne: true } };
   if (originBranchId && Types.ObjectId.isValid(originBranchId)) {
     match.origen_sucursal = new Types.ObjectId(originBranchId);
   }
