@@ -192,7 +192,7 @@ export const getUserInfoController = async (req: Request, res: Response) => {
           ? sellerAccessData.pago_sucursales
           : [],
       });
-      userObj.seller_can_access_inventory = !userObj.seller_has_simple_package_service;
+      userObj.seller_can_access_inventory = userObj.seller_has_commission_service === true;
       userObj.seller_amortizacion = Number(sellerAccessData?.amortizacion ?? 0);
       userObj.seller_precio_paquete = Number(sellerAccessData?.precio_paquete ?? 0);
     }
