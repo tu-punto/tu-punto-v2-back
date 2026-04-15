@@ -187,11 +187,10 @@ const buildTotalAmountToCharge = (row: any) =>
   );
 
 const resolveSimplePackagePaymentPayload = (row: any) => {
-  const paid = normalizePaidStatus(row?.esta_pagado);
-  const totalToCharge = buildTotalAmountToCharge(row);
   const method = normalizePaymentMethod(row?.metodo_pago);
+  const sellerDebtAmount = roundCurrency(Number(row?.amortizacion_vendedor || 0));
 
-  if (paid !== "si" || !method) {
+  if (!method) {
     return {
       esta_pagado: "no" as const,
       tipo_de_pago: "",
@@ -201,10 +200,10 @@ const resolveSimplePackagePaymentPayload = (row: any) => {
   }
 
   return {
-    esta_pagado: "si" as const,
+    esta_pagado: "no" as const,
     tipo_de_pago: method === "qr" ? "1" : "2",
-    subtotal_qr: method === "qr" ? totalToCharge : 0,
-    subtotal_efectivo: method === "efectivo" ? totalToCharge : 0,
+    subtotal_qr: method === "qr" ? sellerDebtAmount : 0,
+    subtotal_efectivo: method === "efectivo" ? sellerDebtAmount : 0,
   };
 };
 
@@ -241,8 +240,8 @@ const buildSimplePackageShippingPayload = (row: any) => {
   const originBranchId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
   const destinationBranchId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal);
   const destinationBranchName = toTrimmed((row?.destino_sucursal as any)?.nombre ?? row?.lugar_entrega) || "Sucursal";
-  const amountToCharge = buildTotalAmountToCharge(row);
   const paymentData = resolveSimplePackagePaymentPayload(row);
+  const tempProductPrice = roundCurrency(Number(row?.saldo_por_paquete || 0));
 
   return {
     cliente: buyerName,
@@ -271,7 +270,7 @@ const buildSimplePackageShippingPayload = (row: any) => {
       {
         producto: toTrimmed(row?.descripcion_paquete) || "Paquete simple",
         cantidad: 1,
-        precio_unitario: amountToCharge,
+        precio_unitario: tempProductPrice,
         utilidad: 0,
         id_vendedor: row?.id_vendedor,
       },
@@ -329,8 +328,7 @@ const buildSimplePackageRecord = async (params: {
     branchRoutePrice
   );
 
-  const paid = normalizePaidStatus(row?.esta_pagado);
-  const paymentMethod = paid === "si" ? normalizePaymentMethod(row?.metodo_pago) : "";
+  const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
   const displaySellerName =
     toTrimmed(seller?.marca) || `${seller?.nombre || ""} ${seller?.apellido || ""}`.trim();
 
@@ -347,8 +345,8 @@ const buildSimplePackageRecord = async (params: {
     service_origin: "simple_package" as const,
     package_size: packageSize,
     metodo_pago: paymentMethod,
-    esta_pagado: paid,
-    saldo_cobrar: paid === "si" ? 0 : buildTotalAmountToCharge(pricing),
+    esta_pagado: "no",
+    saldo_cobrar: buildTotalAmountToCharge(pricing),
     estado_pedido: "En Espera",
     delivered: false,
     is_external: false,
@@ -429,8 +427,9 @@ const createSimplePackageOrders = async (params: {
     const shippingPayload = buildSimplePackageShippingPayload(row);
     const createdShipping = await ShippingService.registerShipping(shippingPayload);
 
-    const isUnpaid = normalizePaidStatus(row?.esta_pagado) !== "si";
-    if (isUnpaid) {
+    const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
+    const shouldRegisterSellerDebt = !paymentMethod;
+    if (shouldRegisterSellerDebt) {
       debtAmount += roundCurrency(Number(row?.amortizacion_vendedor || 0));
       debtCount += 1;
     }
@@ -441,8 +440,8 @@ const createSimplePackageOrders = async (params: {
       estado_pedido: createdShipping.estado_pedido,
       delivered: createdShipping.estado_pedido === "Entregado",
       seller_balance_applied: createdShipping.estado_pedido === "Entregado",
-      seller_debt_applied: isUnpaid,
-      esta_pagado: createdShipping.esta_pagado === "si" ? "si" : "no",
+      seller_debt_applied: shouldRegisterSellerDebt,
+      esta_pagado: "no",
       metodo_pago:
         createdShipping.subtotal_qr > 0
           ? "qr"
@@ -640,11 +639,10 @@ const updateSimplePackageByID = async (params: {
   }
 
   if (isPrivileged) {
-    const paid = normalizePaidStatus(params.payload?.esta_pagado ?? existing.esta_pagado);
-    const method = paid === "si" ? normalizePaymentMethod(params.payload?.metodo_pago ?? existing.metodo_pago) : "";
-    updatePayload.esta_pagado = paid;
+    const method = normalizePaymentMethod(params.payload?.metodo_pago ?? existing.metodo_pago);
+    updatePayload.esta_pagado = "no";
     updatePayload.metodo_pago = method;
-    updatePayload.saldo_cobrar = paid === "si" ? 0 : buildTotalAmountToCharge(pricing);
+    updatePayload.saldo_cobrar = buildTotalAmountToCharge(pricing);
     updatePayload.precio_entre_sucursal = pricing.precio_entre_sucursal;
     if (typeof params.payload?.is_external === "boolean") {
       updatePayload.is_external = params.payload.is_external;
