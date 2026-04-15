@@ -178,9 +178,19 @@ const VentaExternaSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    seller_debt_applied: {
+        type: Boolean,
+        default: false,
+    },
     deposito_realizado: {
         type: Boolean,
         default: false,
+    },
+    pedido_ref: {
+        type: Types.ObjectId,
+        ref: 'Pedido',
+        required: false,
+        default: null
     }
 }, {
     collection: 'VentaExterna',

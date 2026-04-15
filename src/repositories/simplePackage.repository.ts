@@ -13,6 +13,21 @@ const getSimplePackageByID = async (id: string): Promise<IVentaExternaDocument |
   }).populate("sucursal");
 };
 
+const getSimplePackagesByIDs = async (ids: string[]): Promise<IVentaExternaDocument[]> => {
+  const validIds = (ids || [])
+    .filter((id) => Types.ObjectId.isValid(id))
+    .map((id) => new Types.ObjectId(id));
+  if (!validIds.length) return [];
+
+  return await VentaExternaModel.find({
+    _id: { $in: validIds },
+    ...SIMPLE_PACKAGE_FILTER,
+  })
+    .populate({ path: "sucursal", select: "_id nombre" })
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" });
+};
+
 const getSimplePackagesList = async (params: {
   sellerId?: string;
   originBranchId?: string;
@@ -146,6 +161,7 @@ const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => 
 
 export const SimplePackageRepository = {
   getSimplePackageByID,
+  getSimplePackagesByIDs,
   getSimplePackagesList,
   getNextPackageNumberForSeller,
   registerSimplePackages,

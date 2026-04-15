@@ -2,9 +2,11 @@ import moment from "moment-timezone";
 import { Types } from "mongoose";
 import { IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
+import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
+import { ShippingService } from "./shipping.service";
 import { hasConfiguredSimplePackageService } from "../utils";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
@@ -184,6 +186,100 @@ const buildTotalAmountToCharge = (row: any) =>
     )
   );
 
+const resolveSimplePackagePaymentPayload = (row: any) => {
+  const paid = normalizePaidStatus(row?.esta_pagado);
+  const totalToCharge = buildTotalAmountToCharge(row);
+  const method = normalizePaymentMethod(row?.metodo_pago);
+
+  if (paid !== "si" || !method) {
+    return {
+      esta_pagado: "no" as const,
+      tipo_de_pago: "",
+      subtotal_qr: 0,
+      subtotal_efectivo: 0,
+    };
+  }
+
+  return {
+    esta_pagado: "si" as const,
+    tipo_de_pago: method === "qr" ? "1" : "2",
+    subtotal_qr: method === "qr" ? totalToCharge : 0,
+    subtotal_efectivo: method === "efectivo" ? totalToCharge : 0,
+  };
+};
+
+const applySimplePackageDebt = async (params: {
+  sellerId: string;
+  originBranchId?: string;
+  amount: number;
+  packageCount: number;
+}) => {
+  const amount = roundCurrency(params.amount);
+  if (!params.sellerId || amount <= 0) return;
+
+  await FinanceFluxRepository.registerFinanceFlux({
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    concepto:
+      params.packageCount > 1
+        ? `Paquetes simples sin pagar (${params.packageCount})`
+        : "Paquete simple sin pagar",
+    monto: amount,
+    fecha: new Date(),
+    esDeuda: true,
+    id_vendedor: new Types.ObjectId(params.sellerId),
+    id_sucursal:
+      params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
+        ? new Types.ObjectId(params.originBranchId)
+        : undefined,
+  });
+  await SellerRepository.incrementDebt(params.sellerId, amount);
+};
+
+const buildSimplePackageShippingPayload = (row: any) => {
+  const buyerName = toTrimmed(row?.comprador) || `Paquete ${String(row?.numero_paquete || "").trim() || "simple"}`;
+  const originBranchId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
+  const destinationBranchId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal);
+  const destinationBranchName = toTrimmed((row?.destino_sucursal as any)?.nombre ?? row?.lugar_entrega) || "Sucursal";
+  const amountToCharge = buildTotalAmountToCharge(row);
+  const paymentData = resolveSimplePackagePaymentPayload(row);
+
+  return {
+    cliente: buyerName,
+    telefono_cliente: toTrimmed(row?.telefono_comprador),
+    carnet_cliente: "",
+    tipo_de_pago: paymentData.tipo_de_pago,
+    fecha_pedido: normalizeDate(row?.fecha_pedido),
+    hora_entrega_acordada: normalizeDate(row?.fecha_pedido),
+    observaciones: "",
+    lugar_origen: originBranchId || undefined,
+    tipo_destino: "sucursal",
+    sucursal: destinationBranchId || originBranchId || undefined,
+    lugar_entrega: destinationBranchName,
+    ubicacion_link: "",
+    costo_delivery: 0,
+    cargo_delivery: roundCurrency(Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0)),
+    estado_pedido: "En Espera",
+    adelanto_cliente: 0,
+    esta_pagado: paymentData.esta_pagado,
+    pagado_al_vendedor: false,
+    subtotal_qr: paymentData.subtotal_qr,
+    subtotal_efectivo: paymentData.subtotal_efectivo,
+    simple_package_order: true,
+    simple_package_source_id: row?._id,
+    productos_temporales: [
+      {
+        producto: toTrimmed(row?.descripcion_paquete) || "Paquete simple",
+        cantidad: 1,
+        precio_unitario: amountToCharge,
+        utilidad: 0,
+        id_vendedor: row?.id_vendedor,
+      },
+    ],
+    venta: [],
+  };
+};
+
 const buildSimplePackageRecord = async (params: {
   row: any;
   index: number;
@@ -303,6 +399,75 @@ const registerSimplePackages = async (params: {
 
   const created = await SimplePackageRepository.registerSimplePackages(rows);
   return created;
+};
+
+const createSimplePackageOrders = async (params: {
+  packageIds: string[];
+  role: string;
+  currentBranchId?: string;
+}) => {
+  const role = String(params.role || "").toLowerCase();
+  const rows = await SimplePackageRepository.getSimplePackagesByIDs(params.packageIds || []);
+  const pendingRows = rows.filter((row: any) => !row?.is_external);
+  if (!pendingRows.length) {
+    throw new Error("No hay paquetes pendientes para crear");
+  }
+
+  if (
+    (role === "admin" || role === "operator") &&
+    params.currentBranchId &&
+    pendingRows.some((row: any) => String((row?.origen_sucursal as any)?._id || row?.origen_sucursal || "") !== String(params.currentBranchId))
+  ) {
+    throw new Error("Solo puedes crear pedidos de paquetes de tu sucursal actual");
+  }
+
+  const shippingResults = [];
+  let debtAmount = 0;
+  let debtCount = 0;
+
+  for (const row of pendingRows as any[]) {
+    const shippingPayload = buildSimplePackageShippingPayload(row);
+    const createdShipping = await ShippingService.registerShipping(shippingPayload);
+
+    const isUnpaid = normalizePaidStatus(row?.esta_pagado) !== "si";
+    if (isUnpaid) {
+      debtAmount += roundCurrency(Number(row?.amortizacion_vendedor || 0));
+      debtCount += 1;
+    }
+
+    const updatedRow = await SimplePackageRepository.updateSimplePackageByID(String(row._id), {
+      is_external: true,
+      pedido_ref: createdShipping._id,
+      estado_pedido: createdShipping.estado_pedido,
+      delivered: createdShipping.estado_pedido === "Entregado",
+      seller_balance_applied: createdShipping.estado_pedido === "Entregado",
+      seller_debt_applied: isUnpaid,
+      esta_pagado: createdShipping.esta_pagado === "si" ? "si" : "no",
+      metodo_pago:
+        createdShipping.subtotal_qr > 0
+          ? "qr"
+          : createdShipping.subtotal_efectivo > 0
+            ? "efectivo"
+            : "",
+    });
+
+    shippingResults.push({
+      packageId: row._id,
+      shippingId: createdShipping._id,
+      row: updatedRow,
+    });
+  }
+
+  if (debtAmount > 0) {
+    await applySimplePackageDebt({
+      sellerId: String((pendingRows[0] as any)?.id_vendedor || ""),
+      originBranchId: String(((pendingRows[0] as any)?.origen_sucursal as any)?._id || (pendingRows[0] as any)?.origen_sucursal || ""),
+      amount: debtAmount,
+      packageCount: debtCount,
+    });
+  }
+
+  return shippingResults;
 };
 
 const getSimplePackagesList = async (params: {
@@ -521,6 +686,7 @@ export const SimplePackageService = {
   getSimplePackagesList,
   getUploadedSimplePackageSellers,
   getSellerAccountingSimplePackages,
+  createSimplePackageOrders,
   getSimplePackageBranchPrices,
   upsertSimplePackageBranchPrice,
   updateSimplePackageByID,

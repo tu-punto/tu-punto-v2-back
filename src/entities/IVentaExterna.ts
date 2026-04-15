@@ -40,6 +40,8 @@ export interface IVentaExterna {
     delivered: boolean;
     seller_balance_applied?: boolean;
     deposito_realizado?: boolean;
+    seller_debt_applied?: boolean;
+    pedido_ref?: Types.ObjectId;
 
     hora_entrega_real?: Date;
     lugar_entrega?: string;

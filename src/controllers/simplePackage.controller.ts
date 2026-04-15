@@ -184,6 +184,29 @@ export const updateSimplePackageByID = async (req: Request, res: Response) => {
   }
 };
 
+export const createSimplePackageOrders = async (req: Request, res: Response) => {
+  try {
+    const actor = resolveActor(res);
+    const created = await SimplePackageService.createSimplePackageOrders({
+      packageIds: Array.isArray(req.body?.packageIds) ? req.body.packageIds : [],
+      role: actor.role,
+      currentBranchId: actor.role === "seller" ? undefined : actor.sucursalId,
+    });
+
+    return res.json({
+      success: true,
+      createdCount: created.length,
+      data: created,
+    });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(400).json({
+      success: false,
+      message: error?.message || "No se pudieron crear los pedidos simples",
+    });
+  }
+};
+
 export const deleteSimplePackageByID = async (req: Request, res: Response) => {
   try {
     const actor = resolveActor(res);

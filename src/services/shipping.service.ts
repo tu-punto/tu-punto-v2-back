@@ -3,6 +3,7 @@ import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { Types } from "mongoose";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
+import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { SaleService } from "./sale.service";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
@@ -107,6 +108,88 @@ const canMarkDeliveredFromBranch = (shipping: any, branchId?: string | null): bo
   return !paymentBranchId || paymentBranchId === String(branchId);
 };
 
+const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {
+  if (Number(shipping?.subtotal_qr || 0) > 0) return "qr";
+  if (Number(shipping?.subtotal_efectivo || 0) > 0) return "efectivo";
+  const normalizedType = String(shipping?.tipo_de_pago || "").trim().toLowerCase();
+  if (normalizedType === "1" || normalizedType === "transferencia o qr") return "qr";
+  if (normalizedType === "2" || normalizedType === "efectivo") return "efectivo";
+  return "";
+};
+
+const attachSimplePackageFieldsToShipping = async (shipping: any) => {
+  if (!shipping) return shipping;
+
+  const simplePackageSourceId = String(
+    shipping?.simple_package_source_id?._id ||
+      shipping?.simple_package_source_id ||
+      ""
+  ).trim();
+
+  if (!simplePackageSourceId) return shipping;
+
+  const simplePackage = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+  if (!simplePackage) return shipping;
+
+  const base =
+    typeof shipping?.toObject === "function"
+      ? shipping.toObject()
+      : { ...shipping };
+
+  return {
+    ...base,
+    precio_paquete: Number((simplePackage as any)?.precio_paquete || 0),
+    saldo_por_paquete: Number((simplePackage as any)?.saldo_por_paquete || 0),
+    precio_entre_sucursal: Number((simplePackage as any)?.precio_entre_sucursal || 0),
+    amortizacion_vendedor: Number((simplePackage as any)?.amortizacion_vendedor || 0),
+    deuda_comprador: Number((simplePackage as any)?.deuda_comprador || 0),
+  };
+};
+
+const attachSimplePackageFieldsToShippings = async (rows: any[]) => {
+  if (!Array.isArray(rows) || !rows.length) return rows;
+
+  const packageIds = rows
+    .map((row: any) =>
+      String(row?.simple_package_source_id?._id || row?.simple_package_source_id || "").trim()
+    )
+    .filter(Boolean);
+
+  if (!packageIds.length) return rows;
+
+  const simplePackages = await SimplePackageRepository.getSimplePackagesByIDs(packageIds);
+  const packageMap = new Map(
+    simplePackages.map((row: any) => [String(row?._id || ""), row])
+  );
+
+  return rows.map((shipping: any) => {
+    const simplePackageSourceId = String(
+      shipping?.simple_package_source_id?._id ||
+        shipping?.simple_package_source_id ||
+        ""
+    ).trim();
+
+    if (!simplePackageSourceId) return shipping;
+
+    const simplePackage = packageMap.get(simplePackageSourceId);
+    if (!simplePackage) return shipping;
+
+    const base =
+      typeof shipping?.toObject === "function"
+        ? shipping.toObject()
+        : { ...shipping };
+
+    return {
+      ...base,
+      precio_paquete: Number((simplePackage as any)?.precio_paquete || 0),
+      saldo_por_paquete: Number((simplePackage as any)?.saldo_por_paquete || 0),
+      precio_entre_sucursal: Number((simplePackage as any)?.precio_entre_sucursal || 0),
+      amortizacion_vendedor: Number((simplePackage as any)?.amortizacion_vendedor || 0),
+      deuda_comprador: Number((simplePackage as any)?.deuda_comprador || 0),
+    };
+  });
+};
+
 const normalizeShippingBranches = async (payload: any, currentShipping?: any) => {
   const originId = resolveBranchId(
     payload?.lugar_origen ?? currentShipping?.lugar_origen
@@ -175,18 +258,23 @@ const getShippingsList = async (params: {
   sellerId?: string;
   client?: string;
 }) => {
-  return await ShippingRepository.findList(params);
+  const result = await ShippingRepository.findList(params);
+  return {
+    ...result,
+    rows: await attachSimplePackageFieldsToShippings(result.rows || []),
+  };
 };
 
 const getShippingsByDateRange = async (from?: Date, to?: Date, sucursalIds?: string[]) => {
-  return await ShippingRepository.findByDateRange(from, to, sucursalIds);
+  const rows = await ShippingRepository.findByDateRange(from, to, sucursalIds);
+  return await attachSimplePackageFieldsToShippings(rows);
 };
 
 const getShippingByIds = async (shippingIds: string[]) => {
   const shippings = await ShippingRepository.findByIds(shippingIds);
   if (!shippings.length)
     throw new Error(`No shippings found for the provided IDs`);
-  return shippings;
+  return await attachSimplePackageFieldsToShippings(shippings);
 };
 
 const registerShipping = async (shipping: any) => {
@@ -228,7 +316,8 @@ const registerShipping = async (shipping: any) => {
   return savedShipping;
 };
 const getShippingById = async (id: string) => {
-  return await ShippingRepository.findById(id);
+  const shipping = await ShippingRepository.findById(id);
+  return await attachSimplePackageFieldsToShipping(shipping);
 };
 
 const SHIPPING_QR_PREFIX = "TP|v1|SHIP|";
@@ -449,6 +538,22 @@ const updateShipping = async (
   }
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
+
+  const simplePackageSourceId = String(
+    (resShip as any)?.simple_package_source_id ||
+    (shipping as any)?.simple_package_source_id ||
+    ""
+  ).trim();
+
+  if (resShip && simplePackageSourceId) {
+    await SimplePackageRepository.updateSimplePackageByID(simplePackageSourceId, {
+      estado_pedido: (resShip as any).estado_pedido,
+      delivered: String((resShip as any).estado_pedido || "").trim() === "Entregado",
+      seller_balance_applied: String((resShip as any).estado_pedido || "").trim() === "Entregado",
+      esta_pagado: String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no",
+      metodo_pago: getSimplePackageMethodFromShipping(resShip),
+    });
+  }
 
   if (resShip && toStatus !== fromStatus) {
     await ShippingStatusHistoryModel.create({
@@ -758,7 +863,7 @@ const getShippingDetailsForQR = async (shippingCodeOrId: string) => {
   const shipping = await resolveShippingByCodeOrId(shippingCodeOrId);
   if (!shipping) return null;
 
-  return await PedidoModel.findById(shipping._id)
+  const detailedShipping = await PedidoModel.findById(shipping._id)
     .populate([
       {
         path: 'venta',
@@ -777,6 +882,7 @@ const getShippingDetailsForQR = async (shippingCodeOrId: string) => {
       'trabajador'
     ])
     .lean();
+  return await attachSimplePackageFieldsToShipping(detailedShipping);
 };
 
 const resolveShippingByQRPayload = async (payload: string) => {

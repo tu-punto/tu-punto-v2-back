@@ -122,6 +122,16 @@ const PedidoSchema = new Schema({
     default: "",
     index: true,
   },
+  simple_package_order: {
+    type: Boolean,
+    default: false,
+  },
+  simple_package_source_id: {
+    type: Schema.Types.ObjectId,
+    ref: 'VentaExterna',
+    required: false,
+    default: null,
+  },
   venta: [{
     type: Types.ObjectId,
     ref: 'Venta'
