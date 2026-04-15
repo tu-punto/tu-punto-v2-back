@@ -52,8 +52,7 @@ export const hasCommissionServiceEnabled = (seller: {
   (seller?.pago_sucursales || []).some(
     (payment) =>
       isActiveBranchPayment(payment) &&
-      Number(payment?.alquiler ?? 0) > 0 &&
-      Number(payment?.exhibicion ?? 0) > 0
+      (Number(payment?.alquiler ?? 0) > 0 || Number(payment?.exhibicion ?? 0) > 0)
   );
 
 export const hasSimplePackageServiceEnabled = (seller: {
@@ -68,8 +67,7 @@ export const hasConfiguredCommissionService = (seller: {
 }): boolean =>
   (seller?.pago_sucursales || []).some(
     (payment) =>
-      Number(payment?.alquiler ?? 0) > 0 &&
-      Number(payment?.exhibicion ?? 0) > 0
+      Number(payment?.alquiler ?? 0) > 0 || Number(payment?.exhibicion ?? 0) > 0
   );
 
 export const hasConfiguredSimplePackageService = (seller: {
