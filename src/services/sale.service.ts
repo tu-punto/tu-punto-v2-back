@@ -256,8 +256,15 @@ const getSalesByShippingId = async (pedidoId: string) => {
     precio_unitario: prod.precio_unitario,
     utilidad: prod.utilidad,
     id_vendedor: prod.id_vendedor,
+    id_pedido: pedidoId,
+    id_sucursal: (pedido as any)?.sucursal ?? (pedido as any)?.lugar_origen ?? null,
+    deposito_realizado: false,
     esTemporal: true,
   }));
+
+  if ((pedido as any)?.simple_package_order && ventas.length > 0) {
+    return ventas;
+  }
 
   return [...ventas, ...temporales];
 };

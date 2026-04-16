@@ -187,10 +187,12 @@ export const updateSimplePackageByID = async (req: Request, res: Response) => {
 export const createSimplePackageOrders = async (req: Request, res: Response) => {
   try {
     const actor = resolveActor(res);
+    const paymentMethod = String(req.body?.paymentMethod || "").trim().toLowerCase();
     const created = await SimplePackageService.createSimplePackageOrders({
       packageIds: Array.isArray(req.body?.packageIds) ? req.body.packageIds : [],
       role: actor.role,
       currentBranchId: actor.role === "seller" ? undefined : actor.sucursalId,
+      paymentMethod: paymentMethod === "efectivo" || paymentMethod === "qr" ? (paymentMethod as "efectivo" | "qr") : "",
     });
 
     return res.json({

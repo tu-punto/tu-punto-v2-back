@@ -10,7 +10,9 @@ const financeFluxPopulate = [
 ];
 
 const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
-  return await FlujoFinancieroModel.find()
+  return await FlujoFinancieroModel.find({
+    visible_en_flujo_general: { $ne: false },
+  })
     .populate(financeFluxPopulate)
     .exec();
 };
@@ -23,6 +25,7 @@ const findByDateRange = async (
   if (!from && !to && !sucursalIds?.length) return await findAll();
 
   const match: any = {};
+  match.visible_en_flujo_general = { $ne: false };
   if (from || to) {
     match.fecha = {};
     if (from) match.fecha.$gte = from;

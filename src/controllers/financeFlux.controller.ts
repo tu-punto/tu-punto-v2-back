@@ -16,6 +16,25 @@ export const getFinanceFluxes = async (_: Request, res: Response) => {
   }
 };
 
+export const getDailyServiceIncome = async (req: Request, res: Response) => {
+  try {
+    const { date, sucursalId } = req.query;
+    if (!date || !sucursalId) {
+      return res.status(400).json({
+        msg: "Parámetros date y sucursalId son requeridos",
+      });
+    }
+
+    const incomes = await FinanceFluxService.getDailyServiceIncomeByDateAndSucursal(
+      String(date),
+      String(sucursalId)
+    );
+    res.json(incomes);
+  } catch (err) {
+    res.status(500).json({ msg: "Error obteniendo ingresos de servicio", err });
+  }
+};
+
 export const registerFinanceFlux = async (req: Request, res: Response) => {
   try {
     const fluxPayload = req.body;

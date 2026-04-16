@@ -10,6 +10,7 @@ export interface IFlujoFinanciero {
   monto: number;
   fecha: Date;
   esDeuda: boolean;
+  visible_en_flujo_general?: boolean;
 
   vendedor?: Types.ObjectId | IVendedor; 
   id_vendedor?: Types.ObjectId;

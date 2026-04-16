@@ -18,6 +18,22 @@ const assertFlux = (flux: IFlujoFinanciero | null) => {
 
 const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 
+const getDailyServiceIncomeByDateAndSucursal = async (
+  dateISO: string,
+  sucursalId: string
+) => {
+  const date = new Date(dateISO);
+  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+
+  return await FinanceFluxRepository.findByDateRange(
+    startOfDay,
+    endOfDay,
+    sucursalId ? [sucursalId] : undefined
+  );
+};
+
+
 const getDebts = async () => await FinanceFluxRepository.findAllDebts();
 
 const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
@@ -334,6 +350,7 @@ const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
 
 export const FinanceFluxService = {
   getAllFinanceFluxes,
+  getDailyServiceIncomeByDateAndSucursal,
   registerFinanceFlux,
   payDebt,
   getWorkerById,

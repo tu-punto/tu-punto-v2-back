@@ -226,6 +226,7 @@ const applySimplePackageDebt = async (params: {
     monto: amount,
     fecha: new Date(),
     esDeuda: true,
+    visible_en_flujo_general: false,
     id_vendedor: new Types.ObjectId(params.sellerId),
     id_sucursal:
       params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
@@ -233,6 +234,62 @@ const applySimplePackageDebt = async (params: {
         : undefined,
   });
   await SellerRepository.incrementDebt(params.sellerId, amount);
+};
+
+const applySimplePackageIncomeEffectivo = async (params: {
+  sellerId: string;
+  originBranchId?: string;
+  amount: number;
+  packageCount: number;
+}) => {
+  const amount = roundCurrency(params.amount);
+  if (!params.sellerId || amount <= 0) return;
+
+  await FinanceFluxRepository.registerFinanceFlux({
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    concepto:
+      params.packageCount > 1
+        ? `Paquetes simples en efectivo (${params.packageCount})`
+        : "Paquete simple en efectivo",
+    monto: amount,
+    fecha: new Date(),
+    esDeuda: false,
+    visible_en_flujo_general: true,
+    id_vendedor: new Types.ObjectId(params.sellerId),
+    id_sucursal:
+      params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
+        ? new Types.ObjectId(params.originBranchId)
+        : undefined,
+  });
+};
+
+const applySimplePackageIncomeQR = async (params: {
+  sellerId: string;
+  originBranchId?: string;
+  amount: number;
+  packageCount: number;
+}) => {
+  const amount = roundCurrency(params.amount);
+  if (!params.sellerId || amount <= 0) return;
+
+  await FinanceFluxRepository.registerFinanceFlux({
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    concepto:
+      params.packageCount > 1
+        ? `Paquetes simples en QR (${params.packageCount})`
+        : "Paquete simple en QR",
+    monto: amount,
+    fecha: new Date(),
+    esDeuda: false,
+    visible_en_flujo_general: true,
+    id_vendedor: new Types.ObjectId(params.sellerId),
+    id_sucursal:
+      params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
+        ? new Types.ObjectId(params.originBranchId)
+        : undefined,
+  });
 };
 
 const buildSimplePackageShippingPayload = (row: any) => {
@@ -279,6 +336,22 @@ const buildSimplePackageShippingPayload = (row: any) => {
   };
 };
 
+const buildSimplePackageSalePayload = (row: any) => {
+  const description = toTrimmed(row?.descripcion_paquete) || "Paquete simple";
+  const originBranchId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
+
+  return {
+    producto: description,
+    nombre_variante: description,
+    cantidad: 1,
+    precio_unitario: roundCurrency(Number(row?.saldo_por_paquete || 0)),
+    utilidad: 0,
+    id_vendedor: String(row?.id_vendedor || ""),
+    sucursal: originBranchId,
+    id_sucursal: originBranchId,
+  };
+};
+
 const buildSimplePackageRecord = async (params: {
   row: any;
   index: number;
@@ -314,8 +387,8 @@ const buildSimplePackageRecord = async (params: {
   const precioPaqueteUnitario = toNumber(seller?.precio_paquete ?? 0);
   const precioPaquete = roundCurrency(precioPaqueteUnitario * (packageSize === "grande" ? 2 : 1));
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
-  if (amortizacionVendedor <= 0) {
-    throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor debe ser mayor a 0`);
+  if (amortizacionVendedor < 0) {
+    throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser menor a 0`);
   }
   if (amortizacionVendedor > precioPaquete) {
     throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser mayor al precio del paquete`);
@@ -403,8 +476,10 @@ const createSimplePackageOrders = async (params: {
   packageIds: string[];
   role: string;
   currentBranchId?: string;
+  paymentMethod?: "efectivo" | "qr" | "";
 }) => {
   const role = String(params.role || "").toLowerCase();
+  const paymentMethod = normalizePaymentMethod(params.paymentMethod || "");
   const rows = await SimplePackageRepository.getSimplePackagesByIDs(params.packageIds || []);
   const pendingRows = rows.filter((row: any) => !row?.is_external);
   if (!pendingRows.length) {
@@ -422,47 +497,82 @@ const createSimplePackageOrders = async (params: {
   const shippingResults = [];
   let debtAmount = 0;
   let debtCount = 0;
+  let effectivoAmount = 0;
+  let effectivoCount = 0;
+  let qrAmount = 0;
+  let qrCount = 0;
 
   for (const row of pendingRows as any[]) {
     const shippingPayload = buildSimplePackageShippingPayload(row);
+    const salePayload = buildSimplePackageSalePayload(row);
     const createdShipping = await ShippingService.registerShipping(shippingPayload);
 
-    const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
-    const shouldRegisterSellerDebt = !paymentMethod;
-    if (shouldRegisterSellerDebt) {
-      debtAmount += roundCurrency(Number(row?.amortizacion_vendedor || 0));
-      debtCount += 1;
+    try {
+      await ShippingService.processSalesForShipping(String(createdShipping._id), [salePayload]);
+
+      const sellerAmortizacion = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+      
+      if (paymentMethod === "efectivo") {
+        effectivoAmount += sellerAmortizacion;
+        effectivoCount += 1;
+      } else if (paymentMethod === "qr") {
+        qrAmount += sellerAmortizacion;
+        qrCount += 1;
+      } else {
+        // No payment method specified - register as debt
+        debtAmount += sellerAmortizacion;
+        debtCount += 1;
+      }
+
+      const updatedRow = await SimplePackageRepository.updateSimplePackageByID(String(row._id), {
+        is_external: true,
+        pedido_ref: createdShipping._id,
+        estado_pedido: createdShipping.estado_pedido,
+        delivered: createdShipping.estado_pedido === "Entregado",
+        seller_balance_applied: createdShipping.estado_pedido === "Entregado",
+        seller_debt_applied: !paymentMethod,
+        esta_pagado: "no",
+        metodo_pago: paymentMethod,
+      });
+
+      shippingResults.push({
+        packageId: row._id,
+        shippingId: createdShipping._id,
+        row: updatedRow,
+      });
+    } catch (error) {
+      await ShippingService.deleteShippingById(String(createdShipping._id));
+      throw error;
     }
-
-    const updatedRow = await SimplePackageRepository.updateSimplePackageByID(String(row._id), {
-      is_external: true,
-      pedido_ref: createdShipping._id,
-      estado_pedido: createdShipping.estado_pedido,
-      delivered: createdShipping.estado_pedido === "Entregado",
-      seller_balance_applied: createdShipping.estado_pedido === "Entregado",
-      seller_debt_applied: shouldRegisterSellerDebt,
-      esta_pagado: "no",
-      metodo_pago:
-        createdShipping.subtotal_qr > 0
-          ? "qr"
-          : createdShipping.subtotal_efectivo > 0
-            ? "efectivo"
-            : "",
-    });
-
-    shippingResults.push({
-      packageId: row._id,
-      shippingId: createdShipping._id,
-      row: updatedRow,
-    });
   }
+
+  const sellerId = String((pendingRows[0] as any)?.id_vendedor || "");
+  const originBranchId = String(((pendingRows[0] as any)?.origen_sucursal as any)?._id || (pendingRows[0] as any)?.origen_sucursal || "");
 
   if (debtAmount > 0) {
     await applySimplePackageDebt({
-      sellerId: String((pendingRows[0] as any)?.id_vendedor || ""),
-      originBranchId: String(((pendingRows[0] as any)?.origen_sucursal as any)?._id || (pendingRows[0] as any)?.origen_sucursal || ""),
+      sellerId,
+      originBranchId,
       amount: debtAmount,
       packageCount: debtCount,
+    });
+  }
+
+  if (effectivoAmount > 0) {
+    await applySimplePackageIncomeEffectivo({
+      sellerId,
+      originBranchId,
+      amount: effectivoAmount,
+      packageCount: effectivoCount,
+    });
+  }
+
+  if (qrAmount > 0) {
+    await applySimplePackageIncomeQR({
+      sellerId,
+      originBranchId,
+      amount: qrAmount,
+      packageCount: qrCount,
     });
   }
 
@@ -597,8 +707,8 @@ const updateSimplePackageByID = async (params: {
       0
     )
   );
-  if (nextAmortizacionVendedor <= 0) {
-    throw new Error("El monto que cubrira el vendedor debe ser mayor a 0");
+  if (nextAmortizacionVendedor < 0) {
+    throw new Error("El monto que cubrira el vendedor no puede ser menor a 0");
   }
   if (nextAmortizacionVendedor > nextPrecioPaquete) {
     throw new Error("El monto que cubrira el vendedor no puede ser mayor al precio del paquete");

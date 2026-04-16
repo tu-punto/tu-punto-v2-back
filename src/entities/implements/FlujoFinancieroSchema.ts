@@ -27,6 +27,10 @@ const FlujoFinancieroSchema = new Schema({
     type: Boolean,
     default: false
   },
+  visible_en_flujo_general: {
+    type: Boolean,
+    default: true
+  },
   founder: {
     type: String,
     default: 'N/A'

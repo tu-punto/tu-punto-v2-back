@@ -5,6 +5,7 @@ import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { CategoriaModel } from "../entities/implements/CategoriaSchema";
 import { SaleService } from "./sale.service";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
@@ -15,9 +16,28 @@ import { QRService } from "./qr.service";
 import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatusHistorySchema";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
+import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
+};
+
+let cachedTemporaryCategoryId = "";
+
+const resolveTemporaryCategoryId = async () => {
+  if (cachedTemporaryCategoryId && Types.ObjectId.isValid(cachedTemporaryCategoryId)) {
+    return cachedTemporaryCategoryId;
+  }
+
+  const category = await CategoriaModel.findOne().sort({ createdAt: 1, _id: 1 }).select("_id").lean();
+  const categoryId = String((category as any)?._id || "").trim();
+
+  if (!categoryId) {
+    throw new Error("No existe ninguna categoria registrada para crear el producto temporal del paquete");
+  }
+
+  cachedTemporaryCategoryId = categoryId;
+  return categoryId;
 };
 
 const PAYMENT_TYPE_LABEL_BY_CODE: Record<string, string> = {
@@ -116,6 +136,13 @@ const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "q
   if (normalizedType === "2" || normalizedType === "efectivo") return "efectivo";
   return "";
 };
+
+const isPendingSimplePackageCashRecord = (shipping: any) =>
+  Boolean(
+    shipping?.simple_package_order &&
+      String(shipping?.estado_pedido || "").trim().toLowerCase() === "en espera" &&
+      (Number(shipping?.subtotal_qr || 0) > 0 || Number(shipping?.subtotal_efectivo || 0) > 0)
+  );
 
 const attachSimplePackageFieldsToShipping = async (shipping: any) => {
   if (!shipping) return shipping;
@@ -519,21 +546,69 @@ const updateShipping = async (
 
   if (willBeDelivered && !wasDelivered) {
     const sales = await SaleService.getSalesByShippingId(shippingId);
-    const salesToUpdateSaldo: any = [];
-
-    sales.forEach((sale) => {
-      const subtotal = sale.cantidad * sale.precio_unitario;
-      salesToUpdateSaldo.push({
-        id_vendedor: sale.id_vendedor.toString(),
-        utilidad: sale.utilidad,
+    const fallbackTemporarySales = (Array.isArray((shipping as any)?.productos_temporales) ? (shipping as any).productos_temporales : [])
+      .filter((prod: any) => prod?.id_vendedor)
+      .map((prod: any, index: number) => ({
+        key: `fallback-temp-${index}`,
+        producto: prod.producto,
+        cantidad: Number(prod.cantidad || 1),
+        precio_unitario: Number(prod.precio_unitario || 0),
+        utilidad: Number(prod.utilidad || 0),
+        id_vendedor: prod.id_vendedor,
         id_pedido: shippingId,
-        subtotal: newData.pagado_al_vendedor ? 0 : subtotal,
-        pagado_al_vendedor: !!newData.pagado_al_vendedor,
+        id_sucursal: (shipping as any)?.sucursal ?? (shipping as any)?.lugar_origen ?? null,
+        deposito_realizado: false,
+        esTemporal: true,
+      }));
+    const salesForBalance = sales.length > 0 ? sales : fallbackTemporarySales;
+    
+    // For simple packages, sum the service income to seller's accumulated balance
+    const isSimplePackage = !!(shipping as any)?.simple_package_source_id;
+    const sellerId = String((shipping as any)?.id_vendedor || "");
+    
+    if (isSimplePackage && sellerId) {
+      // Get the service income from FinanceFlux for this simple package
+      const financeFluxRecords = await FinanceFluxRepository.findByDateRange(
+        new Date(new Date().setHours(0, 0, 0, 0)),
+        new Date(new Date().setHours(23, 59, 59, 999)),
+        [(shipping as any)?.id_sucursal ? String((shipping as any).id_sucursal) : ""]
+      );
+      
+      const serviceIncome = financeFluxRecords
+        .filter((flux: any) => 
+          flux.tipo === "INGRESO" && 
+          flux.categoria === "SERVICIO" &&
+          String(flux.id_vendedor || "") === String(sellerId)
+        )
+        .reduce((total: number, flux: any) => total + (flux.monto || 0), 0);
+      
+      if (serviceIncome > 0) {
+        // Sum the service income to seller's accumulated balance
+        await VendedorModel.findByIdAndUpdate(sellerId, {
+          $inc: { saldo_acumulado: serviceIncome },
+        });
+      }
+    } else {
+      // Regular packages: update using the standard balance calculation
+      const salesToUpdateSaldo: any = [];
+      
+      salesForBalance.forEach((sale: any) => {
+        if (!sale?.id_vendedor) {
+          return;
+        }
+        const subtotal = sale.cantidad * sale.precio_unitario;
+        salesToUpdateSaldo.push({
+          id_vendedor: sale.id_vendedor.toString(),
+          utilidad: sale.utilidad,
+          id_pedido: sale.id_pedido || shippingId,
+          subtotal: newData.pagado_al_vendedor ? 0 : subtotal,
+          pagado_al_vendedor: !!newData.pagado_al_vendedor,
+        });
       });
-    });
 
-    if (salesToUpdateSaldo.length > 0) {
-      await actualizarSaldoVendedor(salesToUpdateSaldo);
+      if (salesToUpdateSaldo.length > 0) {
+        await actualizarSaldoVendedor(salesToUpdateSaldo);
+      }
     }
   }
 
@@ -636,22 +711,24 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
     let productId = sale.id_producto;
 
     if (!productId || productId.length !== 24) {
+      const temporaryCategoryId = await resolveTemporaryCategoryId();
       const nuevoProducto = await ProductoModel.create({
-      nombre_producto: sale.nombre_variante || sale.producto,
-      id_vendedor: sale.id_vendedor,
-      id_categoria: sale.id_categoria || undefined,
-      esTemporal: true,
-      sucursales: [{
-        id_sucursal: sale.sucursal,
-        combinaciones: [{
-          variantes: {
-            Variante: "Temporal" 
-          },
-          precio: sale.precio_unitario,
-          stock: sale.cantidad || 1
+        nombre_producto: sale.nombre_variante || sale.producto,
+        id_vendedor: sale.id_vendedor,
+        id_categoria: sale.id_categoria || temporaryCategoryId,
+        categoria: sale.id_categoria || temporaryCategoryId,
+        esTemporal: true,
+        sucursales: [{
+          id_sucursal: sale.sucursal,
+          combinaciones: [{
+            variantes: {
+              Variante: "Temporal" 
+            },
+            precio: sale.precio_unitario,
+            stock: sale.cantidad || 1
+          }]
         }]
-      }]
-    });
+      });
 
       productId = nuevoProducto._id;
     }
@@ -705,12 +782,11 @@ const getDailySalesHistory = async (
     : nowLaPaz
   ).toDate();
 
-  const filter: any = {
-    estado_pedido: { $ne: "En Espera" }
-  };
+  const filter: any = {};
 
   const getHistoryDate = (pedido: any): Date => {
     const estado = String(pedido?.estado_pedido || "").trim().toLowerCase();
+    if (isPendingSimplePackageCashRecord(pedido)) return pedido?.fecha_pedido;
     if (estado === "interno") return pedido?.fecha_pedido;
     if (estado === "entregado") return pedido?.hora_entrega_real || pedido?.fecha_pedido;
     return pedido?.hora_entrega_acordada || pedido?.fecha_pedido;
@@ -737,13 +813,50 @@ const getDailySalesHistory = async (
             estado_pedido: "Entregado",
             hora_entrega_real: { $gt: periodStart, $lte: periodEnd },
           },
+          {
+            simple_package_order: true,
+            estado_pedido: "En Espera",
+            $or: [
+              { subtotal_qr: { $gt: 0 } },
+              { subtotal_efectivo: { $gt: 0 } },
+            ],
+            fecha_pedido: { $gt: periodStart, $lte: periodEnd },
+          },
         ],
       },
     ];
   } else if (date) {
-    filter.hora_entrega_acordada = { $gte: startOfDay, $lte: periodEnd };
+    filter.$or = [
+      {
+        estado_pedido: { $ne: "En Espera" },
+        hora_entrega_acordada: { $gte: startOfDay, $lte: periodEnd },
+      },
+      {
+        simple_package_order: true,
+        estado_pedido: "En Espera",
+        $or: [
+          { subtotal_qr: { $gt: 0 } },
+          { subtotal_efectivo: { $gt: 0 } },
+        ],
+        fecha_pedido: { $gte: startOfDay, $lte: periodEnd },
+      },
+    ];
   } else {
-    filter.hora_entrega_acordada = { $lte: new Date() };
+    filter.$or = [
+      {
+        estado_pedido: { $ne: "En Espera" },
+        hora_entrega_acordada: { $lte: new Date() },
+      },
+      {
+        simple_package_order: true,
+        estado_pedido: "En Espera",
+        $or: [
+          { subtotal_qr: { $gt: 0 } },
+          { subtotal_efectivo: { $gt: 0 } },
+        ],
+        fecha_pedido: { $lte: new Date() },
+      },
+    ];
   }
 
   const pedidos = await PedidoModel.find(filter)
