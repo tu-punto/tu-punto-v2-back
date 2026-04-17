@@ -28,6 +28,7 @@ import simplePackageRouter from "./routes/simplePackage.routes";
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
 import { requireAuth, requireRole } from "./middlewares/auth.middleware";
+import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 
 const router = Router();
 
@@ -40,6 +41,12 @@ router.use("/sale", requireAuth, requireRole("admin", "operator", "seller"), sal
 router.use("/group", requireAuth, requireRole("admin", "operator", "seller"), groupRouter);
 router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller"), shippingRouter);
 router.use("/sucursal", sucursalRouter);
+router.get(
+  "/financeFlux/daily-service-income",
+  requireAuth,
+  requireRole("admin", "operator"),
+  getDailyServiceIncome
+);
 router.use("/financeFlux", requireAuth, requireRole("admin"), financeFluxRouter);
 router.use("/financeFlux/category", requireAuth, requireRole("admin"), financeFluxCategoryRouter);
 router.use("/recurringExpense", requireAuth, requireRole("admin"), recurringExpenseRouter);
