@@ -1098,7 +1098,12 @@ const getDailySalesHistory = async (
       typeof v.cantidad === 'number'
     );
 
-    const montoTotal = [...ventasNormales, ...ventasTemporales].reduce(
+    const ventasParaMontoTotal =
+      (p as any)?.simple_package_order && ventasNormales.length > 0
+        ? ventasNormales
+        : [...ventasNormales, ...ventasTemporales];
+
+    const montoTotal = ventasParaMontoTotal.reduce(
       (acc, v: any) => acc + (v.precio_unitario * v.cantidad), 0
     );
 

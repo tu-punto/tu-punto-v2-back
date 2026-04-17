@@ -9,10 +9,25 @@ const financeFluxPopulate = [
   { path: "id_sucursal", select: "nombre" },
 ];
 
+const SIMPLE_PACKAGE_INCOME_CONCEPT_REGEX = /^Paquetes?\s+simples?\s+en\s+(efectivo|qr)(\s*\(\d+\))?$/i;
+
+const applyGeneralFinanceFluxVisibilityFilter = (match: any = {}) => {
+  match.visible_en_flujo_general = { $ne: false };
+  match.$nor = [
+    ...(Array.isArray(match.$nor) ? match.$nor : []),
+    {
+      tipo: "INGRESO",
+      categoria: "SERVICIO",
+      concepto: { $regex: SIMPLE_PACKAGE_INCOME_CONCEPT_REGEX },
+    },
+  ];
+  return match;
+};
+
 const findAll = async (): Promise<IFlujoFinancieroDocument[]> => {
-  return await FlujoFinancieroModel.find({
-    visible_en_flujo_general: { $ne: false },
-  })
+  return await FlujoFinancieroModel.find(
+    applyGeneralFinanceFluxVisibilityFilter({})
+  )
     .populate(financeFluxPopulate)
     .exec();
 };
@@ -24,8 +39,7 @@ const findByDateRange = async (
 ): Promise<IFlujoFinancieroDocument[]> => {
   if (!from && !to && !sucursalIds?.length) return await findAll();
 
-  const match: any = {};
-  match.visible_en_flujo_general = { $ne: false };
+  const match: any = applyGeneralFinanceFluxVisibilityFilter({});
   if (from || to) {
     match.fecha = {};
     if (from) match.fecha.$gte = from;

@@ -255,7 +255,7 @@ const applySimplePackageIncomeEffectivo = async (params: {
     monto: amount,
     fecha: new Date(),
     esDeuda: false,
-    visible_en_flujo_general: true,
+    visible_en_flujo_general: false,
     id_vendedor: new Types.ObjectId(params.sellerId),
     id_sucursal:
       params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
@@ -283,7 +283,7 @@ const applySimplePackageIncomeQR = async (params: {
     monto: amount,
     fecha: new Date(),
     esDeuda: false,
-    visible_en_flujo_general: true,
+    visible_en_flujo_general: false,
     id_vendedor: new Types.ObjectId(params.sellerId),
     id_sucursal:
       params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
