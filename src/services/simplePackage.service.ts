@@ -45,7 +45,7 @@ const normalizePaidStatus = (value: unknown): "si" | "no" => {
 const normalizePaymentMethod = (value: unknown): PackagePaymentMethod => {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "efectivo" || normalized === "qr") return normalized;
-  return "";
+  return "efectivo";
 };
 
 const toObjectIdOrUndefined = (value?: string) =>

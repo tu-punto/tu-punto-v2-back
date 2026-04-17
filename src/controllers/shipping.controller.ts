@@ -104,32 +104,10 @@ const updateShipping = async (req: Request, res: Response) => {
 
   try {
     const auth = res.locals.auth as { id?: string; role?: string; sucursalId?: string } | undefined;
-    console.log("[SimplePackageDeliveryTrace] controller.updateShipping.request", {
-      shippingId: id,
-      actor: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : null,
-      branchId: auth?.sucursalId || null,
-      payload: {
-        estado_pedido: newData?.estado_pedido,
-        esta_pagado: newData?.esta_pagado,
-        tipo_de_pago: newData?.tipo_de_pago,
-        subtotal_qr: newData?.subtotal_qr,
-        subtotal_efectivo: newData?.subtotal_efectivo,
-        adelanto_cliente: newData?.adelanto_cliente,
-        pagado_al_vendedor: newData?.pagado_al_vendedor,
-      },
-    });
     const shippingUpdated = await ShippingService.updateShipping(newData, id, {
       currentBranchId: auth?.sucursalId,
       source: "manual",
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
-    });
-    console.log("[SimplePackageDeliveryTrace] controller.updateShipping.response", {
-      shippingId: id,
-      success: true,
-      estado_pedido: (shippingUpdated as any)?.estado_pedido,
-      esta_pagado: (shippingUpdated as any)?.esta_pagado,
-      subtotal_qr: (shippingUpdated as any)?.subtotal_qr,
-      subtotal_efectivo: (shippingUpdated as any)?.subtotal_efectivo,
     });
     res.json({ success: true, shippingUpdated });
   } catch (error) {

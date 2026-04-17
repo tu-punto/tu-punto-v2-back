@@ -138,10 +138,6 @@ const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "q
 
 const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 
-const logSimplePackageDeliveryTrace = (step: string, payload: Record<string, unknown>) => {
-  console.log(`[SimplePackageDeliveryTrace] ${step}`, payload);
-};
-
 const getSimplePackageBalanceToApply = async (
   shipping: any
 ): Promise<{ sellerId: string; amount: number } | null> => {
@@ -158,21 +154,6 @@ const getSimplePackageBalanceToApply = async (
 
   const sellerId = String((simplePackage as any)?.id_vendedor || "").trim();
   const amount = roundCurrency(Number((simplePackage as any)?.saldo_cobrar || 0));
-
-  logSimplePackageDeliveryTrace("balance-source.simple-package", {
-    shippingId: String(shipping?._id || ""),
-    simplePackageSourceId,
-    sellerId,
-    financials: {
-      precio_paquete: Number((simplePackage as any)?.precio_paquete || 0),
-      saldo_por_paquete: Number((simplePackage as any)?.saldo_por_paquete || 0),
-      precio_entre_sucursal: Number((simplePackage as any)?.precio_entre_sucursal || 0),
-      cargo_delivery: Number((simplePackage as any)?.cargo_delivery || 0),
-      amortizacion_vendedor: Number((simplePackage as any)?.amortizacion_vendedor || 0),
-      saldo_cobrar: Number((simplePackage as any)?.saldo_cobrar || 0),
-    },
-    resolvedAmount: amount,
-  });
 
   if (!sellerId || amount <= 0) return null;
 
@@ -548,35 +529,6 @@ const updateShipping = async (
     Boolean((shipping as any)?.simple_package_order) ||
     Boolean((shipping as any)?.simple_package_source_id);
 
-  if (isSimplePackageOrder) {
-    logSimplePackageDeliveryTrace("update.start", {
-      shippingId,
-      source: options?.source || "manual",
-      changedBy: options?.changedBy || null,
-      currentBranchId: options?.currentBranchId || null,
-      shippingBefore: {
-        estado_pedido: (shipping as any)?.estado_pedido,
-        esta_pagado: (shipping as any)?.esta_pagado,
-        tipo_de_pago: (shipping as any)?.tipo_de_pago,
-        subtotal_qr: Number((shipping as any)?.subtotal_qr || 0),
-        subtotal_efectivo: Number((shipping as any)?.subtotal_efectivo || 0),
-        cargo_delivery: Number((shipping as any)?.cargo_delivery || 0),
-        adelanto_cliente: Number((shipping as any)?.adelanto_cliente || 0),
-        simple_package_order: Boolean((shipping as any)?.simple_package_order),
-        simple_package_source_id: String((shipping as any)?.simple_package_source_id || ""),
-      },
-      incomingPayload: {
-        estado_pedido: newData?.estado_pedido,
-        esta_pagado: newData?.esta_pagado,
-        tipo_de_pago: newData?.tipo_de_pago,
-        subtotal_qr: Number(newData?.subtotal_qr || 0),
-        subtotal_efectivo: Number(newData?.subtotal_efectivo || 0),
-        adelanto_cliente: Number(newData?.adelanto_cliente || 0),
-        pagado_al_vendedor: Boolean(newData?.pagado_al_vendedor),
-      },
-    });
-  }
-
   normalizeOrderPaymentData(newData, shipping);
   await normalizeShippingBranches(newData, shipping);
 
@@ -615,25 +567,6 @@ const updateShipping = async (
     ...newData,
   };
 
-  if (isSimplePackageOrder) {
-    logSimplePackageDeliveryTrace("update.status-decision", {
-      shippingId,
-      wasDelivered,
-      willBeDelivered,
-      fromStatus,
-      toStatus,
-      normalizedPayload: {
-        estado_pedido: newData?.estado_pedido,
-        esta_pagado: newData?.esta_pagado,
-        tipo_de_pago: newData?.tipo_de_pago,
-        subtotal_qr: Number(newData?.subtotal_qr || 0),
-        subtotal_efectivo: Number(newData?.subtotal_efectivo || 0),
-        adelanto_cliente: Number(newData?.adelanto_cliente || 0),
-        pagado_al_vendedor: Boolean(newData?.pagado_al_vendedor),
-      },
-    });
-  }
-
   if (willBeDelivered && !canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId)) {
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
   }
@@ -657,57 +590,11 @@ const updateShipping = async (
     const salesForBalance = sales.length > 0 ? sales : fallbackTemporarySales;
 
     if (isSimplePackageOrder) {
-      logSimplePackageDeliveryTrace("delivery.sales-loaded", {
-        shippingId,
-        salesCount: sales.length,
-        fallbackTemporarySalesCount: fallbackTemporarySales.length,
-        salesForBalance: salesForBalance.map((sale: any) => ({
-          id_vendedor: String(sale?.id_vendedor || ""),
-          cantidad: Number(sale?.cantidad || 0),
-          precio_unitario: Number(sale?.precio_unitario || 0),
-          subtotal: roundCurrency(Number(sale?.cantidad || 0) * Number(sale?.precio_unitario || 0)),
-          utilidad: Number(sale?.utilidad || 0),
-          id_pedido: String(sale?.id_pedido || shippingId),
-          esTemporal: Boolean(sale?.esTemporal),
-        })),
-      });
-
       const balanceToApply = await getSimplePackageBalanceToApply(shipping);
-      logSimplePackageDeliveryTrace("delivery.balance-selected", {
-        shippingId,
-        balanceToApply,
-        pagado_al_vendedor: Boolean(newData?.pagado_al_vendedor),
-      });
 
       if (balanceToApply && !newData.pagado_al_vendedor) {
-        const sellerBefore = await VendedorModel.findById(balanceToApply.sellerId)
-          .select("saldo_pendiente deuda")
-          .lean();
-        logSimplePackageDeliveryTrace("delivery.seller-before-update", {
-          shippingId,
-          sellerId: balanceToApply.sellerId,
-          saldo_pendiente: Number((sellerBefore as any)?.saldo_pendiente || 0),
-          deuda: Number((sellerBefore as any)?.deuda || 0),
-          amountToApply: balanceToApply.amount,
-        });
-
         await VendedorModel.findByIdAndUpdate(balanceToApply.sellerId, {
           $inc: { saldo_pendiente: balanceToApply.amount },
-        });
-
-        const sellerAfter = await VendedorModel.findById(balanceToApply.sellerId)
-          .select("saldo_pendiente deuda")
-          .lean();
-        logSimplePackageDeliveryTrace("delivery.seller-after-update", {
-          shippingId,
-          sellerId: balanceToApply.sellerId,
-          saldo_pendiente: Number((sellerAfter as any)?.saldo_pendiente || 0),
-          deuda: Number((sellerAfter as any)?.deuda || 0),
-        });
-        logSimplePackageDeliveryTrace("delivery.finance-flux", {
-          shippingId,
-          action: "none",
-          reason: "ShippingService.updateShipping for simple_package does not call FinanceFluxRepository.registerFinanceFlux",
         });
       } else {
         const sellerTotals = new Map<string, number>();
@@ -723,45 +610,12 @@ const updateShipping = async (
           sellerTotals.set(sellerId, roundCurrency((sellerTotals.get(sellerId) || 0) + nextAmount));
         });
 
-        logSimplePackageDeliveryTrace("delivery.fallback-balance-map", {
-          shippingId,
-          reason: balanceToApply ? "pagado_al_vendedor=true" : "simple_package balance source unavailable",
-          sellerTotals: Array.from(sellerTotals.entries()).map(([sellerId, amount]) => ({
-            sellerId,
-            amount,
-          })),
-        });
-
         for (const [sellerId, amount] of sellerTotals.entries()) {
           if (amount <= 0) continue;
-          const sellerBefore = await VendedorModel.findById(sellerId)
-            .select("saldo_pendiente deuda")
-            .lean();
-          logSimplePackageDeliveryTrace("delivery.fallback-seller-before-update", {
-            shippingId,
-            sellerId,
-            saldo_pendiente: Number((sellerBefore as any)?.saldo_pendiente || 0),
-            deuda: Number((sellerBefore as any)?.deuda || 0),
-            amountToApply: amount,
-          });
           await VendedorModel.findByIdAndUpdate(sellerId, {
             $inc: { saldo_pendiente: amount },
           });
-          const sellerAfter = await VendedorModel.findById(sellerId)
-            .select("saldo_pendiente deuda")
-            .lean();
-          logSimplePackageDeliveryTrace("delivery.fallback-seller-after-update", {
-            shippingId,
-            sellerId,
-            saldo_pendiente: Number((sellerAfter as any)?.saldo_pendiente || 0),
-            deuda: Number((sellerAfter as any)?.deuda || 0),
-          });
         }
-        logSimplePackageDeliveryTrace("delivery.finance-flux", {
-          shippingId,
-          action: "none",
-          reason: "Fallback balance path also does not create finance flux records on delivery",
-        });
       }
     } else {
       // Regular packages: update using the standard balance calculation
@@ -789,21 +643,6 @@ const updateShipping = async (
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
 
-  if (isSimplePackageOrder) {
-    logSimplePackageDeliveryTrace("update.shipping-saved", {
-      shippingId,
-      shippingAfter: {
-        estado_pedido: (resShip as any)?.estado_pedido,
-        esta_pagado: (resShip as any)?.esta_pagado,
-        tipo_de_pago: (resShip as any)?.tipo_de_pago,
-        subtotal_qr: Number((resShip as any)?.subtotal_qr || 0),
-        subtotal_efectivo: Number((resShip as any)?.subtotal_efectivo || 0),
-        cargo_delivery: Number((resShip as any)?.cargo_delivery || 0),
-        adelanto_cliente: Number((resShip as any)?.adelanto_cliente || 0),
-      },
-    });
-  }
-
   const simplePackageSourceId = String(
     (resShip as any)?.simple_package_source_id ||
     (shipping as any)?.simple_package_source_id ||
@@ -818,18 +657,8 @@ const updateShipping = async (
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
     };
-    logSimplePackageDeliveryTrace("update.simple-package-sync.before", {
-      shippingId,
-      simplePackageSourceId,
-      payload: simplePackageUpdatePayload,
-    });
     await SimplePackageRepository.updateSimplePackageByID(simplePackageSourceId, {
       ...simplePackageUpdatePayload,
-    });
-    logSimplePackageDeliveryTrace("update.simple-package-sync.after", {
-      shippingId,
-      simplePackageSourceId,
-      status: "updated",
     });
   }
 
@@ -1103,9 +932,13 @@ const getDailySalesHistory = async (
         ? ventasNormales
         : [...ventasNormales, ...ventasTemporales];
 
-    const montoTotal = ventasParaMontoTotal.reduce(
+    const montoBase = ventasParaMontoTotal.reduce(
       (acc, v: any) => acc + (v.precio_unitario * v.cantidad), 0
     );
+    const montoTotal =
+      (p as any)?.simple_package_order
+        ? Number((p as any)?.subtotal_qr || 0) + Number((p as any)?.subtotal_efectivo || 0)
+        : montoBase;
 
     return {
       _id: p._id,

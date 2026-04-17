@@ -32,10 +32,6 @@ const toNumber = (value: unknown, fallback = 0): number => {
 
 const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 
-const logSimplePackageExternalTrace = (step: string, payload: Record<string, unknown>) => {
-  console.log(`[SimplePackageDeliveryTrace][External] ${step}`, payload);
-};
-
 const normalizeExternalDate = (value: unknown) => {
   if (value) {
     return moment.tz(value as string, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
@@ -356,20 +352,6 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     !delivered &&
     existing.seller_balance_applied &&
     sellerPendingDelta !== 0;
-
-  if (serviceOrigin === "simple_package") {
-    logSimplePackageExternalTrace("updateExternalSaleByID.financials", {
-      externalSaleId: id,
-      existingStatus: existing.estado_pedido,
-      nextStatus: status,
-      paidStatus: paid,
-      simplePackageFinancials,
-      sellerPendingDelta,
-      shouldApplySellerBalance,
-      shouldRevertSellerBalance,
-      financeFluxOnThisPath: "none",
-    });
-  }
 
   if (shouldApplySellerBalance) {
     await adjustSellerSaldoPendiente(sellerId, sellerPendingDelta);
