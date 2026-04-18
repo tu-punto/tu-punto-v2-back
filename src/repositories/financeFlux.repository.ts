@@ -58,6 +58,36 @@ const findByDateRange = async (
     .exec();
 };
 
+const findServiceIncomeByDateRange = async (
+  from?: Date,
+  to?: Date,
+  sucursalIds?: string[]
+): Promise<IFlujoFinancieroDocument[]> => {
+  const match: any = {
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    esDeuda: { $ne: true },
+  };
+
+  if (from || to) {
+    match.fecha = {};
+    if (from) match.fecha.$gte = from;
+    if (to) match.fecha.$lte = to;
+  }
+
+  if (sucursalIds?.length) {
+    match.id_sucursal = {
+      $in: sucursalIds
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id)),
+    };
+  }
+
+  return await FlujoFinancieroModel.find(match)
+    .populate(financeFluxPopulate)
+    .exec();
+};
+
 const findAllDebts = async (): Promise<IFlujoFinancieroDocument[]> => {
   return await FlujoFinancieroModel.find({
     esDeuda: true,
@@ -126,6 +156,7 @@ const markFinanceFluxAsPaid = async (sellerId: string): Promise<void> => {
 export const FinanceFluxRepository = {
   findAll,
   findByDateRange,
+  findServiceIncomeByDateRange,
   registerFinanceFlux,
   findWorkerById,
   findSellerById,

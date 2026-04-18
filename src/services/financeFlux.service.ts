@@ -11,6 +11,7 @@ import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingService } from "./shipping.service";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { ExternalSaleRepository } from "../repositories/external.repository";
+import moment from "moment-timezone";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -22,11 +23,13 @@ const getDailyServiceIncomeByDateAndSucursal = async (
   dateISO: string,
   sucursalId: string
 ) => {
-  const date = new Date(dateISO);
-  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  const baseDate = String(dateISO || "").includes("T")
+    ? moment(dateISO).tz("America/La_Paz")
+    : moment.tz(dateISO, "YYYY-MM-DD", "America/La_Paz");
+  const startOfDay = baseDate.clone().startOf("day").toDate();
+  const endOfDay = baseDate.clone().endOf("day").toDate();
 
-  return await FinanceFluxRepository.findByDateRange(
+  return await FinanceFluxRepository.findServiceIncomeByDateRange(
     startOfDay,
     endOfDay,
     sucursalId ? [sucursalId] : undefined
