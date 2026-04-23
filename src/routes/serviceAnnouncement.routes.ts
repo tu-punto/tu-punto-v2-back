@@ -9,6 +9,7 @@ import {
   publishServiceAnnouncementController,
 } from "../controllers/serviceAnnouncement.controller";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware";
+import { uploadAnnouncementFiles } from "../middlewares/upload.middleware";
 
 const serviceAnnouncementRouter = Router();
 
@@ -46,6 +47,7 @@ serviceAnnouncementRouter.post(
   "/",
   requireAuth,
   requireRole("admin"),
+  uploadAnnouncementFiles.array("attachments", 6),
   createServiceAnnouncementController
 );
 serviceAnnouncementRouter.post(

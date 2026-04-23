@@ -94,6 +94,43 @@ const getExternalSalesByDateRange = async (
     return await VentaExternaModel.find(match).populate('sucursal');
 }
 
+const getExternalSalesHistoryCandidates = async (
+    from?: Date,
+    to?: Date,
+    sucursalIds?: string[]
+): Promise<IVentaExternaDocument[]> => {
+    const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
+    const match: any = { ...EXTERNAL_SERVICE_FILTER };
+
+    if (validSucursalIds.length) {
+        match.sucursal = {
+            $in: validSucursalIds.map((id) => new Types.ObjectId(id))
+        };
+    }
+
+    if (from || to) {
+        const fechaPedidoRange: any = {};
+        const horaEntregaRange: any = {};
+        if (from) {
+            fechaPedidoRange.$gte = from;
+            horaEntregaRange.$gte = from;
+        }
+        if (to) {
+            fechaPedidoRange.$lte = to;
+            horaEntregaRange.$lte = to;
+        }
+
+        match.$or = [
+            { fecha_pedido: fechaPedidoRange },
+            { hora_entrega_real: horaEntregaRange }
+        ];
+    }
+
+    return await VentaExternaModel.find(match)
+        .sort({ hora_entrega_real: -1, fecha_pedido: -1 })
+        .populate('sucursal');
+}
+
 const registerExternalSale = async (externalSale: IVentaExterna): Promise<IVentaExternaDocument> => {
     const newSale = new VentaExternaModel(externalSale);
     const saved = await newSale.save();
@@ -132,6 +169,7 @@ export const ExternalSaleRepository = {
     getExternalSalesList,
     getExternalSaleByID,
     getExternalSalesByDateRange,
+    getExternalSalesHistoryCandidates,
     registerExternalSale,
     registerExternalSales,
     deleteExternalSaleByID,

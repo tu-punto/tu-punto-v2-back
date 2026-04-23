@@ -16,6 +16,7 @@ import { QRService } from "./qr.service";
 import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatusHistorySchema";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
+import { ExternalSaleRepository } from "../repositories/external.repository";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -815,6 +816,7 @@ const getDailySalesHistory = async (
   ).toDate();
 
   const filter: any = {};
+  let periodStart = startOfDay;
 
   const getHistoryDate = (pedido: any): Date => {
     const estado = String(pedido?.estado_pedido || "").trim().toLowerCase();
@@ -824,13 +826,21 @@ const getDailySalesHistory = async (
     return pedido?.hora_entrega_acordada || pedido?.fecha_pedido;
   };
 
+  const getExternalHistoryDate = (sale: any): Date => {
+    const estado = String(sale?.estado_pedido || "").trim().toLowerCase();
+    if (estado === "entregado" || sale?.delivered === true) {
+      return sale?.hora_entrega_real || sale?.fecha_pedido;
+    }
+    return sale?.fecha_pedido;
+  };
+
   if (fromLastClose) {
     const lastClose = await BoxCloseRepository.findLatestBySucursalBefore(
       sucursalId,
       periodEnd
     );
 
-    const periodStart = lastClose?.created_at
+    periodStart = lastClose?.created_at
       ? new Date(lastClose.created_at)
       : startOfDay;
 
@@ -914,7 +924,42 @@ const getDailySalesHistory = async (
     return paymentBranchId === sucursalId;
   });
 
-  const resumen = pedidosFiltrados.map(p => {
+  const externalCandidates = await ExternalSaleRepository.getExternalSalesHistoryCandidates(
+    fromLastClose ? periodStart : (date ? startOfDay : undefined),
+    periodEnd,
+    sucursalId ? [sucursalId] : undefined
+  );
+
+  const externalFiltrados = externalCandidates.filter((sale: any) => {
+    const branchId = String((sale?.sucursal as any)?._id || sale?.sucursal || "").trim();
+    if (branchId !== String(sucursalId || "").trim()) return false;
+
+    const buyerAmount = roundCurrency(
+      Number(sale?.monto_paga_comprador ?? sale?.saldo_cobrar ?? 0)
+    );
+    const historyDate = getExternalHistoryDate(sale);
+    if (!historyDate) return false;
+
+    if (fromLastClose) {
+      const deliveredDate = sale?.hora_entrega_real ? new Date(sale.hora_entrega_real) : null;
+      const orderDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
+      const isDelivered = String(sale?.estado_pedido || "").trim().toLowerCase() === "entregado" || sale?.delivered === true;
+
+      if (isDelivered && deliveredDate) {
+        return deliveredDate > periodStart && deliveredDate <= periodEnd;
+      }
+
+      return buyerAmount > 0 && !!orderDate && orderDate > periodStart && orderDate <= periodEnd;
+    }
+
+    if (date) {
+      return historyDate >= startOfDay && historyDate <= periodEnd;
+    }
+
+    return true;
+  });
+
+  const resumenPedidos = pedidosFiltrados.map(p => {
     const ventasNormales = (Array.isArray(p.venta) ? p.venta : []).filter((v: any) =>
       v && typeof v === 'object' &&
       typeof v.precio_unitario === 'number' &&
@@ -951,6 +996,28 @@ const getDailySalesHistory = async (
       esta_pagado: p.esta_pagado
     };
   });
+
+  const resumenExternas = externalFiltrados.map((sale: any) => {
+    const buyerAmount = roundCurrency(
+      Number(sale?.monto_paga_comprador ?? sale?.saldo_cobrar ?? 0)
+    );
+
+    return {
+      _id: sale._id,
+      fecha: getExternalHistoryDate(sale),
+      hora: dayjs(getExternalHistoryDate(sale)).format("HH:mm"),
+      tipo_de_pago: buyerAmount > 0 ? "Efectivo" : "No pagado",
+      monto_total: buyerAmount,
+      subtotal_efectivo: buyerAmount,
+      subtotal_qr: 0,
+      esta_pagado: sale.esta_pagado,
+      is_external: true,
+    };
+  });
+
+  const resumen = [...resumenPedidos, ...resumenExternas].sort(
+    (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+  );
 
   const totales = resumen.reduce((acc, curr) => {
     acc.efectivo += curr.subtotal_efectivo;

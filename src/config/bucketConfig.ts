@@ -19,6 +19,7 @@ const s3Client = new S3Client({
 export const awsFolderNames = {
   comprobantes: "comprobantes",
   sucursalesHeader: "sucursales/header",
+  serviceAnnouncements: "service-announcements",
 };
 
 export const awsConfig = {

@@ -4,6 +4,24 @@ import { ServiceAnnouncementService } from "../services/serviceAnnouncement.serv
 const getAuthContext = (res: Response) =>
   (res.locals.auth as { id?: string; role?: string } | undefined) || {};
 
+const parseMaybeJson = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return JSON.parse(trimmed);
+};
+
+const parseOptionalBooleanValue = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "on", "yes", "si"].includes(normalized)) return true;
+    if (["false", "0", "off", "no"].includes(normalized)) return false;
+  }
+  return Boolean(value);
+};
+
 export const listMyServiceAnnouncementsController = async (_req: Request, res: Response) => {
   try {
     const auth = getAuthContext(res);
@@ -65,6 +83,7 @@ export const listAdminServiceAnnouncementsController = async (_req: Request, res
 export const createServiceAnnouncementController = async (req: Request, res: Response) => {
   try {
     const auth = getAuthContext(res);
+    const files = Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : [];
     const announcement = await ServiceAnnouncementService.createAnnouncement({
       actorUserId: String(auth.id || ""),
       title: req.body?.title,
@@ -73,10 +92,17 @@ export const createServiceAnnouncementController = async (req: Request, res: Res
       body: req.body?.body,
       regulation: req.body?.regulation,
       policyText: req.body?.policyText,
-      targetRoles: req.body?.targetRoles,
-      requireAcceptance: req.body?.requireAcceptance,
-      sendPush: req.body?.sendPush,
-      publishNow: req.body?.publishNow,
+      linkAttachments: parseMaybeJson(req.body?.linkAttachments),
+      attachmentFiles: files.map((file) => ({
+        buffer: file.buffer,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+      })),
+      targetRoles: parseMaybeJson(req.body?.targetRoles),
+      requireAcceptance: parseOptionalBooleanValue(req.body?.requireAcceptance),
+      sendPush: parseOptionalBooleanValue(req.body?.sendPush),
+      publishNow: parseOptionalBooleanValue(req.body?.publishNow),
     });
 
     res.json({
