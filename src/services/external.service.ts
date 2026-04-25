@@ -1,6 +1,8 @@
 import moment from "moment-timezone";
-import { ExternalPaidStatus, IVentaExterna } from "../entities/IVentaExterna";
+import { Types } from "mongoose";
+import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod } from "../entities/IVentaExterna";
 import { ExternalSaleRepository } from "../repositories/external.repository";
+import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
 
 const getAllExternalSales = async () => {
@@ -32,6 +34,12 @@ const toNumber = (value: unknown, fallback = 0): number => {
 
 const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 
+const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
+  "1": "Transferencia o QR",
+  "2": "Efectivo",
+  "4": "Efectivo + QR",
+};
+
 const normalizeExternalDate = (value: unknown) => {
   if (value) {
     return moment.tz(value as string, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
@@ -50,9 +58,120 @@ const normalizePaidStatus = (value: unknown): ExternalPaidStatus => {
   return "no";
 };
 
+const normalizeSellerPaymentMethod = (value: unknown): PackagePaymentMethod => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "efectivo" || normalized === "qr") return normalized;
+  return "";
+};
+
+const normalizeDeliveryPaymentType = (value: unknown): string => {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "";
+  if (EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE[trimmed]) {
+    return EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE[trimmed];
+  }
+
+  const normalized = trimmed.toLowerCase();
+  const existing = Object.values(EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE).find(
+    (label) => label.toLowerCase() === normalized
+  );
+
+  return existing || "";
+};
+
 const normalizeOrderStatus = (value: unknown, delivered: boolean): string => {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   return delivered ? "Entregado" : "En Espera";
+};
+
+const registerExternalMixedIncome = async (params: {
+  paymentMethod: "efectivo" | "qr";
+  amount: number;
+  packageCount: number;
+  branchId?: string;
+}) => {
+  const amount = roundCurrency(params.amount);
+  if (amount <= 0) return;
+
+  await FinanceFluxRepository.registerFinanceFlux({
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    concepto:
+      params.packageCount > 1
+        ? `Entregas externas mixtas en ${params.paymentMethod} (${params.packageCount})`
+        : `Entrega externa mixta en ${params.paymentMethod}`,
+    monto: amount,
+    fecha: new Date(),
+    esDeuda: false,
+    visible_en_flujo_general: false,
+    id_sucursal:
+      params.branchId && Types.ObjectId.isValid(params.branchId)
+        ? new Types.ObjectId(params.branchId)
+        : undefined,
+  });
+};
+
+const resolveExternalDeliveryPayment = (params: {
+  delivered: boolean;
+  buyerAmount: number;
+  paymentType?: unknown;
+  subtotalQr?: unknown;
+  subtotalEfectivo?: unknown;
+}) => {
+  const buyerAmount = roundCurrency(params.buyerAmount);
+  if (!params.delivered || buyerAmount <= 0) {
+    return {
+      tipoDePago: "",
+      subtotalQr: 0,
+      subtotalEfectivo: 0,
+    };
+  }
+
+  const tipoDePago = normalizeDeliveryPaymentType(params.paymentType);
+  const subtotalQr = roundCurrency(toNumber(params.subtotalQr, 0));
+  const subtotalEfectivo = roundCurrency(toNumber(params.subtotalEfectivo, 0));
+
+  if (!tipoDePago) {
+    return {
+      tipoDePago: EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE["2"],
+      subtotalQr: 0,
+      subtotalEfectivo: buyerAmount,
+    };
+  }
+
+  if (tipoDePago === EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE["1"]) {
+    return {
+      tipoDePago,
+      subtotalQr: buyerAmount,
+      subtotalEfectivo: 0,
+    };
+  }
+
+  if (tipoDePago === EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE["2"]) {
+    return {
+      tipoDePago,
+      subtotalQr: 0,
+      subtotalEfectivo: buyerAmount,
+    };
+  }
+
+  if (tipoDePago !== EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE["4"]) {
+    throw new Error("Tipo de pago de entrega no valido");
+  }
+
+  if (subtotalQr <= 0 || subtotalEfectivo <= 0) {
+    throw new Error("En pago mixto de entrega ambos montos deben ser mayores a 0");
+  }
+
+  if (Math.abs(roundCurrency(subtotalQr + subtotalEfectivo) - buyerAmount) > 0.01) {
+    throw new Error("La suma de QR + efectivo debe ser igual a la deuda del comprador");
+  }
+
+  return {
+    tipoDePago,
+    subtotalQr,
+    subtotalEfectivo,
+  };
 };
 
 const getSimplePackageFinancials = (input: any) => {
@@ -85,6 +204,45 @@ const adjustSellerSaldoPendiente = async (sellerId: string, delta: number) => {
   await SellerRepository.updateSeller(sellerId, {
     saldo_pendiente: roundCurrency(Number(seller?.saldo_pendiente || 0) + safeDelta),
   });
+};
+
+const applyExternalMixedIncomeFromRecords = async (records: IVentaExterna[]) => {
+  const totals = records.reduce(
+    (acc, row) => {
+      if (row.esta_pagado !== "mixto") return acc;
+      const method = normalizeSellerPaymentMethod(row.metodo_pago);
+      const amount = roundCurrency(Number(row.monto_paga_vendedor || row.amortizacion_vendedor || 0));
+      if (!method || amount <= 0) return acc;
+
+      acc[method].amount = roundCurrency(acc[method].amount + amount);
+      acc[method].count += 1;
+      acc.branchId = acc.branchId || String(row.sucursal || "");
+      return acc;
+    },
+    {
+      efectivo: { amount: 0, count: 0 },
+      qr: { amount: 0, count: 0 },
+      branchId: "",
+    }
+  );
+
+  if (totals.efectivo.amount > 0) {
+    await registerExternalMixedIncome({
+      paymentMethod: "efectivo",
+      amount: totals.efectivo.amount,
+      packageCount: totals.efectivo.count,
+      branchId: totals.branchId || undefined,
+    });
+  }
+
+  if (totals.qr.amount > 0) {
+    await registerExternalMixedIncome({
+      paymentMethod: "qr",
+      amount: totals.qr.amount,
+      packageCount: totals.qr.count,
+      branchId: totals.branchId || undefined,
+    });
+  }
 };
 
 const validateBuyerIdentity = (input: any) => {
@@ -168,6 +326,10 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
     input.monto_paga_vendedor,
     input.monto_paga_comprador
   );
+  const sellerPaymentMethod =
+    paid === "mixto"
+      ? normalizeSellerPaymentMethod(input.metodo_pago ?? input.paymentMethod ?? input.seller_payment_method)
+      : "";
 
   return {
     id_vendedor: input.id_vendedor,
@@ -184,8 +346,14 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
     package_size: "estandar",
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
-    deuda_comprador: toNumber(input.deuda_comprador ?? input.monto_paga_comprador ?? packagePrice, packagePrice),
-    metodo_pago: "",
+    deuda_comprador:
+      paid === "mixto"
+        ? roundCurrency(montoPagaComprador)
+        : toNumber(input.deuda_comprador ?? saldoCobrar ?? input.monto_paga_comprador ?? packagePrice, packagePrice),
+    metodo_pago: sellerPaymentMethod,
+    tipo_de_pago: "",
+    subtotal_qr: 0,
+    subtotal_efectivo: 0,
     precio_paquete: packagePrice,
     precio_total: packagePrice,
     esta_pagado: paid,
@@ -217,7 +385,12 @@ const registerExternalSale = async (externalSale: any) => {
   }
 
   const record = buildExternalRecord(externalSale);
-  return await ExternalSaleRepository.registerExternalSale(record);
+  if (record.esta_pagado === "mixto" && !record.metodo_pago) {
+    throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para entregas mixtas");
+  }
+  const created = await ExternalSaleRepository.registerExternalSale(record);
+  await applyExternalMixedIncomeFromRecords([record]);
+  return created;
 };
 
 const registerExternalSalesByPackages = async (payload: any) => {
@@ -239,10 +412,17 @@ const registerExternalSalesByPackages = async (payload: any) => {
       merged.sucursal = merged.id_sucursal;
     }
 
-    return buildExternalRecord(merged, index);
+    const record = buildExternalRecord(merged, index);
+    if (record.esta_pagado === "mixto" && !record.metodo_pago) {
+      throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para paquetes mixtos");
+    }
+
+    return record;
   });
 
-  return await ExternalSaleRepository.registerExternalSales(toCreate);
+  const created = await ExternalSaleRepository.registerExternalSales(toCreate);
+  await applyExternalMixedIncomeFromRecords(toCreate);
+  return created;
 };
 
 const deleteExternalSaleByID = async (id: string) => {
@@ -299,6 +479,36 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
     externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
   );
+  const buyerDebtAmount =
+    serviceOrigin === "simple_package"
+      ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
+      : toNumber(
+          externalSale.deuda_comprador ??
+            existing.deuda_comprador ??
+            saldoCobrar ??
+            amountToCharge,
+          amountToCharge
+        );
+  const sellerPaymentMethod = paid === "mixto"
+    ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago)
+    : "";
+  if (serviceOrigin === "external" && paid === "mixto" && !sellerPaymentMethod) {
+    throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para entregas mixtas");
+  }
+  const deliveryPayment =
+    serviceOrigin === "external"
+      ? resolveExternalDeliveryPayment({
+          delivered,
+          buyerAmount: buyerDebtAmount,
+          paymentType: externalSale.tipo_de_pago ?? existing.tipo_de_pago,
+          subtotalQr: externalSale.subtotal_qr ?? existing.subtotal_qr,
+          subtotalEfectivo: externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
+        })
+      : {
+          tipoDePago: String(existing.tipo_de_pago || ""),
+          subtotalQr: roundCurrency(Number((existing as any)?.subtotal_qr || 0)),
+          subtotalEfectivo: roundCurrency(Number((existing as any)?.subtotal_efectivo || 0)),
+        };
 
   const updatePayload: any = {
     ...externalSale,
@@ -310,10 +520,11 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     monto_paga_vendedor: montoPagaVendedor,
     monto_paga_comprador: montoPagaComprador,
     saldo_cobrar: saldoCobrar,
-    deuda_comprador:
-      serviceOrigin === "simple_package"
-        ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
-        : toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador ?? amountToCharge, amountToCharge),
+    deuda_comprador: buyerDebtAmount,
+    metodo_pago: sellerPaymentMethod,
+    tipo_de_pago: deliveryPayment.tipoDePago,
+    subtotal_qr: deliveryPayment.subtotalQr,
+    subtotal_efectivo: deliveryPayment.subtotalEfectivo,
     estado_pedido: status,
     delivered,
     is_external: true,

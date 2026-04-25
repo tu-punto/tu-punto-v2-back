@@ -179,6 +179,15 @@ const calculateSoldMerchandiseValue = (sales: any[]) =>
     return total + cantidad * precio;
   }, 0);
 
+const isDeliveredStatus = (value: unknown) =>
+  String(value || "").trim().toLowerCase() === "entregado";
+
+const isCompletedExternalSale = (sale: any) =>
+  Boolean(sale?.delivered) || isDeliveredStatus(sale?.estado_pedido);
+
+const isCompletedSimplePackageShipping = (shipping: any) =>
+  Boolean(shipping?.simple_package_order) && isDeliveredStatus(shipping?.estado_pedido);
+
 const parseRangeToDates = ({ range, from, to }: CommissionRange): { fromDate?: Date; toDate?: Date } => {
   const now = new Date();
   let fromDate: Date | undefined;
@@ -263,6 +272,9 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   let costoDelivery = 0;
   let comision = 0;
   let ingresosEntregasExternas = 0;
+  let externalDeliveredPackageTotal = 0;
+  let simplePackagesNoDeliveryTotal = 0;
+  let simplePackagesInterbranchTotal = 0;
 
   for (const f of fluxes) {
     if (f.tipo === "INGRESO") ingresosFluxes += f.monto || 0;
@@ -273,6 +285,19 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   for (const s of shippings) {
     montoCobradoDelivery += s.cargo_delivery || 0;
     costoDelivery += s.costo_delivery || 0;
+
+    if (!isCompletedSimplePackageShipping(s)) continue;
+
+    const packagePrice = Number((s as any)?.precio_paquete || 0);
+    const branchShippingPrice = Number(
+      (s as any)?.precio_entre_sucursal ?? s.cargo_delivery ?? 0
+    );
+
+    if (branchShippingPrice > 0) {
+      simplePackagesInterbranchTotal += packagePrice + branchShippingPrice;
+    } else {
+      simplePackagesNoDeliveryTotal += packagePrice;
+    }
   }
   const balanceDelivery = montoCobradoDelivery - costoDelivery;
 
@@ -282,7 +307,17 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
 
   // Suma ingresos por entregas externas
   for (const e of externalSales) {
-    ingresosEntregasExternas += e.precio_total || 0;
+    if (!isCompletedExternalSale(e)) continue;
+
+    const subtotalQr = Number((e as any)?.subtotal_qr || 0);
+    const subtotalEfectivo = Number((e as any)?.subtotal_efectivo || 0);
+    const buyerIncome =
+      subtotalQr > 0 || subtotalEfectivo > 0
+        ? subtotalQr + subtotalEfectivo
+        : Number((e as any)?.deuda_comprador ?? (e as any)?.monto_paga_comprador ?? (e as any)?.saldo_cobrar ?? 0);
+
+    ingresosEntregasExternas += buyerIncome;
+    externalDeliveredPackageTotal += Number(e.precio_paquete || 0);
   }
 
   const mercaderiaVendida = calculateSoldMerchandiseValue(sales);
@@ -305,6 +340,9 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
     deliveryIncome: montoCobradoDelivery,
     deliveryExpenses: costoDelivery,
     externalDeliveryIncome: ingresosEntregasExternas,
+    externalDeliveredPackageTotal,
+    simplePackagesNoDeliveryTotal,
+    simplePackagesInterbranchTotal,
     balanceDelivery,
     utilidad,
     caja

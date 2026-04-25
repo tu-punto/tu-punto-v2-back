@@ -79,6 +79,21 @@ const VentaExternaSchema = new Schema({
         enum: ["", "efectivo", "qr"],
         default: ""
     },
+    tipo_de_pago: {
+        type: String,
+        required: false,
+        default: ""
+    },
+    subtotal_qr: {
+        type: Number,
+        required: false,
+        default: 0
+    },
+    subtotal_efectivo: {
+        type: Number,
+        required: false,
+        default: 0
+    },
     direccion_delivery: {
         type: String,
         required: false

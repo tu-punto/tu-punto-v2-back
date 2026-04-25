@@ -139,6 +139,36 @@ const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "q
 
 const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 
+const getExternalBuyerChargeAmount = (sale: any): number =>
+  roundCurrency(
+    Number(
+      sale?.deuda_comprador ??
+        sale?.monto_paga_comprador ??
+        sale?.saldo_cobrar ??
+        0
+    )
+  );
+
+const getExternalDeliveredPaymentTotals = (sale: any) => {
+  const buyerAmount = getExternalBuyerChargeAmount(sale);
+  const subtotalQr = roundCurrency(Number(sale?.subtotal_qr || 0));
+  const subtotalEfectivo = roundCurrency(Number(sale?.subtotal_efectivo || 0));
+
+  if (subtotalQr > 0 || subtotalEfectivo > 0) {
+    return {
+      subtotalQr,
+      subtotalEfectivo,
+      montoTotal: roundCurrency(subtotalQr + subtotalEfectivo),
+    };
+  }
+
+  return {
+    subtotalQr: 0,
+    subtotalEfectivo: buyerAmount,
+    montoTotal: buyerAmount,
+  };
+};
+
 const getSimplePackageBalanceToApply = async (
   shipping: any
 ): Promise<{ sellerId: string; amount: number } | null> => {
@@ -934,21 +964,19 @@ const getDailySalesHistory = async (
     const branchId = String((sale?.sucursal as any)?._id || sale?.sucursal || "").trim();
     if (branchId !== String(sucursalId || "").trim()) return false;
 
-    const buyerAmount = roundCurrency(
-      Number(sale?.monto_paga_comprador ?? sale?.saldo_cobrar ?? 0)
-    );
+    const buyerAmount = getExternalBuyerChargeAmount(sale);
     const historyDate = getExternalHistoryDate(sale);
     if (!historyDate) return false;
+    const isDelivered = String(sale?.estado_pedido || "").trim().toLowerCase() === "entregado" || sale?.delivered === true;
+    if (!isDelivered) return false;
 
     if (fromLastClose) {
       const deliveredDate = sale?.hora_entrega_real ? new Date(sale.hora_entrega_real) : null;
-      const orderDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
-      const isDelivered = String(sale?.estado_pedido || "").trim().toLowerCase() === "entregado" || sale?.delivered === true;
-
-      if (isDelivered && deliveredDate) {
+      if (deliveredDate) {
         return deliveredDate > periodStart && deliveredDate <= periodEnd;
       }
 
+      const orderDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
       return buyerAmount > 0 && !!orderDate && orderDate > periodStart && orderDate <= periodEnd;
     }
 
@@ -998,18 +1026,24 @@ const getDailySalesHistory = async (
   });
 
   const resumenExternas = externalFiltrados.map((sale: any) => {
-    const buyerAmount = roundCurrency(
-      Number(sale?.monto_paga_comprador ?? sale?.saldo_cobrar ?? 0)
-    );
+    const paymentTotals = getExternalDeliveredPaymentTotals(sale);
+    const buyerAmount = paymentTotals.montoTotal;
+    const tipoDePago =
+      String(sale?.tipo_de_pago || "").trim() ||
+      (paymentTotals.subtotalQr > 0 && paymentTotals.subtotalEfectivo > 0
+        ? "Efectivo + QR"
+        : paymentTotals.subtotalQr > 0
+          ? "Transferencia o QR"
+          : "Efectivo");
 
     return {
       _id: sale._id,
       fecha: getExternalHistoryDate(sale),
       hora: dayjs(getExternalHistoryDate(sale)).format("HH:mm"),
-      tipo_de_pago: buyerAmount > 0 ? "Efectivo" : "No pagado",
+      tipo_de_pago: buyerAmount > 0 ? tipoDePago : "No pagado",
       monto_total: buyerAmount,
-      subtotal_efectivo: buyerAmount,
-      subtotal_qr: 0,
+      subtotal_efectivo: paymentTotals.subtotalEfectivo,
+      subtotal_qr: paymentTotals.subtotalQr,
       esta_pagado: sale.esta_pagado,
       is_external: true,
     };
