@@ -489,10 +489,27 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
             amountToCharge,
           amountToCharge
         );
+  const existingSellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
+  const hasPaymentStatusUpdate = Object.prototype.hasOwnProperty.call(externalSale, "esta_pagado");
+  const hasSellerMethodUpdate = Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
+  const hasSellerAmountUpdate =
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador");
+  const isLegacyMixedWithoutSellerMethod =
+    existing.esta_pagado === "mixto" &&
+    !existingSellerPaymentMethod &&
+    !hasPaymentStatusUpdate &&
+    !hasSellerMethodUpdate &&
+    !hasSellerAmountUpdate;
   const sellerPaymentMethod = paid === "mixto"
     ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago)
     : "";
-  if (serviceOrigin === "external" && paid === "mixto" && !sellerPaymentMethod) {
+  if (
+    serviceOrigin === "external" &&
+    paid === "mixto" &&
+    !sellerPaymentMethod &&
+    !isLegacyMixedWithoutSellerMethod
+  ) {
     throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para entregas mixtas");
   }
   const deliveryPayment =
