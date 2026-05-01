@@ -324,6 +324,8 @@ const getInternalRecipientsForShipping = async (shipping: ShippingLike): Promise
       { role: { $in: ["admin", "superadmin"] } },
       { sucursal: new Types.ObjectId(branchId) },
     ];
+  } else {
+    query.role = { $in: ["admin", "superadmin"] };
   }
 
   const users = await UserModel.find(query).select("_id").lean();
@@ -706,13 +708,16 @@ const registerBuyerPushSubscription = async (params: {
 const runReminderSweep = async () => {
   try {
     const now = new Date();
-    const thirtyMinutesLater = new Date(now.getTime() + 30 * 60 * 1000);
+    const reminderWindowStart = new Date(now.getTime() + 59 * 60 * 1000);
+    const reminderWindowEnd = new Date(now.getTime() + 60 * 60 * 1000);
 
     const upcomingShippings = await PedidoModel.find({
       estado_pedido: BUYER_STATUSES.CONFIRMED,
+      simple_package_order: { $ne: true },
+      "venta.0": { $exists: true },
       hora_entrega_acordada: {
-        $gte: now,
-        $lte: thirtyMinutesLater,
+        $gte: reminderWindowStart,
+        $lte: reminderWindowEnd,
       },
     })
       .select("_id cliente hora_entrega_acordada lugar_entrega sucursal lugar_origen")
@@ -734,9 +739,9 @@ const runReminderSweep = async () => {
         data: {
           shippingId,
           status: BUYER_STATUSES.CONFIRMED,
-          kind: "reminder_30m",
+          kind: "reminder_1h",
         },
-        dedupeKey: `delivery.reminder.30m.${shippingId}`,
+        dedupeKey: `delivery.reminder.1h.${shippingId}`,
       });
 
       if (!createdForUserIds.length) continue;

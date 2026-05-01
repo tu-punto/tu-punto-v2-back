@@ -6,6 +6,7 @@ import { comparePassword, hashPassword } from "../helpers/auth";
 import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
+import { Types } from "mongoose";
 import {
   ASSIGNABLE_USER_ROLES,
   getPublicUserRole,
@@ -65,6 +66,22 @@ const serializeUserForClient = (user: any) => {
     is_superadmin: actualRole === "superadmin",
   };
 };
+
+const resolveUserBranchForRole = (role: string, branchValue: unknown) => {
+  if (role !== "operator") return null;
+
+  const branchId =
+    typeof branchValue === "object" && branchValue
+      ? String((branchValue as any)._id || branchValue || "")
+      : String(branchValue || "");
+
+  if (!Types.ObjectId.isValid(branchId)) {
+    throw new Error("Debe asignar una sucursal valida al operador");
+  }
+
+  return new Types.ObjectId(branchId);
+};
+
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   console.log("User:",user)
@@ -86,15 +103,16 @@ export const registerUserController = async (req: Request, res: Response) => {
       ...user,
       role: normalizedRole,
       password: encryptPassword,
+      sucursal: resolveUserBranchForRole(normalizedRole, user.sucursal ?? user.sucursalId),
     });
     res.json({
       status: true,
       user: serializeUserForClient(newUser),
     });
     console.log("Usuario registrado");
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({ error: error?.message || "Internal Server Error" });
   }
 };
 
@@ -257,7 +275,7 @@ export const getAdminsController = async (req: Request, res: Response) => {
 export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, role, password } = req.body;
+    const { email, role, password, sucursal, sucursalId } = req.body;
     const authRole = normalizeUserRole(res.locals.auth?.role);
     const existingUser = await UserService.getUserByIdService(id);
 
@@ -275,9 +293,14 @@ export const updateUserController = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, msg: "Rol inválido" });
     }
     
+    if (existingRole !== normalizedRole && authRole !== "superadmin") {
+      return res.status(403).json({ success: false, msg: "Solo superadmin puede asignar roles" });
+    }
+
     const updateData: any = {
       email,
       role: existingRole === "superadmin" ? "superadmin" : normalizedRole,
+      sucursal: resolveUserBranchForRole(normalizedRole, sucursal ?? sucursalId),
     };
     
     if (password) {

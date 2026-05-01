@@ -397,6 +397,16 @@ export const exportClientesStatusXlsx = async (_: Request, res: Response) => {
   }
 };
 
+export const exportVendedoresPagosSucursalesXlsx = async (_: Request, res: Response) => {
+  try {
+    const { filePath, filename } = await ReportsService.exportVendedoresPagosSucursalesXlsx();
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportVendedoresPagosSucursalesXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+
 export const getEntregasSimplesResumen = async (req: Request, res: Response) => {
   try {
     const sellerId = typeof req.query?.sellerId === "string" ? String(req.query.sellerId).trim() : "";

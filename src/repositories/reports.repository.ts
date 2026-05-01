@@ -4,6 +4,7 @@ import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { VentaModel } from "../entities/implements/VentaSchema";
 import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { FlujoFinancieroModel } from "../entities/implements/FlujoFinancieroSchema"; // 👈 asegúrate de tenerlo
 import { VendedorModel } from "../entities/implements/VendedorSchema"; // 👈 asegúrate de tenerlo
 export const ReportsRepository = {
@@ -577,9 +578,22 @@ async fetchVendedoresConPagoSucursales() {
       mail: 1,
       telefono: 1,
       fecha_vigencia: 1,
+      comision_porcentual: 1,
+      comision_fija: 1,
       pago_sucursales: 1,
     },
   )
+    .lean()
+    .exec();
+},
+async fetchSucursalesBasicas() {
+  return await SucursalModel.find(
+    {},
+    {
+      nombre: 1,
+    },
+  )
+    .sort({ nombre: 1 })
     .lean()
     .exec();
 },

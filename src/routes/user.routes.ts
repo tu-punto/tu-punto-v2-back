@@ -13,7 +13,7 @@ import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 
 const userRouter = Router();
 
-userRouter.post("/register", requireAuth, requireRole("admin"), registerUserController);
+userRouter.post("/register", requireAuth, requireRole("superadmin"), registerUserController);
 userRouter.post("/login", loginUserController);
 userRouter.get("/info", requireAuth, getUserInfoController);
 userRouter.post("/logout", requireAuth, logoutUserController);

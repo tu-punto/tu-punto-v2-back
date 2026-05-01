@@ -18,6 +18,7 @@ import {
   getVentasQr,
   exportVentasQrXlsx,
   exportClientesStatusXlsx,
+  exportVendedoresPagosSucursalesXlsx,
   getEntregasSimplesResumen,
   exportEntregasSimplesResumenXlsx,
   exportVentasTemporalesPorVendedorXlsx,
@@ -45,6 +46,7 @@ reportsRouter.get("/ventas-vendedores-4m/xlsx", exportVentasVendedores4mXlsx);
 reportsRouter.post("/ventas-qr", getVentasQr);
 reportsRouter.get("/ventas-qr/xlsx", exportVentasQrXlsx);
 reportsRouter.get("/clientes-status/xlsx", exportClientesStatusXlsx);
+reportsRouter.get("/vendedores-pagos-sucursales/xlsx", exportVendedoresPagosSucursalesXlsx);
 reportsRouter.get("/entregas-simples", getEntregasSimplesResumen);
 reportsRouter.get("/entregas-simples/xlsx", exportEntregasSimplesResumenXlsx);
 reportsRouter.get("/ventas-temporales-vendedor", getVentasTemporalesPorVendedor);

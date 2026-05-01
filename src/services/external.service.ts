@@ -98,8 +98,8 @@ const registerExternalMixedIncome = async (params: {
     categoria: "SERVICIO",
     concepto:
       params.packageCount > 1
-        ? `Entregas externas mixtas en ${params.paymentMethod} (${params.packageCount})`
-        : `Entrega externa mixta en ${params.paymentMethod}`,
+        ? `Entregas externas pagadas por vendedor en ${params.paymentMethod} (${params.packageCount})`
+        : `Entrega externa pagada por vendedor en ${params.paymentMethod}`,
     monto: amount,
     fecha: new Date(),
     esDeuda: false,
@@ -209,7 +209,6 @@ const adjustSellerSaldoPendiente = async (sellerId: string, delta: number) => {
 const applyExternalMixedIncomeFromRecords = async (records: IVentaExterna[]) => {
   const totals = records.reduce(
     (acc, row) => {
-      if (row.esta_pagado !== "mixto") return acc;
       const method = normalizeSellerPaymentMethod(row.metodo_pago);
       const amount = roundCurrency(Number(row.monto_paga_vendedor || row.amortizacion_vendedor || 0));
       if (!method || amount <= 0) return acc;
@@ -327,7 +326,7 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
     input.monto_paga_comprador
   );
   const sellerPaymentMethod =
-    paid === "mixto"
+    montoPagaVendedor > 0
       ? normalizeSellerPaymentMethod(input.metodo_pago ?? input.paymentMethod ?? input.seller_payment_method)
       : "";
 
@@ -385,8 +384,8 @@ const registerExternalSale = async (externalSale: any) => {
   }
 
   const record = buildExternalRecord(externalSale);
-  if (record.esta_pagado === "mixto" && !record.metodo_pago) {
-    throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para entregas mixtas");
+  if (roundCurrency(Number(record.monto_paga_vendedor || 0)) > 0 && !record.metodo_pago) {
+    throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
   const created = await ExternalSaleRepository.registerExternalSale(record);
   await applyExternalMixedIncomeFromRecords([record]);
@@ -413,8 +412,8 @@ const registerExternalSalesByPackages = async (payload: any) => {
     }
 
     const record = buildExternalRecord(merged, index);
-    if (record.esta_pagado === "mixto" && !record.metodo_pago) {
-      throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para paquetes mixtos");
+    if (roundCurrency(Number(record.monto_paga_vendedor || 0)) > 0 && !record.metodo_pago) {
+      throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
     }
 
     return record;

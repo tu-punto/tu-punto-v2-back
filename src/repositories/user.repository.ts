@@ -14,13 +14,13 @@ const registerUserRepo = async (user: IUser): Promise<IUserDocument> => {
 };
 
 const getUserByEmail = async (email: string): Promise<IUserDocument | null> => {
-  const user = await UserModel.findOne({ email: email }); 
+  const user = await UserModel.findOne({ email: email }).populate("sucursal"); 
   console.log("Encontrado:", user); 
   return user;
 };
 
 const getUserById = async (id: string): Promise<IUserDocument | null> => {
-  const user = await UserModel.findById(id);  
+  const user = await UserModel.findById(id).populate("sucursal");  
   return user;
 };
 
@@ -30,11 +30,11 @@ const getAdmins = async () => {
 
 
 const getAllUsers = async () => {
-  return await UserModel.find({}).select('-password').sort({ createdAt: -1 });
+  return await UserModel.find({}).select('-password').populate("sucursal").sort({ createdAt: -1 });
 };
 
 const updateUser = async (id: string, updateData: any) => {
-  return await UserModel.findByIdAndUpdate(id, updateData, { new: true }).select('-password');
+  return await UserModel.findByIdAndUpdate(id, updateData, { new: true }).select('-password').populate("sucursal");
 };
 
 const deleteUser = async (id: string) => {

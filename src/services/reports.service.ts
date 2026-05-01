@@ -2084,6 +2084,120 @@ export const ReportsService = {
     return { filePath, filename };
   },
 
+  async exportVendedoresPagosSucursalesXlsx() {
+    const [vendedores, sucursalesRaw] = await Promise.all([
+      ReportsRepository.fetchVendedoresConPagoSucursales(),
+      ReportsRepository.fetchSucursalesBasicas(),
+    ]);
+    const today = moment.tz(TZ).startOf("day");
+
+    const sucursalesMap = new Map<string, string>();
+    for (const suc of sucursalesRaw as any[]) {
+      const id = String(suc?._id || "").trim();
+      const nombre = String(suc?.nombre || "").trim();
+      if (id) sucursalesMap.set(id, nombre || id);
+    }
+
+    for (const vendedor of vendedores as any[]) {
+      const pagos = Array.isArray(vendedor?.pago_sucursales) ? vendedor.pago_sucursales : [];
+      for (const pago of pagos) {
+        const id = pago?.id_sucursal ? String(pago.id_sucursal).trim() : "";
+        const nombre = String(pago?.sucursalName || "").trim();
+        if (id && !sucursalesMap.has(id)) sucursalesMap.set(id, nombre || id);
+      }
+    }
+
+    const sucursales = Array.from(sucursalesMap.entries())
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre) || a.id.localeCompare(b.id));
+
+    const rows = (vendedores as any[])
+      .map((vendedor) => {
+        const estado = getSellerLifecycleStatus(vendedor?.fecha_vigencia);
+        const pagos = Array.isArray(vendedor?.pago_sucursales) ? vendedor.pago_sucursales : [];
+        const pagosPorSucursal = new Map<string, number>();
+
+        for (const pago of pagos) {
+          const idSucursal = pago?.id_sucursal ? String(pago.id_sucursal).trim() : "";
+          if (!idSucursal || pago?.activo === false) continue;
+
+          const fechaIngreso = pago?.fecha_ingreso ? moment.tz(pago.fecha_ingreso, TZ).startOf("day") : null;
+          const fechaSalida = pago?.fecha_salida ? moment.tz(pago.fecha_salida, TZ).endOf("day") : null;
+          const fueraDeRango =
+            (fechaIngreso && fechaIngreso.isAfter(today)) ||
+            (fechaSalida && fechaSalida.isBefore(today));
+          if (fueraDeRango) continue;
+
+          const pagoMensual =
+            safeNum(pago?.alquiler) +
+            safeNum(pago?.exhibicion) +
+            safeNum(pago?.delivery) +
+            safeNum(pago?.entrega_simple);
+
+          pagosPorSucursal.set(idSucursal, (pagosPorSucursal.get(idSucursal) || 0) + pagoMensual);
+        }
+
+        const pagosCols: Record<string, number> = {};
+        for (const sucursal of sucursales) {
+          pagosCols[`${sucursal.nombre} - Pago mensual`] = +(pagosPorSucursal.get(sucursal.id) || 0).toFixed(2);
+        }
+
+        return {
+          id_vendedor: String(vendedor?._id || ""),
+          vendedor: `${vendedor?.nombre || ""} ${vendedor?.apellido || ""}`.trim(),
+          estado: estado === "ya_no_es_cliente" ? "Inactivo" : "Activo",
+          estado_detalle: estado,
+          mail: vendedor?.mail || "",
+          telefono: vendedor?.telefono || "",
+          fecha_vigencia: vendedor?.fecha_vigencia || null,
+          comision_porcentual: safeNum(vendedor?.comision_porcentual),
+          comision_fija: safeNum(vendedor?.comision_fija),
+          ...pagosCols,
+        };
+      })
+      .sort((a, b) => String(a.vendedor || "").localeCompare(String(b.vendedor || "")));
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet("Vendedores_Pagos");
+    const baseColumns = [
+      { header: "Id Vendedor", key: "id_vendedor", width: 28 },
+      { header: "Vendedor", key: "vendedor", width: 28 },
+      { header: "Estado", key: "estado", width: 14 },
+      { header: "Estado Detalle", key: "estado_detalle", width: 18 },
+      { header: "Mail", key: "mail", width: 28 },
+      { header: "Telefono", key: "telefono", width: 16 },
+      { header: "Fecha Vigencia", key: "fecha_vigencia", width: 18 },
+      { header: "Comision Porcentual", key: "comision_porcentual", width: 20 },
+      { header: "Comision Fija", key: "comision_fija", width: 16 },
+    ];
+    const sucursalColumns = sucursales.map((sucursal) => ({
+      header: `${sucursal.nombre} - Pago mensual`,
+      key: `${sucursal.nombre} - Pago mensual`,
+      width: Math.max(22, sucursal.nombre.length + 16),
+    }));
+
+    ws.columns = [...baseColumns, ...sucursalColumns];
+    ws.getRow(1).font = { bold: true };
+    rows.forEach((row) => ws.addRow(row));
+    ws.getColumn("fecha_vigencia").numFmt = "dd/mm/yyyy";
+    for (const column of sucursalColumns) {
+      ws.getColumn(column.key).numFmt = '#,##0.00';
+    }
+    ws.getColumn("comision_porcentual").numFmt = '#,##0.00';
+    ws.getColumn("comision_fija").numFmt = '#,##0.00';
+
+    const filename = `vendedores_pagos_sucursales.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const filePath = path.join(outDir, filename);
+
+    await wb.xlsx.writeFile(filePath);
+    return { filePath, filename };
+  },
+
   async getInventarioActual({ idSucursal, sellerId }: InventoryParams) {
     if (!idSucursal) throw new Error("idSucursal es requerido");
 
