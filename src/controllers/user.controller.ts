@@ -82,6 +82,16 @@ const resolveUserBranchForRole = (role: string, branchValue: unknown) => {
   return new Types.ObjectId(branchId);
 };
 
+const resolveIdString = (value: unknown): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value instanceof Types.ObjectId) return value.toString();
+  if (typeof value === "object") {
+    return String((value as any)._id || (value as any).$oid || value || "");
+  }
+  return String(value);
+};
+
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   console.log("User:",user)
@@ -135,6 +145,25 @@ export const loginUserController = async (req: Request, res: Response) => {
     let nombre_vendedor = null;
 
     const actualRole = normalizeUserRole(user.role);
+
+    if (actualRole === "operator") {
+      const assignedBranchId = resolveIdString(user.sucursal);
+      const selectedBranchId = String(sucursalId || "").trim();
+
+      if (!Types.ObjectId.isValid(assignedBranchId)) {
+        return res.status(403).json({
+          success: false,
+          msg: "El operador no tiene una sucursal asignada",
+        });
+      }
+
+      if (!Types.ObjectId.isValid(selectedBranchId) || assignedBranchId !== selectedBranchId) {
+        return res.status(403).json({
+          success: false,
+          msg: "El operador solo puede ingresar a su sucursal asignada",
+        });
+      }
+    }
 
     if (actualRole === "seller") {
       const vendedor = await resolveSellerByUserData(user);
