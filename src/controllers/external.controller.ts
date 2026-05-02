@@ -40,6 +40,28 @@ export const getExternalSalesList = async (req: Request, res: Response) => {
     }
 }
 
+export const getExternalContactSuggestions = async (req: Request, res: Response) => {
+    try {
+        const query = (req.query.query as string | undefined) || "";
+        const field = (req.query.field as "seller_carnet" | "name" | "phone" | undefined) || "name";
+        const limit = Number(req.query.limit || 8);
+
+        const suggestions = await ExternalSaleService.getExternalContactSuggestions({
+            query,
+            field,
+            limit
+        });
+
+        res.json({
+            success: true,
+            data: suggestions
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+}
+
 export const getExternalSaleByID = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     deleteExternalSaleByID,
     getAllExternalSales,
+    getExternalContactSuggestions,
     getExternalSalesList,
     getExternalSaleByID,
     registerExternalSale,
@@ -13,6 +14,7 @@ const externalSaleRouter = Router();
 
 externalSaleRouter.get("/", getAllExternalSales)
 externalSaleRouter.get("/list", getExternalSalesList)
+externalSaleRouter.get("/contact-suggestions", getExternalContactSuggestions)
 externalSaleRouter.get("/:id", getExternalSaleByID)
 externalSaleRouter.post("/register", registerExternalSale)
 externalSaleRouter.post("/register-packages", registerExternalSalesByPackages)

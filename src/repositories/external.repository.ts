@@ -63,6 +63,105 @@ const getExternalSalesList = async (params: {
     };
 }
 
+export type ExternalContactSuggestionField = "seller_carnet" | "name" | "phone";
+
+export type ExternalContactSuggestion = {
+    carnet_vendedor?: string;
+    nombre?: string;
+    telefono?: string;
+    source: "seller" | "buyer";
+    lastUsed?: Date;
+};
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getExternalContactSuggestions = async (params: {
+    query?: string;
+    field?: ExternalContactSuggestionField;
+    limit?: number;
+}): Promise<ExternalContactSuggestion[]> => {
+    const query = String(params.query || "").trim();
+    if (query.length < 2) return [];
+
+    const safeLimit = Math.min(20, Math.max(1, Number(params.limit) || 8));
+    const regex = new RegExp(escapeRegex(query), "i");
+    const field = params.field || "name";
+    const match: any = { ...EXTERNAL_SERVICE_FILTER };
+
+    if (field === "seller_carnet") {
+        match.carnet_vendedor = regex;
+    } else if (field === "phone") {
+        match.$and = [
+            {
+                $or: [
+                    { telefono_vendedor: regex },
+                    { telefono_comprador: regex }
+                ]
+            }
+        ];
+    } else {
+        match.$and = [
+            {
+                $or: [
+                    { vendedor: regex },
+                    { comprador: regex }
+                ]
+            }
+        ];
+    }
+
+    const rows = await VentaExternaModel.find(match)
+        .select("carnet_vendedor vendedor telefono_vendedor comprador telefono_comprador fecha_pedido hora_entrega_real")
+        .sort({ hora_entrega_real: -1, fecha_pedido: -1 })
+        .limit(300)
+        .lean();
+
+    const suggestions = new Map<string, ExternalContactSuggestion>();
+    const addSuggestion = (suggestion: ExternalContactSuggestion) => {
+        const key = [
+            String(suggestion.carnet_vendedor || "").trim().toLowerCase(),
+            String(suggestion.nombre || "").trim().toLowerCase(),
+            String(suggestion.telefono || "").trim().toLowerCase()
+        ].join("|");
+
+        if (!suggestion.nombre && !suggestion.telefono && !suggestion.carnet_vendedor) return;
+        if (!suggestions.has(key)) suggestions.set(key, suggestion);
+    };
+
+    rows.forEach((row: any) => {
+        const lastUsed = row.hora_entrega_real || row.fecha_pedido;
+        const sellerSuggestion = {
+            carnet_vendedor: row.carnet_vendedor,
+            nombre: row.vendedor,
+            telefono: row.telefono_vendedor,
+            source: "seller" as const,
+            lastUsed
+        };
+        const buyerSuggestion = {
+            nombre: row.comprador,
+            telefono: row.telefono_comprador,
+            source: "buyer" as const,
+            lastUsed
+        };
+
+        if (field === "seller_carnet") {
+            if (regex.test(String(row.carnet_vendedor || ""))) addSuggestion(sellerSuggestion);
+            return;
+        }
+
+        if (field === "phone") {
+            if (regex.test(String(row.telefono_vendedor || ""))) addSuggestion(sellerSuggestion);
+            if (regex.test(String(row.telefono_comprador || ""))) addSuggestion(buyerSuggestion);
+            return;
+        }
+
+        if (regex.test(String(row.vendedor || ""))) addSuggestion(sellerSuggestion);
+        if (regex.test(String(row.comprador || ""))) addSuggestion(buyerSuggestion);
+    });
+
+    return Array.from(suggestions.values()).slice(0, safeLimit);
+}
+
 const getExternalSaleByID = async (id: string): Promise<IVentaExternaDocument | null> => {
     if (!Types.ObjectId.isValid(id)) return null;
     return await VentaExternaModel.findOne({
@@ -167,6 +266,7 @@ const updateExternalSaleByID = async (id: string, externalSale: IVentaExterna): 
 export const ExternalSaleRepository = {
     getAllExternalSales,
     getExternalSalesList,
+    getExternalContactSuggestions,
     getExternalSaleByID,
     getExternalSalesByDateRange,
     getExternalSalesHistoryCandidates,

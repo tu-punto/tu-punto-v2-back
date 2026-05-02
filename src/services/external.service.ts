@@ -21,6 +21,14 @@ const getExternalSalesList = async (params: {
   return await ExternalSaleRepository.getExternalSalesList(params);
 };
 
+const getExternalContactSuggestions = async (params: {
+  query?: string;
+  field?: "seller_carnet" | "name" | "phone";
+  limit?: number;
+}) => {
+  return await ExternalSaleRepository.getExternalContactSuggestions(params);
+};
+
 const getExternalSaleByID = async (id: string) => {
   return await ExternalSaleRepository.getExternalSaleByID(id);
 };
@@ -603,6 +611,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 export const ExternalSaleService = {
   getAllExternalSales,
   getExternalSalesList,
+  getExternalContactSuggestions,
   getExternalSaleByID,
   registerExternalSale,
   registerExternalSalesByPackages,
