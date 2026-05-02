@@ -4,6 +4,8 @@ import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod } from "../enti
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
+import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -41,6 +43,9 @@ const toNumber = (value: unknown, fallback = 0): number => {
 };
 
 const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
+
+const toObjectIdOrUndefined = (value?: string) =>
+  value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
 
 const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
   "1": "Transferencia o QR",
@@ -90,6 +95,48 @@ const normalizeDeliveryPaymentType = (value: unknown): string => {
 const normalizeOrderStatus = (value: unknown, delivered: boolean): string => {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   return delivered ? "Entregado" : "En Espera";
+};
+
+const resolveExternalBranchRoutePricing = async (originBranchId?: string, destinationBranchId?: string) => {
+  if (!originBranchId && !destinationBranchId) {
+    return {
+      precioEntreSucursal: 0,
+      originBranchId: "",
+      destinationBranchId: "",
+      destinationBranchName: "",
+    };
+  }
+
+  const safeOriginBranchId = toTrimmed(originBranchId || destinationBranchId);
+  const safeDestinationBranchId = toTrimmed(destinationBranchId || originBranchId);
+  if (!Types.ObjectId.isValid(safeOriginBranchId) || !Types.ObjectId.isValid(safeDestinationBranchId)) {
+    throw new Error("Debe seleccionar sucursales validas");
+  }
+
+  if (safeOriginBranchId === safeDestinationBranchId) {
+    const branch = await SucursalModel.findById(safeOriginBranchId).select("nombre").lean();
+    return {
+      precioEntreSucursal: 0,
+      originBranchId: safeOriginBranchId,
+      destinationBranchId: safeDestinationBranchId,
+      destinationBranchName: String((branch as any)?.nombre || "").trim(),
+    };
+  }
+
+  const route = await SimplePackageBranchPriceRepository.findPriceByRoute(
+    safeOriginBranchId,
+    safeDestinationBranchId
+  );
+  if (!route) {
+    throw new Error("No existe un precio configurado entre las sucursales seleccionadas");
+  }
+
+  return {
+    precioEntreSucursal: roundCurrency(Number((route as any)?.precio || 0)),
+    originBranchId: safeOriginBranchId,
+    destinationBranchId: safeDestinationBranchId,
+    destinationBranchName: String((route as any)?.destino_sucursal?.nombre || "").trim(),
+  };
 };
 
 const registerExternalMixedIncome = async (params: {
@@ -317,11 +364,16 @@ const resolvePaymentSplit = (
   };
 };
 
-const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
+const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna> => {
   validateBuyerIdentity(input);
 
   const paid = normalizePaidStatus(input.esta_pagado);
   const packagePrice = toNumber(input.precio_paquete ?? input.precio_total, 0);
+  const originBranchId = toTrimmed(input.origen_sucursal_id ?? input.origen_sucursal ?? input.sucursal ?? input.id_sucursal);
+  const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
+  const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
+  const branchRoutePrice = branchRoute.precioEntreSucursal;
+  const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
   const initialDelivered = input.delivered === true || input.estado_pedido === "Entregado";
@@ -333,6 +385,11 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
     input.monto_paga_vendedor,
     input.monto_paga_comprador
   );
+  const totalSaldoCobrar = roundCurrency(saldoCobrar + branchRoutePrice);
+  const totalBuyerDebt =
+    paid === "mixto"
+      ? roundCurrency(montoPagaComprador + branchRoutePrice)
+      : toNumber(input.deuda_comprador ?? totalSaldoCobrar ?? input.monto_paga_comprador ?? totalServicePrice, totalServicePrice);
   const sellerPaymentMethod =
     montoPagaVendedor > 0
       ? normalizeSellerPaymentMethod(input.metodo_pago ?? input.paymentMethod ?? input.seller_payment_method)
@@ -348,32 +405,33 @@ const buildExternalRecord = (input: any, index = 0): IVentaExterna => {
     descripcion_paquete: toTrimmed(input.descripcion_paquete ?? input.descripcion ?? "Sin descripcion"),
     telefono_comprador: buyerPhone || undefined,
     fecha_pedido: normalizeExternalDate(input.fecha_pedido) as unknown as Date,
-    sucursal: input.sucursal ?? input.id_sucursal,
+    sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
+    origen_sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
+    destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
     package_size: "estandar",
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
-    deuda_comprador:
-      paid === "mixto"
-        ? roundCurrency(montoPagaComprador)
-        : toNumber(input.deuda_comprador ?? saldoCobrar ?? input.monto_paga_comprador ?? packagePrice, packagePrice),
+    deuda_comprador: totalBuyerDebt,
     metodo_pago: sellerPaymentMethod,
     tipo_de_pago: "",
     subtotal_qr: 0,
     subtotal_efectivo: 0,
     precio_paquete: packagePrice,
-    precio_total: packagePrice,
+    precio_entre_sucursal: branchRoutePrice,
+    cargo_delivery: branchRoutePrice,
+    precio_total: totalServicePrice,
     esta_pagado: paid,
     monto_paga_vendedor: montoPagaVendedor,
     monto_paga_comprador: montoPagaComprador,
-    saldo_cobrar: saldoCobrar,
+    saldo_cobrar: totalSaldoCobrar,
     estado_pedido: estadoPedido,
     delivered,
     is_external: true,
     hora_entrega_real: delivered
       ? (normalizeExternalDate(input.hora_entrega_real ?? input.fecha_pedido) as unknown as Date)
       : undefined,
-    lugar_entrega: toTrimmed(input.lugar_entrega ?? "Externo"),
+    lugar_entrega: branchRoute.destinationBranchName || toTrimmed(input.lugar_entrega ?? "Externo"),
     direccion_delivery: input.direccion_delivery,
     ciudad_envio: input.ciudad_envio,
     nombre_flota: input.nombre_flota,
@@ -391,7 +449,7 @@ const registerExternalSale = async (externalSale: any) => {
     externalSale.sucursal = externalSale.id_sucursal;
   }
 
-  const record = buildExternalRecord(externalSale);
+  const record = await buildExternalRecord(externalSale);
   if (roundCurrency(Number(record.monto_paga_vendedor || 0)) > 0 && !record.metodo_pago) {
     throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
@@ -404,7 +462,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
   const paquetes = Array.isArray(payload?.paquetes) ? payload.paquetes : [];
   if (!paquetes.length) throw new Error("Debe enviar al menos un paquete");
 
-  const toCreate: IVentaExterna[] = paquetes.map((pkg: any, index: number) => {
+  const toCreate: IVentaExterna[] = await Promise.all(paquetes.map(async (pkg: any, index: number) => {
     const merged = {
       ...payload,
       ...pkg,
@@ -413,19 +471,20 @@ const registerExternalSalesByPackages = async (payload: any) => {
       carnet_vendedor: payload?.carnet_vendedor,
       vendedor: payload?.vendedor,
       telefono_vendedor: payload?.telefono_vendedor,
+      origen_sucursal_id: payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal,
     };
 
     if (merged.id_sucursal) {
       merged.sucursal = merged.id_sucursal;
     }
 
-    const record = buildExternalRecord(merged, index);
+    const record = await buildExternalRecord(merged, index);
     if (roundCurrency(Number(record.monto_paga_vendedor || 0)) > 0 && !record.metodo_pago) {
       throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
     }
 
     return record;
-  });
+  }));
 
   const created = await ExternalSaleRepository.registerExternalSales(toCreate);
   await applyExternalMixedIncomeFromRecords(toCreate);
