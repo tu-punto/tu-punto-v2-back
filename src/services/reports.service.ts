@@ -3431,6 +3431,214 @@ async getVentasQr({ mes, meses, sucursalIds }: Params) {
     totalGlobal,
   };
 },
+async exportReporteEntregasSimplesExternasXlsx(params: { mes: string; sucursalIds?: string[] }) {
+  const mes = normalizeMeses(params.mes, undefined)[0];
+  const { start, end } = monthRange(mes);
+  const validSucursalIds = Array.isArray(params.sucursalIds)
+    ? params.sucursalIds.map((id) => String(id).trim()).filter((id) => Types.ObjectId.isValid(id))
+    : undefined;
+
+  const rawRows = await ReportsRepository.fetchEntregasSimplesExternasReporte({
+    start,
+    end,
+    sucursalIds: validSucursalIds,
+  });
+
+  const getId = (value: any) => String(value?._id || value || "").trim();
+  const getName = (value: any, fallback = "Sin sucursal") => String(value?.nombre || fallback || "").trim();
+  const inRange = (value: unknown) => {
+    if (!value) return false;
+    const d = new Date(value as any);
+    return !Number.isNaN(d.getTime()) && d >= start && d < end;
+  };
+  const isDelivered = (row: any) =>
+    row?.delivered === true || String(row?.estado_pedido || "").trim().toLowerCase() === "entregado";
+  const resolvePotential = (row: any) => {
+    const precioTotal = safeNum(row?.precio_total);
+    if (precioTotal > 0) return precioTotal;
+    return safeNum(row?.precio_paquete) + safeNum(row?.precio_entre_sucursal || row?.cargo_delivery);
+  };
+  const resolveBuyerPaid = (row: any) => {
+    if (!isDelivered(row)) return 0;
+    const subtotal = safeNum(row?.subtotal_qr) + safeNum(row?.subtotal_efectivo);
+    if (subtotal > 0) return subtotal;
+    if (String(row?.service_origin || "external") === "simple_package") {
+      return String(row?.esta_pagado || "").toLowerCase() === "si" ? safeNum(row?.deuda_comprador) : 0;
+    }
+    return safeNum(row?.monto_paga_comprador || row?.deuda_comprador || row?.saldo_cobrar);
+  };
+  const resolveSellerPaid = (row: any) => {
+    if (String(row?.service_origin || "external") === "simple_package") {
+      return row?.seller_debt_applied === true ? 0 : safeNum(row?.amortizacion_vendedor);
+    }
+    return safeNum(row?.monto_paga_vendedor);
+  };
+
+  type SummaryRow = {
+    sucursal: string;
+    simples_realizadas: number;
+    externas_realizadas: number;
+    total_entregas: number;
+    monto_potencial_simples_bs: number;
+    monto_potencial_externas_bs: number;
+    monto_potencial_total_bs: number;
+    cobrado_simples_bs: number;
+    cobrado_externas_bs: number;
+    cobrado_total_bs: number;
+    por_delivery: number;
+    misma_sucursal: number;
+  };
+
+  const makeSummary = (sucursal: string): SummaryRow => ({
+    sucursal,
+    simples_realizadas: 0,
+    externas_realizadas: 0,
+    total_entregas: 0,
+    monto_potencial_simples_bs: 0,
+    monto_potencial_externas_bs: 0,
+    monto_potencial_total_bs: 0,
+    cobrado_simples_bs: 0,
+    cobrado_externas_bs: 0,
+    cobrado_total_bs: 0,
+    por_delivery: 0,
+    misma_sucursal: 0,
+  });
+
+  const summaryByBranch = new Map<string, SummaryRow>();
+  const total = makeSummary("TOTAL");
+  const simpleDetails: any[] = [];
+  const externalDetails: any[] = [];
+
+  for (const row of rawRows as any[]) {
+    const serviceType = String(row?.service_origin || "external") === "simple_package" ? "simple" : "externa";
+    const registeredInMonth = inRange(row?.fecha_pedido);
+    const deliveredInMonth = isDelivered(row) && inRange(row?.hora_entrega_real || row?.fecha_pedido);
+    if (!registeredInMonth && !deliveredInMonth) continue;
+
+    const origin = row?.origen_sucursal || row?.sucursal;
+    const destination = row?.destino_sucursal || row?.sucursal || row?.origen_sucursal;
+    const originId = getId(origin) || "sin_sucursal";
+    const destinationId = getId(destination);
+    const branchName = getName(origin);
+    const routeType = originId && destinationId && originId !== destinationId ? "Delivery" : "Misma sucursal";
+    const potential = registeredInMonth ? resolvePotential(row) : 0;
+    const sellerPaid = registeredInMonth ? resolveSellerPaid(row) : 0;
+    const buyerPaid = deliveredInMonth ? resolveBuyerPaid(row) : 0;
+    const charged = sellerPaid + buyerPaid;
+    const target = summaryByBranch.get(originId) || makeSummary(branchName);
+
+    if (registeredInMonth) {
+      if (serviceType === "simple") {
+        target.simples_realizadas += 1;
+        total.simples_realizadas += 1;
+        target.monto_potencial_simples_bs += potential;
+        total.monto_potencial_simples_bs += potential;
+      } else {
+        target.externas_realizadas += 1;
+        total.externas_realizadas += 1;
+        target.monto_potencial_externas_bs += potential;
+        total.monto_potencial_externas_bs += potential;
+      }
+
+      target.total_entregas += 1;
+      total.total_entregas += 1;
+      if (routeType === "Delivery") {
+        target.por_delivery += 1;
+        total.por_delivery += 1;
+      } else {
+        target.misma_sucursal += 1;
+        total.misma_sucursal += 1;
+      }
+    }
+
+    if (serviceType === "simple") {
+      target.cobrado_simples_bs += charged;
+      total.cobrado_simples_bs += charged;
+    } else {
+      target.cobrado_externas_bs += charged;
+      total.cobrado_externas_bs += charged;
+    }
+
+    const detail = {
+      tipo: serviceType === "simple" ? "Simple" : "Externa",
+      numero_guia: String(row?.numero_guia || ""),
+      fecha_registro: row?.fecha_pedido ? moment.tz(row.fecha_pedido, TZ).format("YYYY-MM-DD HH:mm") : "",
+      fecha_entrega: row?.hora_entrega_real ? moment.tz(row.hora_entrega_real, TZ).format("YYYY-MM-DD HH:mm") : "",
+      sucursal_origen: branchName,
+      sucursal_destino: getName(destination),
+      ruta: routeType,
+      vendedor: String(row?.vendedor || ""),
+      comprador: String(row?.comprador || ""),
+      descripcion_paquete: String(row?.descripcion_paquete || ""),
+      monto_potencial_bs: +potential.toFixed(2),
+      cobrado_vendedor_bs: +sellerPaid.toFixed(2),
+      cobrado_comprador_bs: +buyerPaid.toFixed(2),
+      cobrado_total_bs: +charged.toFixed(2),
+      estado_pedido: String(row?.estado_pedido || ""),
+      incluido_en_conteo_mes: registeredInMonth ? "Si" : "No",
+      incluido_en_cobrado_mes: charged > 0 ? "Si" : "No",
+    };
+
+    if (serviceType === "simple") simpleDetails.push(detail);
+    else externalDetails.push(detail);
+    summaryByBranch.set(originId, target);
+  }
+
+  const finalize = (row: SummaryRow) => ({
+    ...row,
+    monto_potencial_simples_bs: +row.monto_potencial_simples_bs.toFixed(2),
+    monto_potencial_externas_bs: +row.monto_potencial_externas_bs.toFixed(2),
+    monto_potencial_total_bs: +(row.monto_potencial_simples_bs + row.monto_potencial_externas_bs).toFixed(2),
+    cobrado_simples_bs: +row.cobrado_simples_bs.toFixed(2),
+    cobrado_externas_bs: +row.cobrado_externas_bs.toFixed(2),
+    cobrado_total_bs: +(row.cobrado_simples_bs + row.cobrado_externas_bs).toFixed(2),
+  });
+
+  const resumenRows = [
+    finalize(total),
+    ...Array.from(summaryByBranch.values())
+      .map((row) => finalize(row))
+      .sort((a, b) => a.sucursal.localeCompare(b.sucursal)),
+  ];
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "TuPunto Reports";
+  wb.created = new Date();
+
+  const addRowsSheet = (name: string, rows: any[]) => {
+    const ws = wb.addWorksheet(name);
+    if (!rows.length) return ws;
+    const headers = Object.keys(rows[0]);
+    ws.addRow(headers);
+    ws.getRow(1).font = { bold: true };
+    rows.forEach((row) => ws.addRow(headers.map((header) => row[header])));
+    ws.columns.forEach((column) => {
+      column.width = 22;
+    });
+    return ws;
+  };
+
+  const wsResumen = wb.addWorksheet("Resumen");
+  wsResumen.addRow(["Mes", mes]);
+  wsResumen.addRow([]);
+  const resumenHeaders = Object.keys(resumenRows[0] || finalize(total));
+  wsResumen.addRow(resumenHeaders);
+  wsResumen.getRow(wsResumen.rowCount).font = { bold: true };
+  resumenRows.forEach((row) => wsResumen.addRow(resumenHeaders.map((header) => (row as any)[header])));
+  wsResumen.columns.forEach((column) => {
+    column.width = 24;
+  });
+
+  addRowsSheet("Detalle simples", simpleDetails);
+  addRowsSheet("Detalle externas", externalDetails);
+
+  const outDir = path.join(process.cwd(), "reports");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const filename = `reporte_entregas_simples_externas_${mes}.xlsx`;
+  const filePath = path.join(outDir, filename);
+  await wb.xlsx.writeFile(filePath);
+  return { filePath, filename };
+},
 async getEntregasSimplesResumen(params: { sellerIds?: string[]; meses?: string[] } = {}) {
   const meses = normalizeMeses(undefined, Array.isArray(params.meses) ? params.meses : undefined);
   const sellerIds =

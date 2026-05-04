@@ -355,6 +355,47 @@ export const ReportsRepository = {
       .exec();
   },
 
+  async fetchEntregasSimplesExternasReporte(opts: { start: Date; end: Date; sucursalIds?: string[] }) {
+    const { start, end, sucursalIds } = opts;
+    const rangeMatch: any = {};
+    if (start) rangeMatch.$gte = start;
+    if (end) rangeMatch.$lt = end;
+
+    const filter: any = {
+      $or: [
+        { fecha_pedido: rangeMatch },
+        { hora_entrega_real: rangeMatch },
+      ],
+    };
+
+    if (sucursalIds?.length) {
+      const ids = sucursalIds
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+
+      if (ids.length) {
+        filter.$and = [
+          {
+            $or: [
+              { sucursal: { $in: ids } },
+              { origen_sucursal: { $in: ids } },
+              { destino_sucursal: { $in: ids } },
+            ],
+          },
+        ];
+      }
+    }
+
+    return await VentaExternaModel.find(filter)
+      .populate([
+        { path: "sucursal", select: "_id nombre" },
+        { path: "origen_sucursal", select: "_id nombre" },
+        { path: "destino_sucursal", select: "_id nombre" },
+      ])
+      .lean()
+      .exec();
+  },
+
 async fetchVendedoresActivosConPlanes(opts: { hoy: Date }) {
   const { hoy } = opts;
 

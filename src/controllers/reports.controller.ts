@@ -438,6 +438,26 @@ export const exportEntregasSimplesResumenXlsx = async (req: Request, res: Respon
   }
 };
 
+export const exportReporteEntregasSimplesExternasXlsx = async (req: Request, res: Response) => {
+  try {
+    const mes = typeof req.query?.mes === "string" ? String(req.query.mes).trim() : "";
+    const sucursalIds = parseStringArrayInput(req.query?.sucursales);
+
+    if (!mes) {
+      return res.status(400).json({ ok: false, msg: "mes es requerido" });
+    }
+
+    const { filePath, filename } = await ReportsService.exportReporteEntregasSimplesExternasXlsx({
+      mes,
+      sucursalIds,
+    });
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportReporteEntregasSimplesExternasXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+
 export const getVentasTemporalesPorVendedor = async (req: Request, res: Response) => {
   try {
     const sellerId = typeof req.query?.sellerId === "string" ? String(req.query.sellerId).trim() : "";
