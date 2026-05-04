@@ -18,6 +18,11 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
   diferencia_efectivo: Number,
   diferencia_bancario: Number,
   observaciones: String,
+  closed_at: {
+    type: Date,
+    required: false,
+    index: true,
+  },
 
   efectivo_diario: [
     {

@@ -827,24 +827,33 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
 const getDailySalesHistory = async (
   date: string | undefined,
   sucursalId: string,
-  fromLastClose = false
+  fromLastClose = false,
+  periodEndISO?: string
 ) => {
-  const nowLaPaz = moment.tz("America/La_Paz");
-  const baseMoment = date
-    ? moment.tz(date, ["YYYY-MM-DD", moment.ISO_8601], "America/La_Paz")
-    : nowLaPaz.clone();
+  const parseRawDate = (value?: string) => {
+    if (!value) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(`${value}T00:00:00.000Z`);
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+  const startOfRawDay = (value: Date) =>
+    new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+  const endOfRawDay = (value: Date) =>
+    new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 23, 59, 59, 999));
 
-  if (!baseMoment.isValid()) {
+  const now = new Date();
+  const baseDate = parseRawDate(date) || now;
+
+  if (Number.isNaN(baseDate.getTime())) {
     throw new Error("Invalid date received for sales history");
   }
 
-  const startOfDay = baseMoment.clone().startOf("day").toDate();
-  const endOfSelectedDay = baseMoment.clone().endOf("day");
-  const isToday = baseMoment.isSame(nowLaPaz, "day");
-  const periodEnd = (date
-    ? (isToday ? nowLaPaz : endOfSelectedDay)
-    : nowLaPaz
-  ).toDate();
+  const startOfDay = startOfRawDay(baseDate);
+  const endOfSelectedDay = endOfRawDay(baseDate);
+  const explicitPeriodEnd = parseRawDate(periodEndISO);
+  const periodEnd = explicitPeriodEnd || (date ? endOfSelectedDay : now);
 
   const filter: any = {};
   let periodStart = startOfDay;
@@ -871,8 +880,11 @@ const getDailySalesHistory = async (
       periodEnd
     );
 
-    periodStart = lastClose?.created_at
-      ? new Date(lastClose.created_at)
+    const lastCloseDate = lastClose?.closed_at || lastClose?.created_at
+      ? new Date((lastClose?.closed_at || lastClose?.created_at) as Date)
+      : null;
+    periodStart = lastCloseDate && lastCloseDate > startOfDay
+      ? lastCloseDate
       : startOfDay;
 
     filter.$and = [

@@ -11,7 +11,7 @@ const findAll = async (sucursalId?: string): Promise<ICierreCaja[]> => {
 
   return await CierreCajaModel.find(filter)
     .populate('id_sucursal')
-    .sort({ created_at: 1 })
+    .sort({ closed_at: 1, created_at: 1 })
     .lean() 
     .exec();
 };
@@ -38,9 +38,12 @@ const findLatestBySucursalBefore = async (
 
   return await CierreCajaModel.findOne({
     id_sucursal: new Types.ObjectId(sucursalId),
-    created_at: { $lt: before },
+    $or: [
+      { closed_at: { $lt: before } },
+      { closed_at: { $exists: false }, created_at: { $lt: before } },
+    ],
   })
-    .sort({ created_at: -1 })
+    .sort({ closed_at: -1, created_at: -1 })
     .lean()
     .exec();
 };

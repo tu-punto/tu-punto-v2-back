@@ -162,13 +162,14 @@ export const deleteShippingById = async (req: Request, res: Response) => {
 };
 
 export const getSalesHistory = async (req: Request, res: Response) => {
-  const { date, sucursalId, fromLastClose } = req.query;
+  const { date, sucursalId, fromLastClose, to } = req.query;
   const useLastClose = String(fromLastClose || "").toLowerCase() === "true";
   try {
     const result = await ShippingService.getDailySalesHistory(
       date as string | undefined,
       sucursalId as string,
-      useLastClose
+      useLastClose,
+      to as string | undefined
     );
     res.json(result);
   } catch (error) {

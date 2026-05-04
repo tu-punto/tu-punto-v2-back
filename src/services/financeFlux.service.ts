@@ -12,6 +12,7 @@ import { ShippingService } from "./shipping.service";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import moment from "moment-timezone";
+import { BoxCloseRepository } from "../repositories/boxClose.repository";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -19,19 +20,44 @@ const assertFlux = (flux: IFlujoFinanciero | null) => {
 
 const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 
+const parseRawDate = (value?: string) => {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00.000Z`);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const startOfRawDay = (value: Date) =>
+  new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
+
+const endOfRawDay = (value: Date) =>
+  new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 23, 59, 59, 999));
+
 const getDailyServiceIncomeByDateAndSucursal = async (
   dateISO: string,
-  sucursalId: string
+  sucursalId: string,
+  options?: { fromLastClose?: boolean; to?: string }
 ) => {
-  const baseDate = String(dateISO || "").includes("T")
-    ? moment(dateISO).tz("America/La_Paz")
-    : moment.tz(dateISO, "YYYY-MM-DD", "America/La_Paz");
-  const startOfDay = baseDate.clone().startOf("day").toDate();
-  const endOfDay = baseDate.clone().endOf("day").toDate();
+  const baseDate = parseRawDate(dateISO) || new Date();
+  const startOfDay = startOfRawDay(baseDate);
+  const periodEnd = parseRawDate(options?.to) || endOfRawDay(baseDate);
+  let periodStart = startOfDay;
+
+  if (options?.fromLastClose) {
+    const lastClose = await BoxCloseRepository.findLatestBySucursalBefore(sucursalId, periodEnd);
+    const lastCloseDate = lastClose?.closed_at || lastClose?.created_at
+      ? new Date((lastClose?.closed_at || lastClose?.created_at) as Date)
+      : null;
+    periodStart = lastCloseDate && lastCloseDate > startOfDay
+      ? lastCloseDate
+      : startOfDay;
+  }
 
   return await FinanceFluxRepository.findServiceIncomeByDateRange(
-    startOfDay,
-    endOfDay,
+    periodStart,
+    periodEnd,
     sucursalId ? [sucursalId] : undefined
   );
 };

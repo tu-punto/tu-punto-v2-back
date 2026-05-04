@@ -18,16 +18,21 @@ export const getFinanceFluxes = async (_: Request, res: Response) => {
 
 export const getDailyServiceIncome = async (req: Request, res: Response) => {
   try {
-    const { date, sucursalId } = req.query;
+    const { date, sucursalId, fromLastClose, to } = req.query;
     if (!date || !sucursalId) {
       return res.status(400).json({
         msg: "Parámetros date y sucursalId son requeridos",
       });
     }
 
+    const useLastClose = String(fromLastClose || "").toLowerCase() === "true";
     const incomes = await FinanceFluxService.getDailyServiceIncomeByDateAndSucursal(
       String(date),
-      String(sucursalId)
+      String(sucursalId),
+      {
+        fromLastClose: useLastClose,
+        to: to ? String(to) : undefined,
+      }
     );
     res.json(incomes);
   } catch (err) {
