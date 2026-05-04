@@ -11,9 +11,10 @@ const EXTERNAL_SERVICE_FILTER = {
 };
 
 const getAllExternalSales = async (): Promise<IVentaExternaDocument[]> => {
-    return await VentaExternaModel.find(EXTERNAL_SERVICE_FILTER).populate(
-        'sucursal'
-    );
+    return await VentaExternaModel.find(EXTERNAL_SERVICE_FILTER)
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
 const getExternalSalesList = async (params: {
@@ -50,6 +51,8 @@ const getExternalSalesList = async (params: {
             .skip((safePage - 1) * safeLimit)
             .limit(safeLimit)
             .populate({ path: "sucursal", select: "_id nombre" })
+            .populate({ path: "origen_sucursal", select: "_id nombre" })
+            .populate({ path: "destino_sucursal", select: "_id nombre" })
             .lean(),
         VentaExternaModel.countDocuments(match)
     ]);
@@ -167,7 +170,10 @@ const getExternalSaleByID = async (id: string): Promise<IVentaExternaDocument | 
     return await VentaExternaModel.findOne({
         _id: new Types.ObjectId(id),
         ...EXTERNAL_SERVICE_FILTER
-    }).populate('sucursal');
+    })
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
 const getExternalSalesByDateRange = async (
@@ -190,7 +196,10 @@ const getExternalSalesByDateRange = async (
         };
     }
 
-    return await VentaExternaModel.find(match).populate('sucursal');
+    return await VentaExternaModel.find(match)
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
 const getExternalSalesHistoryCandidates = async (
@@ -227,7 +236,9 @@ const getExternalSalesHistoryCandidates = async (
 
     return await VentaExternaModel.find(match)
         .sort({ hora_entrega_real: -1, fecha_pedido: -1 })
-        .populate('sucursal');
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
 const registerExternalSale = async (externalSale: IVentaExterna): Promise<IVentaExternaDocument> => {
@@ -240,7 +251,11 @@ const registerExternalSale = async (externalSale: IVentaExterna): Promise<IVenta
 const registerExternalSales = async (externalSales: IVentaExterna[]): Promise<IVentaExternaDocument[]> => {
     if (!externalSales.length) return [];
     const created = await VentaExternaModel.insertMany(externalSales);
-    return created as IVentaExternaDocument[];
+    const createdIds = created.map((row) => row._id);
+    return await VentaExternaModel.find({ _id: { $in: createdIds } })
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
 const deleteExternalSaleByID = async (externalSaleID: string) => {
@@ -260,7 +275,10 @@ const updateExternalSaleByID = async (id: string, externalSale: IVentaExterna): 
         },
         externalSale,
         { new: true }
-    ).populate('sucursal');
+    )
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
 export const ExternalSaleRepository = {
