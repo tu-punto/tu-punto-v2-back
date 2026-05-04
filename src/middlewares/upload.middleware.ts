@@ -30,17 +30,21 @@ const announcementAttachmentMimeTypes = new Set([
   "image/jpeg",
   "image/jpg",
   "image/webp",
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
 ]);
 
 export const uploadAnnouncementFiles = multer({
   storage,
   limits: {
     files: 6,
-    fileSize: 10 * 1024 * 1024
+    fileSize: 200 * 1024 * 1024
   },
   fileFilter: (_req, file, cb) => {
     if (!announcementAttachmentMimeTypes.has(file.mimetype)) {
-      return cb(new Error("Solo se permiten PDF, documentos Office, texto, CSV o imagenes"));
+      return cb(new Error("Solo se permiten PDF, documentos Office, texto, CSV, imagenes o videos"));
     }
     cb(null, true);
   }

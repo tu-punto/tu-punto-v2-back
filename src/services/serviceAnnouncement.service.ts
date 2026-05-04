@@ -116,7 +116,7 @@ const uploadAnnouncementFiles = async (
 ): Promise<IServiceAnnouncementAttachment[]> => {
   if (!files.length) return [];
   if (files.length > MAX_FILE_ATTACHMENTS) {
-    throw new Error(`Solo se permiten hasta ${MAX_FILE_ATTACHMENTS} documentos adjuntos`);
+    throw new Error(`Solo se permiten hasta ${MAX_FILE_ATTACHMENTS} archivos adjuntos`);
   }
 
   return Promise.all(

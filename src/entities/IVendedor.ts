@@ -41,6 +41,12 @@ export interface IVendedor {
     almacen_caja: number;
     deuda: number;
     emite_factura: boolean;
+    qr_pago_url?: string;
+    qr_pago_key?: string;
+    fecha_solicitud_pago?: Date;
+    fecha_pago_asignada?: Date;
+    declinacion_servicio_fecha?: Date;
+    declinacion_servicio_fecha_limite_retiro?: Date;
 
     saldo_pendiente: number;
     user: Types.ObjectId;

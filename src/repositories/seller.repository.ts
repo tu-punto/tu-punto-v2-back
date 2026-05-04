@@ -16,7 +16,7 @@ const VendedorModel = mongoose.model<IVendedorDocument>(
 type SellerListQueryParams = {
   sellerId?: string;
   q?: string;
-  status?: "activo" | "debe_renovar" | "ya_no_es_cliente";
+  status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
 };
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -167,7 +167,10 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
   }
 
   const todayStart = dayjs().startOf("day");
-  if (params?.status === "activo") {
+  if (params?.status === "declinando_servicio") {
+    match.declinacion_servicio_fecha = { $exists: true, $ne: null };
+    match.fecha_vigencia = { $gte: todayStart.subtract(5, "day").toDate() };
+  } else if (params?.status === "activo") {
     match.fecha_vigencia = { $gte: todayStart.toDate() };
   } else if (params?.status === "debe_renovar") {
     match.fecha_vigencia = {

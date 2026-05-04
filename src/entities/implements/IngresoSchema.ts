@@ -32,6 +32,11 @@ export const IngresoSchema = new Schema({
     type: Types.ObjectId,
     ref: 'Sucursal',
     required: true
+  },
+  combinacion: {
+    type: Map,
+    of: String,
+    required: false
   }
 }, {
   collection: 'Ingreso',

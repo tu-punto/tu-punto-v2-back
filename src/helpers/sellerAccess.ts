@@ -2,13 +2,14 @@ import dayjs from "dayjs";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 
-export type SellerLifecycleStatus = "activo" | "debe_renovar" | "ya_no_es_cliente";
+export type SellerLifecycleStatus = "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
 
 export const SELLER_SYSTEM_ACCESS_DENIED_MESSAGE =
   "Tu acceso no esta habilitado. Contacta a administracion.";
 
 export const getSellerLifecycleStatus = (
-  fechaVigencia: unknown
+  fechaVigencia: unknown,
+  fechaDeclinacion?: unknown
 ): SellerLifecycleStatus => {
   if (!fechaVigencia) return "ya_no_es_cliente";
   if (
@@ -23,6 +24,20 @@ export const getSellerLifecycleStatus = (
   const today = dayjs().startOf("day");
   const vigencia = dayjs(fechaVigencia).endOf("day");
   if (!vigencia.isValid()) return "ya_no_es_cliente";
+
+  const hasValidDeclinationInput =
+    typeof fechaDeclinacion === "string" ||
+    typeof fechaDeclinacion === "number" ||
+    fechaDeclinacion instanceof Date ||
+    dayjs.isDayjs(fechaDeclinacion);
+
+  if (hasValidDeclinationInput) {
+    const declinacion = dayjs(fechaDeclinacion);
+    const retiroHasta = vigencia.add(5, "day").endOf("day");
+    if (declinacion.isValid() && !today.isAfter(retiroHasta)) {
+      return "declinando_servicio";
+    }
+  }
 
   const diasVencido = today.diff(vigencia, "day");
   if (diasVencido <= 0) return "activo";

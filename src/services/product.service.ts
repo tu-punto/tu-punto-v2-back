@@ -12,6 +12,7 @@ import { Buffer } from "buffer";
 import { Types } from 'mongoose';
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { IngresoModel } from "../entities/implements/IngresoSchema";
 import { ProductVariantKeyService } from "./productVariantKey.service";
 import { createVariantKey } from "../utils/variantKey";
 
@@ -19,6 +20,52 @@ interface Feature {
   feature: string;
   values: string[];
 }
+
+const normalizeVariantsForEntry = (variants: any): Record<string, string> => {
+  if (!variants) return {};
+  if (variants instanceof Map) return Object.fromEntries(variants.entries());
+  if (typeof variants.toObject === "function") return variants.toObject();
+  return Object.fromEntries(
+    Object.entries(variants).map(([key, value]) => [key, String(value ?? "")])
+  );
+};
+
+const buildVariantEntryName = (productName: string, variants: Record<string, string>) => {
+  const variantLabel = Object.values(variants).filter(Boolean).join(" / ");
+  return variantLabel ? `${productName} - ${variantLabel}` : productName;
+};
+
+const registerInitialStockEntries = async (product: IProductoDocument) => {
+  if (product.esTemporal || !product.id_vendedor) return;
+
+  const entriesToCreate = (product.sucursales || []).flatMap((sucursal: any) =>
+    (sucursal.combinaciones || [])
+      .filter((combination: any) => Number(combination?.stock || 0) > 0)
+      .map((combination: any) => {
+        const variants = normalizeVariantsForEntry(combination.variantes);
+        return {
+          fecha_ingreso: product.fecha_de_ingreso || new Date(),
+          estado: "confirmado",
+          cantidad_ingreso: Number(combination.stock || 0),
+          nombre_variante: buildVariantEntryName(product.nombre_producto, variants),
+          producto: product._id,
+          vendedor: product.id_vendedor,
+          sucursal: sucursal.id_sucursal,
+          combinacion: variants,
+        };
+      })
+  );
+
+  if (!entriesToCreate.length) return;
+
+  const createdEntries = await IngresoModel.insertMany(entriesToCreate);
+  const entryIds = createdEntries.map((entry) => entry._id);
+  product.ingreso = [...(product.ingreso || []), ...entryIds];
+  await product.save();
+  await VendedorModel.findByIdAndUpdate(product.id_vendedor, {
+    $push: { ingreso: { $each: entryIds } },
+  });
+};
 
 const getAllProducts = async () => {
   return await ProductRepository.findAll();
@@ -93,6 +140,8 @@ const registerProduct = async (product: IProducto): Promise<any> => {
         await nuevoProducto.save();
       }
     }
+
+    await registerInitialStockEntries(nuevoProducto);
 
     return nuevoProducto;
   } catch (err: any) {
