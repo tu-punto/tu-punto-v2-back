@@ -15,6 +15,7 @@ import { Types } from "mongoose";
 import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
 import dayjs from "dayjs";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { UserModel } from "../entities/implements/UserSchema";
 import { SaleService } from "./sale.service";
 import { calcPagoPendiente } from "../utils/seller.utils";
 import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
@@ -23,6 +24,7 @@ import { IFinanceFlux } from "../entities/IFinanceFlux";
 import { PaymentProofService } from "./paymentProof.service";
 import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 import { SimplePackageService } from "./simplePackage.service";
+import { hashPassword } from "../helpers/auth";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -195,12 +197,70 @@ const getSeller = async (sellerId: string) => {
   return { ...seller, pago_mensual: calcPagoMensual(seller), ...metrics };
 };
 
+const buildInitialSellerPassword = (seller: any) => {
+  const carnet = String(seller?.carnet || "").trim();
+  if (carnet.length >= 6) return carnet;
+
+  const telefono = String(seller?.telefono || "").trim();
+  if (telefono.length >= 6) return telefono;
+
+  return "123456";
+};
+
+const createOrLinkSellerUser = async (seller: any) => {
+  const email = String(seller?.mail || "").trim().toLowerCase();
+  if (!email) {
+    throw new Error("El vendedor debe tener un mail para crear su usuario");
+  }
+
+  const existingUser = await UserModel.findOne({ email });
+  const sellerId = new Types.ObjectId(seller._id);
+
+  if (existingUser) {
+    if (String(existingUser.role || "").toLowerCase() !== "seller") {
+      throw new Error("Ya existe un usuario con ese mail y no es vendedor");
+    }
+
+    if (existingUser.vendedor && String(existingUser.vendedor) !== String(seller._id)) {
+      throw new Error("Ya existe un usuario vendedor con ese mail asociado a otro vendedor");
+    }
+
+    existingUser.vendedor = sellerId;
+    await existingUser.save();
+    await SellerRepository.updateSeller(seller._id, { user: existingUser._id } as any);
+    return existingUser;
+  }
+
+  const password = await hashPassword(buildInitialSellerPassword(seller));
+  const user = await UserModel.create({
+    email,
+    password,
+    role: "seller",
+    vendedor: sellerId,
+  });
+  await SellerRepository.updateSeller(seller._id, { user: user._id } as any);
+  return user;
+};
+
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
   const normalizedSeller = normalizeSellerServiceValues(seller);
   const montoTotal = calcSellerDebt(seller);
   const deuda = normalizedSeller.esDeuda ? montoTotal : 0;
+  const email = String(normalizedSeller?.mail || "").trim().toLowerCase();
+  if (!email) {
+    throw new Error("El vendedor debe tener un mail para crear su usuario");
+  }
 
-  const nuevo = await SellerRepository.registerSeller({ ...normalizedSeller, deuda });
+  const existingUser = await UserModel.findOne({ email }).lean();
+  if (existingUser && String(existingUser.role || "").toLowerCase() !== "seller") {
+    throw new Error("Ya existe un usuario con ese mail y no es vendedor");
+  }
+  if (existingUser?.vendedor) {
+    throw new Error("Ya existe un usuario vendedor con ese mail");
+  }
+
+  const nuevo = await SellerRepository.registerSeller({ ...normalizedSeller, mail: email, deuda });
+  await createOrLinkSellerUser(nuevo);
 
   await saveFlux({
     tipo: "INGRESO",
