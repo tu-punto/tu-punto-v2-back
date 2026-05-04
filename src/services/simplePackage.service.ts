@@ -8,6 +8,7 @@ import { SimplePackageBranchPriceRepository } from "../repositories/simplePackag
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { ShippingService } from "./shipping.service";
 import { hasConfiguredSimplePackageService } from "../utils";
+import { OrderGuideService } from "./orderGuide.service";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -323,6 +324,8 @@ const buildSimplePackageShippingPayload = (row: any) => {
     subtotal_efectivo: paymentData.subtotal_efectivo,
     simple_package_order: true,
     simple_package_source_id: row?._id,
+    numero_guia: row?.numero_guia || undefined,
+    guia_sequence: row?.guia_sequence || undefined,
     productos_temporales: [
       {
         producto: toTrimmed(row?.descripcion_paquete) || "Paquete simple",
@@ -486,6 +489,11 @@ const createSimplePackageOrders = async (params: {
     throw new Error("No hay paquetes pendientes para crear");
   }
 
+  const missingPrintedLabel = pendingRows.filter((row: any) => !row?.qr_impreso || !row?.numero_guia);
+  if (missingPrintedLabel.length) {
+    throw new Error("Debe imprimir las etiquetas antes de crear los pedidos simples");
+  }
+
   if (
     (role === "admin" || role === "operator") &&
     params.currentBranchId &&
@@ -579,6 +587,61 @@ const createSimplePackageOrders = async (params: {
   return shippingResults;
 };
 
+const printSimplePackageGuides = async (params: {
+  packageIds: string[];
+  role: string;
+  authSellerId?: string;
+  currentBranchId?: string;
+}) => {
+  const packageIds = (params.packageIds || []).map((id) => String(id || "").trim()).filter(Boolean);
+  if (!packageIds.length) return [];
+
+  const role = String(params.role || "").toLowerCase();
+  const rows = await SimplePackageRepository.getSimplePackagesByIDs(packageIds);
+  const pendingRows = rows.filter((row: any) => !row?.is_external);
+
+  if (!pendingRows.length) return [];
+
+  if (
+    role === "seller" &&
+    pendingRows.some((row: any) => String(row?.id_vendedor || "") !== String(params.authSellerId || ""))
+  ) {
+    throw new Error("No autorizado para imprimir estos paquetes");
+  }
+
+  if (
+    (role === "admin" || role === "operator") &&
+    params.currentBranchId &&
+    pendingRows.some((row: any) => String((row?.origen_sucursal as any)?._id || row?.origen_sucursal || "") !== String(params.currentBranchId))
+  ) {
+    throw new Error("Solo puedes imprimir etiquetas de paquetes de tu sucursal actual");
+  }
+
+  const rowsToPrint = pendingRows.filter((row: any) => !row?.qr_impreso || !row?.numero_guia);
+
+  const printedRows = [];
+  for (const row of rowsToPrint as any[]) {
+    const packageId = String(row._id);
+    const guideData: any =
+      typeof row?.toObject === "function"
+        ? row.toObject()
+        : { ...row };
+
+    await OrderGuideService.assignOrderGuide(guideData);
+
+    const updated = await SimplePackageRepository.updateSimplePackageByID(packageId, {
+      numero_guia: guideData.numero_guia,
+      guia_sequence: guideData.guia_sequence,
+      qr_impreso: true,
+      qr_impreso_at: new Date(),
+    } as Partial<IVentaExterna>);
+
+    if (updated) printedRows.push(updated);
+  }
+
+  return printedRows;
+};
+
 const getSimplePackagesList = async (params: {
   sellerId: string;
   originBranchId?: string;
@@ -639,6 +702,9 @@ const updateSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
+  if ((existing as any).qr_impreso || (existing as any).numero_guia) {
+    throw new Error("No se puede modificar un paquete con QR impreso");
+  }
 
   const role = String(params.role || "").toLowerCase();
   const existingSellerId = String(existing.id_vendedor || "");
@@ -769,6 +835,9 @@ const deleteSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
+  if ((existing as any).qr_impreso || (existing as any).numero_guia) {
+    throw new Error("No se puede eliminar un paquete con QR impreso");
+  }
 
   const role = String(params.role || "").toLowerCase();
   const existingSellerId = String(existing.id_vendedor || "");
@@ -795,6 +864,7 @@ export const SimplePackageService = {
   getUploadedSimplePackageSellers,
   getSellerAccountingSimplePackages,
   createSimplePackageOrders,
+  printSimplePackageGuides,
   getSimplePackageBranchPrices,
   upsertSimplePackageBranchPrice,
   updateSimplePackageByID,

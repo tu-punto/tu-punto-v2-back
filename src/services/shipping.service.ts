@@ -12,11 +12,11 @@ import { SucursalModel } from "../entities/implements/SucursalSchema";
 import dayjs from 'dayjs';
 import moment from 'moment-timezone';
 import { v4 as uuidv4 } from "uuid";
-import { QRService } from "./qr.service";
 import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatusHistorySchema";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
+import { OrderGuideService } from "./orderGuide.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -361,6 +361,7 @@ const getShippingByIds = async (shippingIds: string[]) => {
 const registerShipping = async (shipping: any) => {
   normalizeOrderPaymentData(shipping);
   await normalizeShippingBranches(shipping);
+  await OrderGuideService.assignOrderGuide(shipping);
 
   if (shipping.fecha_pedido) {
     shipping.fecha_pedido = moment.tz(shipping.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
@@ -1076,41 +1077,11 @@ const generateShippingQR = async (shippingId: string, forceRegenerate = false) =
     throw new Error("Pedido no encontrado");
   }
 
-  if (
-    !forceRegenerate &&
-    shipping.shipping_qr_code &&
-    shipping.shipping_qr_payload &&
-    shipping.shipping_qr_image_path
-  ) {
-    return {
-      shippingId,
-      shippingQrCode: shipping.shipping_qr_code,
-      shippingQrPayload: shipping.shipping_qr_payload,
-      shippingQrImagePath: shipping.shipping_qr_image_path
-    };
-  }
-
-  const shippingQrCode = buildShippingQRCode(shippingId);
-  const shippingQrPayload = buildShippingQRPayload(shippingQrCode);
-  const { qrPath } = await QRService.generatePayloadQRToS3(
-    shippingQrPayload,
-    `shipping-${shippingId}`
-  );
-
-  await PedidoModel.findByIdAndUpdate(shippingId, {
-    $set: {
-      shipping_qr_code: shippingQrCode,
-      shipping_qr_payload: shippingQrPayload,
-      shipping_qr_image_path: qrPath,
-      qr_code: shippingQrPayload
-    }
-  });
-
   return {
     shippingId,
-    shippingQrCode,
-    shippingQrPayload,
-    shippingQrImagePath: qrPath
+    shippingQrCode: shipping.shipping_qr_code || "",
+    shippingQrPayload: shipping.shipping_qr_payload || "",
+    shippingQrImagePath: shipping.shipping_qr_image_path || ""
   };
 };
 

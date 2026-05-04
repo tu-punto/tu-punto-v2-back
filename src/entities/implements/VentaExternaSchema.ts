@@ -206,10 +206,54 @@ const VentaExternaSchema = new Schema({
         ref: 'Pedido',
         required: false,
         default: null
+    },
+    qr_code: {
+        type: String,
+        required: false,
+        default: "",
+    },
+    shipping_qr_code: {
+        type: String,
+        required: false,
+        default: "",
+    },
+    shipping_qr_payload: {
+        type: String,
+        required: false,
+        default: "",
+    },
+    shipping_qr_image_path: {
+        type: String,
+        required: false,
+        default: "",
+    },
+    qr_impreso: {
+        type: Boolean,
+        default: false,
+    },
+    qr_impreso_at: {
+        type: Date,
+        required: false,
+    },
+    numero_guia: {
+        type: String,
+        required: false,
+        default: "",
+        index: true,
+    },
+    guia_sequence: {
+        type: Number,
+        required: false,
+        index: true,
     }
 }, {
     collection: 'VentaExterna',
     timestamps: false
 })
+
+VentaExternaSchema.index(
+    { numero_guia: 1 },
+    { unique: true, partialFilterExpression: { numero_guia: { $type: "string", $gt: "" } } }
+);
 
 export const VentaExternaModel = model<IVentaExternaDocument>('VentaExterna', VentaExternaSchema)

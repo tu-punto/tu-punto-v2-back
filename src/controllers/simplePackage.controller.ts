@@ -209,6 +209,30 @@ export const createSimplePackageOrders = async (req: Request, res: Response) => 
   }
 };
 
+export const printSimplePackageGuidesController = async (req: Request, res: Response) => {
+  try {
+    const actor = resolveActor(res);
+    const rows = await SimplePackageService.printSimplePackageGuides({
+      packageIds: Array.isArray(req.body?.packageIds) ? req.body.packageIds : [],
+      role: actor.role,
+      authSellerId: actor.sellerId,
+      currentBranchId: actor.role === "seller" ? undefined : actor.sucursalId,
+    });
+
+    return res.json({
+      success: true,
+      printedCount: rows.length,
+      rows,
+    });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(400).json({
+      success: false,
+      message: error?.message || "No se pudieron imprimir los QRs",
+    });
+  }
+};
+
 export const deleteSimplePackageByID = async (req: Request, res: Response) => {
   try {
     const actor = resolveActor(res);

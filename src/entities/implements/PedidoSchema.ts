@@ -122,6 +122,17 @@ const PedidoSchema = new Schema({
     default: "",
     index: true,
   },
+  numero_guia: {
+    type: String,
+    required: false,
+    default: "",
+    index: true,
+  },
+  guia_sequence: {
+    type: Number,
+    required: false,
+    index: true,
+  },
   simple_package_order: {
     type: Boolean,
     default: false,
@@ -151,5 +162,9 @@ const PedidoSchema = new Schema({
 });
 
 PedidoSchema.index({ shipping_qr_code: 1 }, { sparse: true });
+PedidoSchema.index(
+  { numero_guia: 1 },
+  { unique: true, partialFilterExpression: { numero_guia: { $type: "string", $gt: "" } } }
+);
 
 export const PedidoModel = model<IPedidoDocument>('Pedido', PedidoSchema);

@@ -45,6 +45,14 @@ export interface IVentaExterna {
     deposito_realizado?: boolean;
     seller_debt_applied?: boolean;
     pedido_ref?: Types.ObjectId;
+    qr_code?: string;
+    shipping_qr_code?: string;
+    shipping_qr_payload?: string;
+    shipping_qr_image_path?: string;
+    qr_impreso?: boolean;
+    qr_impreso_at?: Date;
+    numero_guia?: string;
+    guia_sequence?: number;
 
     hora_entrega_real?: Date;
     lugar_entrega?: string;

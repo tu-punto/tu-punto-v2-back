@@ -4,6 +4,7 @@ import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod } from "../enti
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
+import { OrderGuideService } from "./orderGuide.service";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -395,9 +396,14 @@ const registerExternalSale = async (externalSale: any) => {
   if (roundCurrency(Number(record.monto_paga_vendedor || 0)) > 0 && !record.metodo_pago) {
     throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
+  await assignExternalGuideAndQR(record);
   const created = await ExternalSaleRepository.registerExternalSale(record);
   await applyExternalMixedIncomeFromRecords([record]);
   return created;
+};
+
+const assignExternalGuideAndQR = async (record: IVentaExterna) => {
+  await OrderGuideService.assignOrderGuide(record);
 };
 
 const registerExternalSalesByPackages = async (payload: any) => {
@@ -426,6 +432,10 @@ const registerExternalSalesByPackages = async (payload: any) => {
 
     return record;
   });
+
+  for (const record of toCreate) {
+    await assignExternalGuideAndQR(record);
+  }
 
   const created = await ExternalSaleRepository.registerExternalSales(toCreate);
   await applyExternalMixedIncomeFromRecords(toCreate);
