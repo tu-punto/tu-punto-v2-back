@@ -37,6 +37,9 @@ export const getSellerLifecycleStatus = (
     if (declinacion.isValid() && !today.isAfter(retiroHasta)) {
       return "declinando_servicio";
     }
+    if (declinacion.isValid() && today.isAfter(retiroHasta)) {
+      return "ya_no_es_cliente";
+    }
   }
 
   const diasVencido = today.diff(vigencia, "day");

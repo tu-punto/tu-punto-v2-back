@@ -181,6 +181,10 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
   } else if (params?.status === "ya_no_es_cliente") {
     match.$or = [
       { fecha_vigencia: { $lt: todayStart.subtract(20, "day").toDate() } },
+      {
+        declinacion_servicio_fecha: { $exists: true, $ne: null },
+        fecha_vigencia: { $lt: todayStart.subtract(5, "day").toDate() }
+      },
       { fecha_vigencia: null },
       { fecha_vigencia: { $exists: false } }
     ];

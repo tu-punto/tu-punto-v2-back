@@ -248,6 +248,24 @@ export const declineSellerService = async (req: Request, res: Response) => {
   }
 };
 
+export const cancelSellerServiceDecline = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const seller = await SellerService.cancelSellerServiceDecline(id);
+    res.json({
+      ok: true,
+      msg: "Declinacion del servicio anulada correctamente",
+      seller,
+    });
+  } catch (error: any) {
+    console.error("Error anulando declinacion del servicio:", error);
+    res.status(error?.status || 500).json({
+      ok: false,
+      msg: error?.message || "Error anulando declinacion del servicio",
+    });
+  }
+};
+
 export const getSellerDebts = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

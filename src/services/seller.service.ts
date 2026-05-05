@@ -532,6 +532,16 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
   const vendedor = await SellerRepository.findById(id);
   if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
 
+  const sellerStatus = getSellerLifecycleStatus(
+    vendedor.fecha_vigencia,
+    (vendedor as any).declinacion_servicio_fecha
+  );
+  if (sellerStatus === "ya_no_es_cliente") {
+    const error: any = new Error("No se puede renovar un vendedor que ya no es cliente");
+    error.status = 400;
+    throw error;
+  }
+
   let nuevaDeuda = vendedor.deuda ?? 0;
   let montoNuevo = 0;
   const monthsToRenew = Math.max(1, Math.floor(toNumber(data.meses_renovacion || 1)));
@@ -564,7 +574,13 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
   delete (updateData as any).meses_renovacion;
   delete (updateData as any).descuento_porcentaje;
 
-  const actualizado = await SellerRepository.updateSeller(id, updateData);
+  const actualizado = await SellerRepository.updateSeller(id, {
+    $set: updateData,
+    $unset: {
+      declinacion_servicio_fecha: "",
+      declinacion_servicio_fecha_limite_retiro: "",
+    },
+  } as any);
 
   if (montoNuevo > 0 && actualizado) {
     for (let i = 0; i < monthsToRenew; i++) {
@@ -623,6 +639,15 @@ const autoRenewSellers = async () => {
     }
 
     try {
+      const status = getSellerLifecycleStatus(
+        seller.fecha_vigencia,
+        (seller as any).declinacion_servicio_fecha
+      );
+      if (status !== "debe_renovar") {
+        results.skipped += 1;
+        continue;
+      }
+
       await renewSellerWithMonths(sellerId, {
         pago_sucursales: Array.isArray(seller.pago_sucursales) ? seller.pago_sucursales : [],
         esDeuda: true,
@@ -766,6 +791,22 @@ const declineSellerService = async (id: string) => {
   return await SellerRepository.updateSeller(id, {
     declinacion_servicio_fecha: new Date(),
     declinacion_servicio_fecha_limite_retiro: vigencia.add(5, "day").toDate(),
+  } as any);
+};
+
+const cancelSellerServiceDecline = async (id: string) => {
+  const seller = await SellerRepository.findById(id);
+  if (!seller) {
+    const error: any = new Error("Vendedor no encontrado");
+    error.status = 404;
+    throw error;
+  }
+
+  return await SellerRepository.updateSeller(id, {
+    $unset: {
+      declinacion_servicio_fecha: "",
+      declinacion_servicio_fecha_limite_retiro: "",
+    },
   } as any);
 };
 
@@ -923,6 +964,7 @@ export const SellerService = {
   paySellerDebt,
   requestSellerPayment,
   declineSellerService,
+  cancelSellerServiceDecline,
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,
