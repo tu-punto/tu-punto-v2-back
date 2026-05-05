@@ -34,7 +34,8 @@ export const getSellers = async (req: Request, res: Response) => {
     const status =
       statusQuery === "activo" ||
       statusQuery === "debe_renovar" ||
-      statusQuery === "ya_no_es_cliente"
+      statusQuery === "ya_no_es_cliente" ||
+      statusQuery === "declinando_servicio"
         ? statusQuery
         : undefined;
     const pendingPayment =
@@ -191,6 +192,46 @@ export const paySellerDebt = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ msg: "Error al pagar la deuda del vendedor", error });
+  }
+};
+
+export const requestSellerPayment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await SellerService.requestSellerPayment(
+      id,
+      req.file as Express.Multer.File | undefined
+    );
+
+    res.json({
+      ok: true,
+      msg: "Solicitud de pago registrada correctamente",
+      ...result,
+    });
+  } catch (error: any) {
+    console.error("Error solicitando pago del vendedor:", error);
+    res.status(error?.status || 500).json({
+      ok: false,
+      msg: error?.message || "Error solicitando pago del vendedor",
+    });
+  }
+};
+
+export const declineSellerService = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const seller = await SellerService.declineSellerService(id);
+    res.json({
+      ok: true,
+      msg: "Declinacion del servicio registrada correctamente",
+      seller,
+    });
+  } catch (error: any) {
+    console.error("Error registrando declinacion del servicio:", error);
+    res.status(error?.status || 500).json({
+      ok: false,
+      msg: error?.message || "Error registrando declinacion del servicio",
+    });
   }
 };
 

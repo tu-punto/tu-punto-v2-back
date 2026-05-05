@@ -9,6 +9,58 @@ import { ComprobantePagoModel } from "../entities/implements/ComprobantePagoSche
 import mongoose from "mongoose";
 import { PaymentProofService } from "./paymentProof.service";
 
+const getPdfImageFormat = (contentType: string, url: string) => {
+  const normalizedContentType = contentType.toLowerCase();
+  const normalizedUrl = url.toLowerCase();
+
+  if (normalizedContentType.includes("jpeg") || normalizedContentType.includes("jpg")) return "JPEG";
+  if (normalizedContentType.includes("png")) return "PNG";
+  if (normalizedContentType.includes("webp")) return "WEBP";
+  if (normalizedUrl.endsWith(".jpg") || normalizedUrl.endsWith(".jpeg")) return "JPEG";
+  if (normalizedUrl.endsWith(".webp")) return "WEBP";
+  return "PNG";
+};
+
+const loadImageAsDataUrl = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`No se pudo descargar la imagen ${url}`);
+  }
+
+  const contentType = response.headers.get("content-type") || "image/png";
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return {
+    dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`,
+    format: getPdfImageFormat(contentType, url),
+  };
+};
+
+const appendSellerQrToPdf = async (doc: jsPDF, seller: any, startY: number) => {
+  const qrUrl = String(seller?.qr_pago_url || "").trim();
+  if (!qrUrl) return;
+
+  try {
+    const { dataUrl, format } = await loadImageAsDataUrl(qrUrl);
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const qrSize = 70;
+    const requiredHeight = 18 + qrSize;
+    let y = startY;
+
+    if (y + requiredHeight > pageHeight - 10) {
+      doc.addPage();
+      y = 15;
+    }
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("QR DE PAGO DEL VENDEDOR", 10, y);
+    doc.addImage(dataUrl, format, (pageWidth - qrSize) / 2, y + 8, qrSize, qrSize);
+  } catch (error) {
+    console.error("No se pudo agregar el QR al comprobante de pago:", error);
+  }
+};
+
 const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const sucursales = await SucursalsService.getAllSucursals();
   const deudas = await FinanceFluxService.getSellerInfoById(sellerId);
@@ -202,11 +254,14 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const montoPagado =
     totalVentasComision - totalAdelantos - totalDeliverys - totalMensualidades;
 
+  const amountY = (doc as any).lastAutoTable.finalY + 20;
   doc.text(
     `MONTO PAGADO: Bs. ${montoPagado}`,
     10,
-    (doc as any).lastAutoTable.finalY + 20
+    amountY
   );
+
+  await appendSellerQrToPdf(doc, seller, amountY + 15);
 
   const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
 

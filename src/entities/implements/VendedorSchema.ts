@@ -114,6 +114,24 @@ export const VendedorSchema = new Schema({
     type: Boolean,
     default: false
   },
+  qr_pago_url: {
+    type: String,
+  },
+  qr_pago_key: {
+    type: String,
+  },
+  fecha_solicitud_pago: {
+    type: Date,
+  },
+  fecha_pago_asignada: {
+    type: Date,
+  },
+  declinacion_servicio_fecha: {
+    type: Date,
+  },
+  declinacion_servicio_fecha_limite_retiro: {
+    type: Date,
+  },
   comprobante_entrada: [{
     type: Types.ObjectId,
     ref: 'ComprobanteEntrada'

@@ -24,6 +24,7 @@ import { IFinanceFlux } from "../entities/IFinanceFlux";
 import { PaymentProofService } from "./paymentProof.service";
 import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 import { SimplePackageService } from "./simplePackage.service";
+import { uploadFileToAws } from "./bucket.service";
 import { hashPassword } from "../helpers/auth";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
@@ -31,7 +32,7 @@ const saveFlux = async (flux: IFlujoFinanciero) =>
 type SellerListFilters = {
   sellerId?: string;
   q?: string;
-  status?: "activo" | "debe_renovar" | "ya_no_es_cliente";
+  status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
 };
 
@@ -70,7 +71,10 @@ const getAllSellers = async (params?: SellerListFilters) => {
     }
 
     if (params?.status) {
-      const lifecycleStatus = getSellerLifecycleStatus(sellerData?.fecha_vigencia);
+      const lifecycleStatus = getSellerLifecycleStatus(
+        sellerData?.fecha_vigencia,
+        sellerData?.declinacion_servicio_fecha
+      );
       if (lifecycleStatus !== params.status) {
         return false;
       }
@@ -181,6 +185,16 @@ const normalizeSellerServiceValues = (seller: any) => {
     amortizacion,
     precio_paquete: precioPaquete,
   };
+};
+
+const getAssignedPaymentDate = (date = new Date()) => {
+  const base = dayjs(date).startOf("day");
+  const day = base.date();
+
+  if (day <= 7) return base.date(8).toDate();
+  if (day <= 17) return base.date(18).toDate();
+  if (day <= 27) return base.date(28).toDate();
+  return base.add(1, "month").date(8).toDate();
 };
 
 const getSeller = async (sellerId: string) => {
@@ -434,8 +448,16 @@ const paySellerDebt = async (id: string, payAll: boolean) => {
   const seller = await SellerRepository.findById(id);
   if (!seller) return null;
 
-  const update: Partial<typeof seller> = { saldo_pendiente: 0 };
-  if (payAll) update.deuda = 0;
+  const update: any = {
+    $set: {
+      saldo_pendiente: 0,
+    },
+    $unset: {
+      fecha_solicitud_pago: "",
+      fecha_pago_asignada: "",
+    },
+  };
+  if (payAll) update.$set.deuda = 0;
 
   if (payAll) {
     await FinanceFluxRepository.markFinanceFluxAsPaid(id);
@@ -451,6 +473,82 @@ const paySellerDebt = async (id: string, payAll: boolean) => {
 
   console.log(`Deuda pagada para el vendedor ${updatedSeller!.nombre}`);
   return updatedSeller;
+};
+
+const requestSellerPayment = async (
+  id: string,
+  file?: Express.Multer.File
+) => {
+  const seller = await SellerRepository.findById(id);
+  if (!seller) {
+    const error: any = new Error("Vendedor no encontrado");
+    error.status = 404;
+    throw error;
+  }
+
+  const currentQrUrl = String((seller as any).qr_pago_url || "").trim();
+  if (!file && !currentQrUrl) {
+    const error: any = new Error("Debes cargar un QR para solicitar el cobro");
+    error.status = 400;
+    throw error;
+  }
+
+  const update: any = {
+    fecha_solicitud_pago: new Date(),
+    fecha_pago_asignada: getAssignedPaymentDate(),
+  };
+
+  if (file) {
+    const safeOriginalName = String(file.originalname || "qr-pago.png")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(-80);
+    const key = `seller-payment-qr/${id}/${Date.now()}-${safeOriginalName}`;
+    update.qr_pago_url = await uploadFileToAws(
+      file.buffer,
+      key,
+      file.mimetype || "image/png"
+    );
+    update.qr_pago_key = key;
+  }
+
+  const updatedSeller = await SellerRepository.updateSeller(id, update);
+  return {
+    seller: updatedSeller,
+    fecha_pago_asignada: update.fecha_pago_asignada,
+  };
+};
+
+const declineSellerService = async (id: string) => {
+  const seller = await SellerRepository.findById(id);
+  if (!seller) {
+    const error: any = new Error("Vendedor no encontrado");
+    error.status = 404;
+    throw error;
+  }
+
+  if ((seller as any).declinacion_servicio_fecha) {
+    return seller;
+  }
+
+  const vigencia = dayjs(seller.fecha_vigencia).endOf("day");
+  if (!vigencia.isValid()) {
+    const error: any = new Error("El vendedor no tiene una fecha de vigencia valida");
+    error.status = 400;
+    throw error;
+  }
+
+  const today = dayjs().startOf("day");
+  const deadline = vigencia.subtract(5, "day").endOf("day");
+  if (today.isAfter(deadline)) {
+    const error: any = new Error("La declinacion solo esta habilitada hasta 5 dias antes de la vigencia");
+    error.status = 400;
+    throw error;
+  }
+
+  return await SellerRepository.updateSeller(id, {
+    declinacion_servicio_fecha: new Date(),
+    declinacion_servicio_fecha_limite_retiro: vigencia.add(5, "day").toDate(),
+  } as any);
 };
 
 const getSellerDebts = async (sellerId: string) => {
@@ -603,6 +701,8 @@ export const SellerService = {
   updateSeller,
   renewSeller,
   paySellerDebt,
+  requestSellerPayment,
+  declineSellerService,
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,
