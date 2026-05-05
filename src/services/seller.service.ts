@@ -591,7 +591,7 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
           pagoSucursales: data.pago_sucursales,
           baseAmount: montoNuevo,
           discountPercent,
-          concept: `RenovaciÃ³n hasta el ${periodEnd.format("DD/MM/YYYY")}`,
+          concept: `Renovación hasta el ${periodEnd.format("DD/MM/YYYY")}`,
           date: periodStart.toDate(),
           esDeuda: data.esDeuda ?? true,
           sellerId: actualizado._id,
