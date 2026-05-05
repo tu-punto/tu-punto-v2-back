@@ -20,6 +20,97 @@ const assertFlux = (flux: IFlujoFinanciero | null) => {
 
 const getAllFinanceFluxes = async () => await FinanceFluxRepository.findAll();
 
+type CommissionRange = {
+  range?: string;
+  from?: string;
+  to?: string;
+  sucursalIds?: string[];
+};
+
+const normalizeSucursalIds = (sucursalIds?: string[]) =>
+  Array.from(
+    new Set(
+      (sucursalIds || [])
+        .map((id) => String(id || "").trim())
+        .filter((id) => Types.ObjectId.isValid(id))
+    )
+  );
+
+const normalizeId = (value: any) => String(value?._id || value || "").trim();
+
+const getFluxAmountForSucursales = (flux: any, sucursalIds?: string[]) => {
+  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
+  if (!normalizedSucursalIds.length) return Number(flux?.monto || 0);
+
+  const detalleServicios = Array.isArray(flux?.detalle_servicios)
+    ? flux.detalle_servicios
+    : [];
+  if (detalleServicios.length) {
+    return detalleServicios
+      .filter((detail: any) =>
+        normalizedSucursalIds.includes(normalizeId(detail?.id_sucursal))
+      )
+      .reduce((sum: number, detail: any) => sum + Number(detail?.total || 0), 0);
+  }
+
+  return normalizedSucursalIds.includes(normalizeId(flux?.id_sucursal))
+    ? Number(flux?.monto || 0)
+    : 0;
+};
+
+const projectFluxesForSucursales = (fluxes: any[], sucursalIds?: string[]) => {
+  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
+  if (!normalizedSucursalIds.length) return fluxes;
+
+  return (fluxes || [])
+    .map((flux: any) => {
+      const amount = getFluxAmountForSucursales(flux, normalizedSucursalIds);
+      if (amount <= 0) return null;
+
+      const raw = typeof flux?.toObject === "function" ? flux.toObject() : flux;
+      return {
+        ...raw,
+        monto: amount,
+      };
+    })
+    .filter(Boolean);
+};
+
+const toNumber = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeServiceDetailUpdates = (detalleServicios: any[] = []) => {
+  const detail = detalleServicios
+    .map((item: any) => {
+      const alquiler = toNumber(item?.alquiler);
+      const exhibicion = toNumber(item?.exhibicion);
+      const entregaSimple = toNumber(item?.entrega_simple);
+      const delivery = toNumber(item?.delivery);
+      const total = alquiler + exhibicion + entregaSimple + delivery;
+      const rawSucursalId = normalizeId(item?.id_sucursal);
+
+      return {
+        id_sucursal: Types.ObjectId.isValid(rawSucursalId)
+          ? new Types.ObjectId(rawSucursalId)
+          : undefined,
+        sucursalName: String(item?.sucursalName || ""),
+        alquiler,
+        exhibicion,
+        entrega_simple: entregaSimple,
+        delivery,
+        total,
+      };
+    })
+    .filter((item) => item.id_sucursal || item.sucursalName || item.total > 0);
+
+  return {
+    detail,
+    total: detail.reduce((sum, item) => sum + item.total, 0),
+  };
+};
+
 const parseRawDate = (value?: string) => {
   if (!value) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -55,11 +146,12 @@ const getDailyServiceIncomeByDateAndSucursal = async (
       : startOfDay;
   }
 
-  return await FinanceFluxRepository.findServiceIncomeByDateRange(
+  const fluxes = await FinanceFluxRepository.findServiceIncomeByDateRange(
     periodStart,
     periodEnd,
     sucursalId ? [sucursalId] : undefined
   );
+  return projectFluxesForSucursales(fluxes, sucursalId ? [sucursalId] : undefined);
 };
 
 
@@ -141,8 +233,17 @@ const updateFinanceFlux = async (
   if (!existingFlux) throw new Error("Flujo no encontrado");
 
   const oldDeuda = existingFlux.esDeuda ? existingFlux.monto : 0;
+  const payload: Partial<IFlujoFinanciero> = { ...updates };
 
-  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, updates);
+  if (Array.isArray((updates as any).detalle_servicios)) {
+    const { detail, total } = normalizeServiceDetailUpdates(
+      (updates as any).detalle_servicios
+    );
+    (payload as any).detalle_servicios = detail;
+    payload.monto = total;
+  }
+
+  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, payload);
   if (!updatedFlux) throw new Error("Error al actualizar el flujo");
 
   const newDeuda = updatedFlux.esDeuda ? updatedFlux.monto : 0;
@@ -157,22 +258,6 @@ const updateFinanceFlux = async (
 
   return updatedFlux;
 };
-
-type CommissionRange = {
-  range?: string;
-  from?: string;
-  to?: string;
-  sucursalIds?: string[];
-};
-
-const normalizeSucursalIds = (sucursalIds?: string[]) =>
-  Array.from(
-    new Set(
-      (sucursalIds || [])
-        .map((id) => String(id || "").trim())
-        .filter((id) => Types.ObjectId.isValid(id))
-    )
-  );
 
 const calculateSaleCommission = async (sale: any) => {
   const storedCommission = Number(sale?.comision);
@@ -303,9 +388,10 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   let simplePackagesInterbranchTotal = 0;
 
   for (const f of fluxes) {
-    if (f.tipo === "INGRESO") ingresosFluxes += f.monto || 0;
-    else if (f.tipo === "GASTO") gastos += f.monto || 0;
-    else if (f.tipo === "INVERSION") inversiones += f.monto || 0;
+    const monto = getFluxAmountForSucursales(f, normalizedSucursalIds);
+    if (f.tipo === "INGRESO") ingresosFluxes += monto;
+    else if (f.tipo === "GASTO") gastos += monto;
+    else if (f.tipo === "INVERSION") inversiones += monto;
   }
 
   for (const s of shippings) {

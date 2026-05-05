@@ -8,6 +8,7 @@ import { seedSucursal } from "./seeds/seedSucursal";
 import { seedUser } from "./seeds/seedUser";
 import { seedFinanceFluxCategory } from "./seeds/seedFinanceFluxCategory";
 import { NotificationService } from "./services/notification.service";
+import { SellerService } from "./services/seller.service";
 
 const app: Express = express();
 const port = process.env.SERVER_PORT || 3000;
@@ -31,6 +32,7 @@ connectToMongoDB().then(async () => {
   app.use(express.urlencoded({ extended: false }));
   app.use(routes);
   NotificationService.startReminderScheduler();
+  SellerService.startAutoRenewalScheduler();
 
   app.listen(Number(port), "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);

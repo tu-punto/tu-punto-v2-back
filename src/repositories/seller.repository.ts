@@ -85,7 +85,8 @@ const findDebtsBySeller = async (sellerId: string) => {
     id_vendedor: new Types.ObjectId(sellerId),
     esDeuda: true,
   })
-    .select("monto concepto fecha esDeuda")
+    .select("monto concepto fecha esDeuda detalle_servicios")
+    .populate({ path: "detalle_servicios.id_sucursal", select: "nombre" })
     .lean()
     .exec();
 };

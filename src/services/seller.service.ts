@@ -29,6 +29,77 @@ import { hashPassword } from "../helpers/auth";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
+const toNumber = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeDiscountPercent = (value: unknown) =>
+  Math.min(100, Math.max(0, toNumber(value)));
+
+const applyDiscount = (amount: number, discountPercent: number) =>
+  Number((amount * (1 - discountPercent / 100)).toFixed(2));
+
+const getRawId = (value: any) => String(value?._id || value || "").trim();
+
+const buildServiceIncomeDetail = (pagoSucursales: any[] = [], discountPercent = 0) =>
+  pagoSucursales
+    .filter((pago) => pago?.activo !== false)
+    .map((pago) => {
+      const sucursalId = getRawId(pago?.id_sucursal);
+      const alquiler = applyDiscount(toNumber(pago?.alquiler), discountPercent);
+      const exhibicion = applyDiscount(toNumber(pago?.exhibicion), discountPercent);
+      const entregaSimple = applyDiscount(toNumber(pago?.entrega_simple), discountPercent);
+      const delivery = applyDiscount(toNumber(pago?.delivery), discountPercent);
+      const total = alquiler + exhibicion + entregaSimple + delivery;
+
+      return {
+        id_sucursal: Types.ObjectId.isValid(sucursalId)
+          ? new Types.ObjectId(sucursalId)
+          : undefined,
+        sucursalName: String(pago?.sucursalName || ""),
+        alquiler,
+        exhibicion,
+        entrega_simple: entregaSimple,
+        delivery,
+        total,
+      };
+    })
+    .filter((detail) => detail.total > 0);
+
+const buildServiceIncomeFlux = ({
+  pagoSucursales,
+  baseAmount,
+  discountPercent,
+  concept,
+  date,
+  esDeuda,
+  sellerId,
+}: {
+  pagoSucursales: any[];
+  baseAmount: number;
+  discountPercent: number;
+  concept: string;
+  date: Date;
+  esDeuda: boolean;
+  sellerId: any;
+}): IFlujoFinanciero => {
+  const detail = buildServiceIncomeDetail(pagoSucursales, discountPercent);
+
+  return {
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    concepto: concept,
+    monto: Number(detail.reduce((sum, item) => sum + item.total, 0).toFixed(2)),
+    fecha: date,
+    esDeuda,
+    id_vendedor: new Types.ObjectId(String(sellerId)),
+    detalle_servicios: detail,
+    descuento_porcentaje: discountPercent,
+    monto_sin_descuento: baseAmount,
+  };
+};
+
 type SellerListFilters = {
   sellerId?: string;
   q?: string;
@@ -258,8 +329,13 @@ const createOrLinkSellerUser = async (seller: any) => {
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
   const normalizedSeller = normalizeSellerServiceValues(seller);
-  const montoTotal = calcSellerDebt(seller);
-  const deuda = normalizedSeller.esDeuda ? montoTotal : 0;
+  const montoTotal = calcSellerDebt(normalizedSeller);
+  const discountPercent = normalizeDiscountPercent(normalizedSeller.descuento_porcentaje);
+  const montoConDescuento = buildServiceIncomeDetail(
+    normalizedSeller.pago_sucursales,
+    discountPercent
+  ).reduce((sum, item) => sum + item.total, 0);
+  const deuda = normalizedSeller.esDeuda ? montoConDescuento : 0;
   const email = String(normalizedSeller?.mail || "").trim().toLowerCase();
   if (!email) {
     throw new Error("El vendedor debe tener un mail para crear su usuario");
@@ -276,17 +352,19 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
   const nuevo = await SellerRepository.registerSeller({ ...normalizedSeller, mail: email, deuda });
   await createOrLinkSellerUser(nuevo);
 
-  await saveFlux({
-    tipo: "INGRESO",
-    categoria: "SERVICIO",
-    concepto: `Alta hasta el ${dayjs(new Date(nuevo.fecha_vigencia)).format(
-      "DD/MM/YYYY"
-    )}`,
-    monto: montoTotal,
-    fecha: new Date(),
-    esDeuda: normalizedSeller.esDeuda,
-    id_vendedor: new Types.ObjectId(nuevo._id),
-  });
+  await saveFlux(
+    buildServiceIncomeFlux({
+      pagoSucursales: normalizedSeller.pago_sucursales,
+      baseAmount: montoTotal,
+      discountPercent,
+      concept: `Alta hasta el ${dayjs(new Date(nuevo.fecha_vigencia)).format(
+        "DD/MM/YYYY"
+      )}`,
+      date: new Date(),
+      esDeuda: normalizedSeller.esDeuda,
+      sellerId: nuevo._id,
+    })
+  );
 
   return nuevo;
 };
@@ -427,6 +505,7 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
       fecha: new Date(),
       esDeuda: data.esDeuda ?? true,
       id_vendedor: actualizado._id,
+      detalle_servicios: buildServiceIncomeDetail(data.pago_sucursales),
     });
   }
   if (data.pago_sucursales?.length) {
@@ -442,6 +521,140 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
   }
 
   return actualizado;
+};
+
+const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean }) => {
+  const vendedor = await SellerRepository.findById(id);
+  if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
+
+  let nuevaDeuda = vendedor.deuda ?? 0;
+  let montoNuevo = 0;
+  const monthsToRenew = Math.max(1, Math.floor(toNumber(data.meses_renovacion || 1)));
+  const discountPercent = normalizeDiscountPercent(data.descuento_porcentaje);
+
+  if (data.pago_sucursales) {
+    montoNuevo = calcSellerDebt(data);
+    const discountedMonthlyAmount = buildServiceIncomeDetail(
+      data.pago_sucursales,
+      discountPercent
+    ).reduce((sum, item) => sum + item.total, 0);
+    nuevaDeuda = data.esDeuda
+      ? nuevaDeuda + discountedMonthlyAmount * monthsToRenew
+      : nuevaDeuda;
+    data.deuda = nuevaDeuda;
+  }
+
+  await handleSucursalRemovals(
+    id,
+    vendedor.pago_sucursales || [],
+    data.pago_sucursales || []
+  );
+
+  const renewalStart = dayjs(vendedor.fecha_vigencia).startOf("day");
+  const finalVigencia = renewalStart.add(monthsToRenew, "month").toDate();
+  const updateData = {
+    ...data,
+    fecha_vigencia: finalVigencia,
+  };
+  delete (updateData as any).meses_renovacion;
+  delete (updateData as any).descuento_porcentaje;
+
+  const actualizado = await SellerRepository.updateSeller(id, updateData);
+
+  if (montoNuevo > 0 && actualizado) {
+    for (let i = 0; i < monthsToRenew; i++) {
+      const periodStart = renewalStart.add(i, "month");
+      const periodEnd = renewalStart.add(i + 1, "month");
+      await saveFlux(
+        buildServiceIncomeFlux({
+          pagoSucursales: data.pago_sucursales,
+          baseAmount: montoNuevo,
+          discountPercent,
+          concept: `RenovaciÃ³n hasta el ${periodEnd.format("DD/MM/YYYY")}`,
+          date: periodStart.toDate(),
+          esDeuda: data.esDeuda ?? true,
+          sellerId: actualizado._id,
+        })
+      );
+    }
+  }
+
+  if (data.pago_sucursales?.length) {
+    const nuevasSucursales = data.pago_sucursales.filter((s: any) => {
+      return !vendedor.pago_sucursales?.some(
+        (ps: any) => ps.id_sucursal.toString() === s.id_sucursal.toString()
+      );
+    });
+
+    if (nuevasSucursales.length > 0) {
+      await syncSellerProductBranches(id, nuevasSucursales);
+    }
+  }
+
+  return actualizado;
+};
+
+const autoRenewSellers = async () => {
+  const sellers = await SellerRepository.findAll();
+  const today = dayjs().startOf("day");
+  const results = {
+    renewed: 0,
+    skipped: 0,
+    errors: [] as { sellerId: string; error: string }[],
+  };
+
+  for (const seller of sellers as any[]) {
+    const sellerId = String((seller as any)?._id || "");
+    const vigencia = seller?.fecha_vigencia ? dayjs(seller.fecha_vigencia).startOf("day") : null;
+
+    if (!sellerId || !vigencia?.isValid() || vigencia.isAfter(today)) {
+      results.skipped += 1;
+      continue;
+    }
+
+    if ((seller as any).declinacion_servicio_fecha) {
+      results.skipped += 1;
+      continue;
+    }
+
+    try {
+      await renewSellerWithMonths(sellerId, {
+        pago_sucursales: Array.isArray(seller.pago_sucursales) ? seller.pago_sucursales : [],
+        esDeuda: true,
+        meses_renovacion: 1,
+        descuento_porcentaje: 0,
+      });
+      results.renewed += 1;
+    } catch (error: any) {
+      results.errors.push({
+        sellerId,
+        error: error?.message || "Error renovando vendedor",
+      });
+    }
+  }
+
+  return results;
+};
+
+let autoRenewalSchedulerStarted = false;
+
+const startAutoRenewalScheduler = () => {
+  if (autoRenewalSchedulerStarted) return;
+  autoRenewalSchedulerStarted = true;
+
+  const run = async () => {
+    try {
+      const result = await autoRenewSellers();
+      if (result.renewed > 0 || result.errors.length > 0) {
+        console.log("[seller-auto-renewal]", result);
+      }
+    } catch (error) {
+      console.error("[seller-auto-renewal] Error:", error);
+    }
+  };
+
+  run();
+  setInterval(run, 24 * 60 * 60 * 1000);
 };
 
 const paySellerDebt = async (id: string, payAll: boolean) => {
@@ -699,7 +912,9 @@ export const SellerService = {
   getSeller,
   registerSeller,
   updateSeller,
-  renewSeller,
+  renewSeller: renewSellerWithMonths,
+  autoRenewSellers,
+  startAutoRenewalScheduler,
   paySellerDebt,
   requestSellerPayment,
   declineSellerService,

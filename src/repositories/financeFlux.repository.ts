@@ -7,6 +7,7 @@ const financeFluxPopulate = [
   { path: "id_vendedor", select: "nombre apellido" },
   { path: "id_trabajador", select: "nombre" },
   { path: "id_sucursal", select: "nombre" },
+  { path: "detalle_servicios.id_sucursal", select: "nombre" },
 ];
 
 const SIMPLE_PACKAGE_INCOME_CONCEPT_REGEX = /^Paquetes?\s+simples?\s+en\s+(efectivo|qr)(\s*\(\d+\))?$/i;
@@ -46,16 +47,49 @@ const findByDateRange = async (
     if (to) match.fecha.$lte = to;
   }
   if (sucursalIds?.length) {
-    match.id_sucursal = {
-      $in: sucursalIds
-        .filter((id) => Types.ObjectId.isValid(id))
-        .map((id) => new Types.ObjectId(id)),
-    };
+    const sucursalObjectIds = sucursalIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    match.$or = [
+      {
+        id_sucursal: {
+          $in: sucursalObjectIds,
+        },
+      },
+      {
+        "detalle_servicios.id_sucursal": {
+          $in: sucursalObjectIds,
+        },
+      },
+    ];
   }
 
   return await FlujoFinancieroModel.find(match)
     .populate(financeFluxPopulate)
     .exec();
+};
+
+const buildBranchDetailMatch = (sucursalIds?: string[]) => {
+  if (!sucursalIds?.length) return {};
+
+  const sucursalObjectIds = sucursalIds
+    .filter((id) => Types.ObjectId.isValid(id))
+    .map((id) => new Types.ObjectId(id));
+
+  return {
+    $or: [
+      {
+        id_sucursal: {
+          $in: sucursalObjectIds,
+        },
+      },
+      {
+        "detalle_servicios.id_sucursal": {
+          $in: sucursalObjectIds,
+        },
+      },
+    ],
+  };
 };
 
 const findServiceIncomeByDateRange = async (
@@ -67,20 +101,13 @@ const findServiceIncomeByDateRange = async (
     tipo: "INGRESO",
     categoria: "SERVICIO",
     esDeuda: { $ne: true },
+    ...buildBranchDetailMatch(sucursalIds),
   };
 
   if (from || to) {
     match.fecha = {};
     if (from) match.fecha.$gte = from;
     if (to) match.fecha.$lte = to;
-  }
-
-  if (sucursalIds?.length) {
-    match.id_sucursal = {
-      $in: sucursalIds
-        .filter((id) => Types.ObjectId.isValid(id))
-        .map((id) => new Types.ObjectId(id)),
-    };
   }
 
   return await FlujoFinancieroModel.find(match)

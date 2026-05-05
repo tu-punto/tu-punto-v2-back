@@ -10,6 +10,7 @@ sellerRouter.get('/clients/status', requireRole("admin"), SellerController.getCl
 sellerRouter.get('/basic', requireRole("admin", "operator", "seller"), SellerController.getSellersBasic);
 sellerRouter.get('/', requireRole("admin", "operator", "seller"), SellerController.getSellers);
 sellerRouter.post('/register', requireRole("admin"), SellerController.registerSeller);
+sellerRouter.post('/auto-renew', requireRole("admin"), SellerController.autoRenewSellers);
 sellerRouter.put('/update/:id', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.updateSeller);
 sellerRouter.get('/:id', requireRole("admin", "operator", "seller"), requireSellerOwnership("id"), SellerController.getSeller);
 sellerRouter.put("/renew/:id", requireRole("admin"), SellerController.renewSeller);

@@ -166,6 +166,19 @@ export const renewSeller = async (req: Request, res: Response) => {
   }
 };
 
+export const autoRenewSellers = async (_req: Request, res: Response) => {
+  try {
+    const result = await SellerService.autoRenewSellers();
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error("Error renovando vendedores automaticamente:", err);
+    res.status(500).json({
+      ok: false,
+      msg: err?.message || "Error renovando vendedores automaticamente",
+    });
+  }
+};
+
 export const paySellerDebt = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { payAll } = req.body;

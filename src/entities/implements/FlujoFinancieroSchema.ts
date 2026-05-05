@@ -31,6 +31,46 @@ const FlujoFinancieroSchema = new Schema({
     type: Boolean,
     default: true
   },
+  descuento_porcentaje: {
+    type: Number,
+    default: 0
+  },
+  monto_sin_descuento: {
+    type: Number,
+    default: 0
+  },
+  detalle_servicios: [{
+    _id: false,
+    id_sucursal: {
+      type: Types.ObjectId,
+      ref: 'Sucursal',
+      default: null
+    },
+    sucursalName: {
+      type: String,
+      default: ''
+    },
+    alquiler: {
+      type: Number,
+      default: 0
+    },
+    exhibicion: {
+      type: Number,
+      default: 0
+    },
+    entrega_simple: {
+      type: Number,
+      default: 0
+    },
+    delivery: {
+      type: Number,
+      default: 0
+    },
+    total: {
+      type: Number,
+      default: 0
+    }
+  }],
   founder: {
     type: String,
     default: 'N/A'
