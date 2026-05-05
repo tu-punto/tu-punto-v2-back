@@ -106,6 +106,8 @@ type SellerListFilters = {
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
+  page?: number;
+  pageSize?: number;
 };
 
 const matchesSellerFullName = (sellerData: any, q?: string) => {
@@ -117,6 +119,10 @@ const matchesSellerFullName = (sellerData: any, q?: string) => {
 };
 
 const getAllSellers = async (params?: SellerListFilters) => {
+  if (params?.page || params?.pageSize) {
+    return await SellerRepository.findWithDebtsAndSalesPage(params);
+  }
+
   const sellersWithData = await SellerRepository.findWithDebtsAndSales({
     sellerId: params?.sellerId,
     q: params?.q,

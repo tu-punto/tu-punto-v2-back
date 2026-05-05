@@ -17,6 +17,9 @@ type SellerListQueryParams = {
   sellerId?: string;
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
+  pendingPayment?: "con_deuda" | "sin_deuda";
+  page?: number;
+  pageSize?: number;
 };
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -173,11 +176,19 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
     match.fecha_vigencia = { $gte: todayStart.subtract(5, "day").toDate() };
   } else if (params?.status === "activo") {
     match.fecha_vigencia = { $gte: todayStart.toDate() };
+    match.$or = [
+      { declinacion_servicio_fecha: { $exists: false } },
+      { declinacion_servicio_fecha: null }
+    ];
   } else if (params?.status === "debe_renovar") {
     match.fecha_vigencia = {
       $gte: todayStart.subtract(20, "day").toDate(),
       $lt: todayStart.toDate()
     };
+    match.$or = [
+      { declinacion_servicio_fecha: { $exists: false } },
+      { declinacion_servicio_fecha: null }
+    ];
   } else if (params?.status === "ya_no_es_cliente") {
     match.$or = [
       { fecha_vigencia: { $lt: todayStart.subtract(20, "day").toDate() } },
@@ -250,6 +261,199 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
   ]).exec();
 };
 
+const buildSellerMetricsStages = () => [
+  {
+    $lookup: {
+      from: "Venta",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$vendedor", "$$vendedor_id"] },
+            deposito_realizado: { $ne: true },
+          },
+        },
+        {
+          $lookup: {
+            from: "Pedido",
+            localField: "pedido",
+            foreignField: "_id",
+            as: "pedido",
+          },
+        },
+        { $unwind: "$pedido" },
+        { $match: { "pedido.estado_pedido": { $ne: "En Espera" } } },
+        {
+          $project: {
+            pedidoId: "$pedido._id",
+            saleBalance: {
+              $cond: [
+                "$pedido.pagado_al_vendedor",
+                { $multiply: [{ $ifNull: ["$utilidad", 0] }, -1] },
+                {
+                  $subtract: [
+                    {
+                      $multiply: [
+                        { $ifNull: ["$cantidad", 0] },
+                        { $ifNull: ["$precio_unitario", 0] },
+                      ],
+                    },
+                    { $ifNull: ["$utilidad", 0] },
+                  ],
+                },
+              ],
+            },
+            orderDiscount: {
+              $add: [
+                { $ifNull: ["$pedido.adelanto_cliente", 0] },
+                {
+                  $cond: [
+                    "$pedido.simple_package_order",
+                    0,
+                    { $ifNull: ["$pedido.cargo_delivery", 0] },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$pedidoId",
+            saleBalance: { $sum: "$saleBalance" },
+            orderDiscount: { $first: "$orderDiscount" },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            saldo_pendiente: {
+              $sum: { $subtract: ["$saleBalance", "$orderDiscount"] },
+            },
+          },
+        },
+      ],
+      as: "salesMetrics",
+    },
+  },
+  {
+    $lookup: {
+      from: "Flujo_Financiero",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+            esDeuda: true,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            deuda: { $sum: { $ifNull: ["$monto", 0] } },
+          },
+        },
+      ],
+      as: "debtMetrics",
+    },
+  },
+  {
+    $addFields: {
+      saldo_pendiente: {
+        $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0],
+      },
+      deuda: {
+        $ifNull: [{ $arrayElemAt: ["$debtMetrics.deuda", 0] }, 0],
+      },
+      pago_mensual: {
+        $sum: {
+          $map: {
+            input: {
+              $filter: {
+                input: { $ifNull: ["$pago_sucursales", []] },
+                as: "pago",
+                cond: { $ne: ["$$pago.activo", false] },
+              },
+            },
+            as: "pago",
+            in: {
+              $add: [
+                { $ifNull: ["$$pago.alquiler", 0] },
+                { $ifNull: ["$$pago.exhibicion", 0] },
+                { $ifNull: ["$$pago.delivery", 0] },
+                { $ifNull: ["$$pago.entrega_simple", 0] },
+              ],
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    $addFields: {
+      pago_pendiente: { $subtract: ["$saldo_pendiente", "$deuda"] },
+    },
+  },
+  {
+    $project: {
+      salesMetrics: 0,
+      debtMetrics: 0,
+    },
+  },
+];
+
+const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
+  const match = buildSellerListMatch(params);
+  const page = Math.max(1, Number(params?.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(params?.pageSize || 10)));
+  const skip = (page - 1) * pageSize;
+  const pendingMatch =
+    params?.pendingPayment === "con_deuda"
+      ? { pago_pendiente: { $ne: 0 } }
+      : params?.pendingPayment === "sin_deuda"
+      ? { pago_pendiente: 0 }
+      : null;
+
+  const result = await VendedorModel.aggregate([
+    ...(Object.keys(match).length ? [{ $match: match }] : []),
+    ...buildSellerMetricsStages(),
+    ...(pendingMatch ? [{ $match: pendingMatch }] : []),
+    { $sort: { nombre: 1, apellido: 1, _id: 1 } },
+    {
+      $facet: {
+        rows: [{ $skip: skip }, { $limit: pageSize }],
+        meta: [
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+              totalPendingPayment: { $sum: "$pago_pendiente" },
+            },
+          },
+        ],
+      },
+    },
+    {
+      $project: {
+        rows: 1,
+        total: { $ifNull: [{ $arrayElemAt: ["$meta.total", 0] }, 0] },
+        totalPendingPayment: {
+          $ifNull: [{ $arrayElemAt: ["$meta.totalPendingPayment", 0] }, 0],
+        },
+      },
+    },
+  ]).exec();
+
+  const data = result[0] || {};
+  return {
+    data: data.rows || [],
+    total: data.total || 0,
+    page,
+    pageSize,
+    totalPendingPayment: data.totalPendingPayment || 0,
+  };
+};
+
 export const SellerRepository = {
   findAll,
   findAllBasic,
@@ -275,4 +479,5 @@ export const SellerRepository = {
   findDebtsBySeller,
   markSalesAsDeposited,
   findWithDebtsAndSales,
+  findWithDebtsAndSalesPage,
 };

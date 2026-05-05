@@ -31,6 +31,11 @@ export const getSellers = async (req: Request, res: Response) => {
     const q = String(req.query.q || "").trim() || undefined;
     const statusQuery = String(req.query.status || "").trim().toLowerCase();
     const pendingPaymentQuery = String(req.query.pendingPayment || "").trim().toLowerCase();
+    const usePagination = req.query.page !== undefined || req.query.pageSize !== undefined;
+    const page = usePagination ? Math.max(1, Number(req.query.page || 1)) : undefined;
+    const pageSize = usePagination
+      ? Math.min(100, Math.max(1, Number(req.query.pageSize || 10)))
+      : undefined;
     const status =
       statusQuery === "activo" ||
       statusQuery === "debe_renovar" ||
@@ -54,6 +59,8 @@ export const getSellers = async (req: Request, res: Response) => {
         q,
         status,
         pendingPayment,
+        page,
+        pageSize,
       });
       return res.json(sellerList);
     }
@@ -62,6 +69,8 @@ export const getSellers = async (req: Request, res: Response) => {
       q,
       status,
       pendingPayment,
+      page,
+      pageSize,
     });
     res.json(sellerList);
   } catch (err) {
