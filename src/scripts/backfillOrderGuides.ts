@@ -25,7 +25,10 @@ const run = async () => {
     await connectToMongoDB();
 
     const [pedidos, externalSales] = await Promise.all([
-      PedidoModel.find(missingGuideFilter).lean(),
+      PedidoModel.find({
+        ...missingGuideFilter,
+        simple_package_order: true,
+      }).lean(),
       VentaExternaModel.find({
         ...missingGuideFilter,
         service_origin: { $ne: "simple_package" },

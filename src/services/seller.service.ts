@@ -14,6 +14,7 @@ import { IFlujoFinanciero } from "../entities/IFlujoFinanciero";
 import { Types } from "mongoose";
 import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el servicio de generación de PDF
 import dayjs from "dayjs";
+import moment from "moment-timezone";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { UserModel } from "../entities/implements/UserSchema";
 import { SaleService } from "./sale.service";
@@ -258,14 +259,18 @@ const normalizeSellerServiceValues = (seller: any) => {
   };
 };
 
-const getAssignedPaymentDate = (date = new Date()) => {
-  const base = dayjs(date).startOf("day");
-  const day = base.date();
+const PAYMENT_TZ = "America/La_Paz";
 
-  if (day <= 7) return base.date(8).toDate();
-  if (day <= 17) return base.date(18).toDate();
-  if (day <= 27) return base.date(28).toDate();
-  return base.add(1, "month").date(8).toDate();
+const getAssignedPaymentDate = (date = new Date()) => {
+  const base = moment.tz(date, PAYMENT_TZ).startOf("day");
+  const day = base.date();
+  const assignAtLocalNoon = (paymentDay: number) =>
+    base.clone().date(paymentDay).hour(12).minute(0).second(0).millisecond(0).toDate();
+
+  if (day <= 7) return assignAtLocalNoon(8);
+  if (day <= 17) return assignAtLocalNoon(18);
+  if (day <= 27) return assignAtLocalNoon(28);
+  return base.clone().add(1, "month").date(8).hour(12).minute(0).second(0).millisecond(0).toDate();
 };
 
 const getSeller = async (sellerId: string) => {

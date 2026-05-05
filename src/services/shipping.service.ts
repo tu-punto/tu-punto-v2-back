@@ -361,7 +361,9 @@ const getShippingByIds = async (shippingIds: string[]) => {
 const registerShipping = async (shipping: any) => {
   normalizeOrderPaymentData(shipping);
   await normalizeShippingBranches(shipping);
-  await OrderGuideService.assignOrderGuide(shipping);
+  if (shipping?.simple_package_order === true) {
+    await OrderGuideService.assignOrderGuide(shipping);
+  }
 
   if (shipping.fecha_pedido) {
     shipping.fecha_pedido = moment.tz(shipping.fecha_pedido, "America/La_Paz").format("YYYY-MM-DD HH:mm:ss");

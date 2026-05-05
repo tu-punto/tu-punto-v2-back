@@ -322,16 +322,9 @@ const resolvePaymentSplit = (
   }
 
   if (paidStatus === "si") {
-    const paidTotal = montoPagaVendedor + montoPagaComprador;
-    if (paidTotal <= 0) {
-      montoPagaVendedor = 0;
-      montoPagaComprador = packagePrice;
-    } else if (paidTotal < packagePrice) {
-      montoPagaComprador += packagePrice - paidTotal;
-    }
     return {
-      montoPagaVendedor: +montoPagaVendedor.toFixed(2),
-      montoPagaComprador: +montoPagaComprador.toFixed(2),
+      montoPagaVendedor: +packagePrice.toFixed(2),
+      montoPagaComprador: 0,
       saldoCobrar: 0,
     };
   }
@@ -577,16 +570,16 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     !hasPaymentStatusUpdate &&
     !hasSellerMethodUpdate &&
     !hasSellerAmountUpdate;
-  const sellerPaymentMethod = paid === "mixto"
+  const sellerPaymentMethod = montoPagaVendedor > 0
     ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago)
     : "";
   if (
     serviceOrigin === "external" &&
-    paid === "mixto" &&
+    montoPagaVendedor > 0 &&
     !sellerPaymentMethod &&
     !isLegacyMixedWithoutSellerMethod
   ) {
-    throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR para entregas mixtas");
+    throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
   const deliveryPayment =
     serviceOrigin === "external"

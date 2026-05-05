@@ -427,8 +427,9 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
       subtotalQr > 0 || subtotalEfectivo > 0
         ? subtotalQr + subtotalEfectivo
         : Number((e as any)?.deuda_comprador ?? (e as any)?.monto_paga_comprador ?? (e as any)?.saldo_cobrar ?? 0);
+    const sellerIncome = Number((e as any)?.monto_paga_vendedor || 0);
 
-    ingresosEntregasExternas += buyerIncome;
+    ingresosEntregasExternas += buyerIncome + sellerIncome;
     externalDeliveredPackageTotal += Number(e.precio_paquete || 0);
   }
 
