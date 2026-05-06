@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ExternalSaleService } from "../services/external.service";
+import { OrderGuideWhatsappService } from "../services/orderGuideWhatsapp.service";
 
 export const getAllExternalSales = async (req: Request, res: Response) => {
     try {
@@ -152,6 +153,21 @@ export const updateExternalSaleByID = async (req: Request, res: Response) => {
         res.status(400).json({ 
             success: false, 
             message: error?.message || "Error al actualizar la venta externa" 
+        });
+    }
+}
+
+export const sendExternalGuideWhatsapp = async (req: Request, res: Response) => {
+    try {
+        const result = await OrderGuideWhatsappService.sendExternalGuideMessages(req.params.id);
+        return res.json({
+            ...result
+        });
+    } catch (error: any) {
+        console.error("Error enviando WhatsApp de guia externa:", error);
+        return res.status(400).json({
+            success: false,
+            message: error?.message || "No se pudo enviar el WhatsApp de la guia"
         });
     }
 }

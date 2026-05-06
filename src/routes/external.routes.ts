@@ -7,6 +7,7 @@ import {
     getExternalSaleByID,
     registerExternalSale,
     registerExternalSalesByPackages,
+    sendExternalGuideWhatsapp,
     updateExternalSaleByID
 } from "../controllers/external.controller";
 
@@ -18,6 +19,7 @@ externalSaleRouter.get("/contact-suggestions", getExternalContactSuggestions)
 externalSaleRouter.get("/:id", getExternalSaleByID)
 externalSaleRouter.post("/register", registerExternalSale)
 externalSaleRouter.post("/register-packages", registerExternalSalesByPackages)
+externalSaleRouter.post("/:id/send-guide-whatsapp", sendExternalGuideWhatsapp)
 externalSaleRouter.delete("/:id", deleteExternalSaleByID)
 externalSaleRouter.put("/update/:id", updateExternalSaleByID)
 

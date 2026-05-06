@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SimplePackageService } from "../services/simplePackage.service";
+import { OrderGuideWhatsappService } from "../services/orderGuideWhatsapp.service";
 
 const resolveActor = (res: Response) => ({
   role: String(res.locals.auth?.role || "").toLowerCase(),
@@ -229,6 +230,28 @@ export const printSimplePackageGuidesController = async (req: Request, res: Resp
     return res.status(400).json({
       success: false,
       message: error?.message || "No se pudieron imprimir los QRs",
+    });
+  }
+};
+
+export const sendSimplePackageGuideWhatsappController = async (req: Request, res: Response) => {
+  try {
+    const actor = resolveActor(res);
+    const result = await OrderGuideWhatsappService.sendSimplePackageGuideMessages({
+      packageIds: Array.isArray(req.body?.packageIds) ? req.body.packageIds : [],
+      role: actor.role,
+      authSellerId: actor.sellerId,
+      currentBranchId: actor.role === "seller" ? undefined : actor.sucursalId,
+    });
+
+    return res.json({
+      ...result,
+    });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(400).json({
+      success: false,
+      message: error?.message || "No se pudo enviar WhatsApp de las guias",
     });
   }
 };

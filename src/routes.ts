@@ -14,6 +14,7 @@ import paymentProofRouter from "./routes/paymentProof.routes";
 import entryRouter from "./routes/entry.routes";
 import userRouter from "./routes/user.routes";
 import whatsRouter from "./routes/whatsapp.route";
+import whatsappWebhookRouter from "./routes/whatsappWebhook.routes";
 import boxCloseRouter from "./routes/boxClose.routes";
 import dailyEffectiveRouter from "./routes/dailyEffective.routes";
 import externalSaleRouter from "./routes/external.routes";
@@ -33,6 +34,7 @@ import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 
 const router = Router();
 
+router.use("/whatsapp/webhook", whatsappWebhookRouter);
 router.use("/seller", requireAuth, sellerRouter);
 // router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
 router.use("/product", productRouter);
