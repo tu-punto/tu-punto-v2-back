@@ -267,6 +267,9 @@ const normalizeSellerServiceValues = (seller: any) => {
 
 const PAYMENT_TZ = "America/La_Paz";
 
+const formatServiceDate = (date: Date | string | number) =>
+  moment.tz(date, PAYMENT_TZ).format("DD/MM/YYYY");
+
 const getAssignedPaymentDate = (date = new Date()) => {
   const base = moment.tz(date, PAYMENT_TZ).startOf("day");
   const day = base.date();
@@ -509,9 +512,7 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
     await saveFlux({
       tipo: "INGRESO",
       categoria: "SERVICIO",
-      concepto: `Renovación hasta el ${dayjs(
-        new Date(actualizado.fecha_vigencia)
-      ).format("DD/MM/YYYY")}`,
+      concepto: `Renovación hasta el ${formatServiceDate(actualizado.fecha_vigencia)}`,
       monto: montoNuevo,
       fecha: new Date(),
       esDeuda: data.esDeuda ?? true,
@@ -571,8 +572,8 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     data.pago_sucursales || []
   );
 
-  const renewalStart = dayjs(vendedor.fecha_vigencia).startOf("day");
-  const finalVigencia = renewalStart.add(monthsToRenew, "month").toDate();
+  const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
+  const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
   const updateData = {
     ...data,
     fecha_vigencia: finalVigencia,
@@ -590,8 +591,8 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
 
   if (montoNuevo > 0 && actualizado) {
     for (let i = 0; i < monthsToRenew; i++) {
-      const periodStart = renewalStart.add(i, "month");
-      const periodEnd = renewalStart.add(i + 1, "month");
+      const periodStart = renewalStart.clone().add(i, "month");
+      const periodEnd = renewalStart.clone().add(i + 1, "month");
       await saveFlux(
         buildServiceIncomeFlux({
           pagoSucursales: data.pago_sucursales,

@@ -169,6 +169,48 @@ const getExternalDeliveredPaymentTotals = (sale: any) => {
   };
 };
 
+const getExternalSellerPaymentTotals = (sale: any) => {
+  const amount = roundCurrency(Number(sale?.monto_paga_vendedor || sale?.amortizacion_vendedor || 0));
+  const method = String(sale?.metodo_pago || "").trim().toLowerCase();
+
+  if (amount <= 0) {
+    return {
+      subtotalQr: 0,
+      subtotalEfectivo: 0,
+      montoTotal: 0,
+      tipoDePago: "No pagado",
+    };
+  }
+
+  if (method === "qr") {
+    return {
+      subtotalQr: amount,
+      subtotalEfectivo: 0,
+      montoTotal: amount,
+      tipoDePago: "Pago vendedor QR",
+    };
+  }
+
+  return {
+    subtotalQr: 0,
+    subtotalEfectivo: amount,
+    montoTotal: amount,
+    tipoDePago: "Pago vendedor efectivo",
+  };
+};
+
+const isDateInSalesHistoryRange = (
+  value: any,
+  periodStart: Date,
+  periodEnd: Date,
+  exclusiveStart: boolean
+) => {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return (exclusiveStart ? date > periodStart : date >= periodStart) && date <= periodEnd;
+};
+
 const getSimplePackageBalanceToApply = async (
   shipping: any
 ): Promise<{ sellerId: string; amount: number } | null> => {
@@ -980,24 +1022,26 @@ const getDailySalesHistory = async (
     const branchId = String((sale?.sucursal as any)?._id || sale?.sucursal || "").trim();
     if (branchId !== String(sucursalId || "").trim()) return false;
 
-    const buyerAmount = getExternalBuyerChargeAmount(sale);
-    const historyDate = getExternalHistoryDate(sale);
-    if (!historyDate) return false;
+    const sellerPayment = getExternalSellerPaymentTotals(sale);
+    const hasSellerPayment = sellerPayment.montoTotal > 0;
     const isDelivered = String(sale?.estado_pedido || "").trim().toLowerCase() === "entregado" || sale?.delivered === true;
-    if (!isDelivered) return false;
+    if (!isDelivered && !hasSellerPayment) return false;
 
     if (fromLastClose) {
       const deliveredDate = sale?.hora_entrega_real ? new Date(sale.hora_entrega_real) : null;
-      if (deliveredDate) {
-        return deliveredDate > periodStart && deliveredDate <= periodEnd;
-      }
+      const sellerPaymentDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
+      if (hasSellerPayment && sellerPaymentDate && sellerPaymentDate > periodStart && sellerPaymentDate <= periodEnd) return true;
+      if (isDelivered && deliveredDate && deliveredDate > periodStart && deliveredDate <= periodEnd) return true;
 
       const orderDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
-      return buyerAmount > 0 && !!orderDate && orderDate > periodStart && orderDate <= periodEnd;
+      return isDelivered && !!orderDate && orderDate > periodStart && orderDate <= periodEnd;
     }
 
     if (date) {
-      return historyDate >= startOfDay && historyDate <= periodEnd;
+      return (
+        (hasSellerPayment && isDateInSalesHistoryRange(sale?.fecha_pedido, startOfDay, periodEnd, false)) ||
+        (isDelivered && isDateInSalesHistoryRange(getExternalHistoryDate(sale), startOfDay, periodEnd, false))
+      );
     }
 
     return true;
@@ -1041,9 +1085,11 @@ const getDailySalesHistory = async (
     };
   });
 
-  const resumenExternas = externalFiltrados.map((sale: any) => {
+  const resumenExternas = externalFiltrados.flatMap((sale: any) => {
     const paymentTotals = getExternalDeliveredPaymentTotals(sale);
     const buyerAmount = paymentTotals.montoTotal;
+    const sellerPaymentTotals = getExternalSellerPaymentTotals(sale);
+    const isDelivered = String(sale?.estado_pedido || "").trim().toLowerCase() === "entregado" || sale?.delivered === true;
     const tipoDePago =
       String(sale?.tipo_de_pago || "").trim() ||
       (paymentTotals.subtotalQr > 0 && paymentTotals.subtotalEfectivo > 0
@@ -1052,17 +1098,52 @@ const getDailySalesHistory = async (
           ? "Transferencia o QR"
           : "Efectivo");
 
-    return {
-      _id: sale._id,
-      fecha: getExternalHistoryDate(sale),
-      hora: dayjs(getExternalHistoryDate(sale)).format("HH:mm"),
-      tipo_de_pago: buyerAmount > 0 ? tipoDePago : "No pagado",
-      monto_total: buyerAmount,
-      subtotal_efectivo: paymentTotals.subtotalEfectivo,
-      subtotal_qr: paymentTotals.subtotalQr,
-      esta_pagado: sale.esta_pagado,
-      is_external: true,
-    };
+    const rows: any[] = [];
+    const shouldIncludeSellerPayment =
+      sellerPaymentTotals.montoTotal > 0 &&
+      (fromLastClose
+        ? isDateInSalesHistoryRange(sale?.fecha_pedido, periodStart, periodEnd, true)
+        : date
+          ? isDateInSalesHistoryRange(sale?.fecha_pedido, startOfDay, periodEnd, false)
+          : true);
+    const shouldIncludeBuyerPayment =
+      isDelivered &&
+      buyerAmount > 0 &&
+      (fromLastClose
+        ? isDateInSalesHistoryRange(getExternalHistoryDate(sale), periodStart, periodEnd, true)
+        : date
+          ? isDateInSalesHistoryRange(getExternalHistoryDate(sale), startOfDay, periodEnd, false)
+          : true);
+
+    if (shouldIncludeSellerPayment) {
+      rows.push({
+        _id: `${sale._id}-seller-payment`,
+        fecha: sale.fecha_pedido,
+        hora: dayjs(sale.fecha_pedido).format("HH:mm"),
+        tipo_de_pago: sellerPaymentTotals.tipoDePago,
+        monto_total: sellerPaymentTotals.montoTotal,
+        subtotal_efectivo: sellerPaymentTotals.subtotalEfectivo,
+        subtotal_qr: sellerPaymentTotals.subtotalQr,
+        esta_pagado: sale.esta_pagado,
+        is_external: true,
+      });
+    }
+
+    if (shouldIncludeBuyerPayment) {
+      rows.push({
+        _id: `${sale._id}-buyer-payment`,
+        fecha: getExternalHistoryDate(sale),
+        hora: dayjs(getExternalHistoryDate(sale)).format("HH:mm"),
+        tipo_de_pago: tipoDePago,
+        monto_total: buyerAmount,
+        subtotal_efectivo: paymentTotals.subtotalEfectivo,
+        subtotal_qr: paymentTotals.subtotalQr,
+        esta_pagado: sale.esta_pagado,
+        is_external: true,
+      });
+    }
+
+    return rows;
   });
 
   const resumen = [...resumenPedidos, ...resumenExternas].sort(
