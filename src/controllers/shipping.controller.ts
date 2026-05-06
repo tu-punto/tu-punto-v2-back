@@ -21,6 +21,7 @@ export const getShippingList = async (req: Request, res: Response) => {
     const originId = (req.query.originId as string | undefined) || undefined;
     const sellerId = (req.query.sellerId as string | undefined) || undefined;
     const client = (req.query.client as string | undefined) || undefined;
+    const guide = (req.query.guide as string | undefined) || undefined;
     const fromRaw = (req.query.from as string | undefined) || undefined;
     const toRaw = (req.query.to as string | undefined) || undefined;
 
@@ -39,7 +40,8 @@ export const getShippingList = async (req: Request, res: Response) => {
           ? auth?.sucursalId
           : undefined,
       sellerId,
-      client
+      client,
+      guide
     });
     res.json(result);
   } catch (error) {

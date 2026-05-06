@@ -42,7 +42,13 @@ const getExternalSalesList = async (params: {
         match.sucursal = new Types.ObjectId(params.sucursalId);
     }
     if (params.client) {
-        match.comprador = { $regex: params.client, $options: "i" };
+        const searchRegex = { $regex: params.client, $options: "i" };
+        match.$or = [
+            { comprador: searchRegex },
+            { telefono_comprador: searchRegex },
+            { carnet_comprador: searchRegex },
+            { numero_guia: searchRegex }
+        ];
     }
 
     const [rows, total] = await Promise.all([

@@ -37,6 +37,7 @@ type ShippingListParams = {
   branchContextId?: string;
   sellerId?: string;
   client?: string;
+  guide?: string;
 };
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -80,11 +81,17 @@ const findList = async (params: ShippingListParams) => {
       $or: [
         { cliente: searchRegex },
         { telefono_cliente: searchRegex },
-        { carnet_cliente: searchRegex }
+        { carnet_cliente: searchRegex },
+        { numero_guia: searchRegex }
       ]
     };
 
     filter.$and = [...(filter.$and || []), clientMatch];
+  }
+
+  if (params.guide) {
+    const guideRegex = new RegExp(escapeRegex(params.guide), "i");
+    filter.$and = [...(filter.$and || []), { numero_guia: guideRegex }];
   }
 
   if (params.sellerId && Types.ObjectId.isValid(params.sellerId)) {

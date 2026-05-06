@@ -338,6 +338,7 @@ const getShippingsList = async (params: {
   branchContextId?: string;
   sellerId?: string;
   client?: string;
+  guide?: string;
 }) => {
   const result = await ShippingRepository.findList(params);
   return {
