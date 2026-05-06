@@ -386,7 +386,7 @@ export const ReportsRepository = {
       }
     }
 
-    return await VentaExternaModel.find(filter)
+    const externalRows = await VentaExternaModel.find(filter)
       .populate([
         { path: "sucursal", select: "_id nombre" },
         { path: "origen_sucursal", select: "_id nombre" },
@@ -394,6 +394,82 @@ export const ReportsRepository = {
       ])
       .lean()
       .exec();
+
+    const simplePackageOrderFilter: any = {
+      simple_package_order: true,
+      $or: [
+        { simple_package_source_id: { $exists: false } },
+        { simple_package_source_id: null },
+      ],
+      $and: [
+        {
+          $or: [
+            { fecha_pedido: rangeMatch },
+            { hora_entrega_real: rangeMatch },
+          ],
+        },
+      ],
+    };
+
+    if (sucursalIds?.length) {
+      const ids = sucursalIds
+        .filter((id) => Types.ObjectId.isValid(id))
+        .map((id) => new Types.ObjectId(id));
+
+      if (ids.length) {
+        simplePackageOrderFilter.$and.push({
+          $or: [
+            { lugar_origen: { $in: ids } },
+            { sucursal: { $in: ids } },
+          ],
+        });
+      }
+    }
+
+    const legacySimpleOrders = await PedidoModel.find(simplePackageOrderFilter)
+      .populate([
+        { path: "sucursal", select: "_id nombre" },
+        { path: "lugar_origen", select: "_id nombre" },
+      ])
+      .lean()
+      .exec();
+
+    const legacySimpleRows = legacySimpleOrders.map((order: any) => {
+      const tempProduct = Array.isArray(order?.productos_temporales) ? order.productos_temporales[0] : null;
+      const precioPaquete = Number(tempProduct?.precio_unitario || 0);
+      const delivery = Number(order?.cargo_delivery || 0);
+      const subtotalQr = Number(order?.subtotal_qr || 0);
+      const subtotalEfectivo = Number(order?.subtotal_efectivo || 0);
+
+      return {
+        _id: order._id,
+        numero_guia: order.numero_guia,
+        fecha_pedido: order.fecha_pedido,
+        hora_entrega_real: order.hora_entrega_real,
+        sucursal: order.lugar_origen || order.sucursal,
+        origen_sucursal: order.lugar_origen || order.sucursal,
+        destino_sucursal: order.sucursal || order.lugar_origen,
+        service_origin: "simple_package",
+        is_external: true,
+        delivered: String(order?.estado_pedido || "").trim().toLowerCase() === "entregado",
+        estado_pedido: order.estado_pedido,
+        vendedor: "",
+        comprador: order.cliente,
+        descripcion_paquete: tempProduct?.producto || "Paquete simple",
+        precio_paquete: precioPaquete,
+        precio_entre_sucursal: delivery,
+        cargo_delivery: delivery,
+        precio_total: precioPaquete + delivery,
+        deuda_comprador: subtotalQr + subtotalEfectivo || precioPaquete + delivery,
+        monto_paga_vendedor: 0,
+        amortizacion_vendedor: 0,
+        subtotal_qr: subtotalQr,
+        subtotal_efectivo: subtotalEfectivo,
+        esta_pagado: order.esta_pagado === "si" ? "si" : "no",
+      };
+    });
+
+    return [...externalRows, ...legacySimpleRows];
   },
 
 async fetchVendedoresActivosConPlanes(opts: { hoy: Date }) {

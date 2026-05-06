@@ -441,20 +441,44 @@ export const exportEntregasSimplesResumenXlsx = async (req: Request, res: Respon
 export const exportReporteEntregasSimplesExternasXlsx = async (req: Request, res: Response) => {
   try {
     const mes = typeof req.query?.mes === "string" ? String(req.query.mes).trim() : "";
+    const meses = parseStringArrayInput(req.query?.meses) || [];
     const sucursalIds = parseStringArrayInput(req.query?.sucursales);
 
-    if (!mes) {
-      return res.status(400).json({ ok: false, msg: "mes es requerido" });
+    if (!mes && !meses.length) {
+      return res.status(400).json({ ok: false, msg: "mes o meses es requerido" });
     }
 
     const { filePath, filename } = await ReportsService.exportReporteEntregasSimplesExternasXlsx({
       mes,
+      meses,
       sucursalIds,
     });
     return res.download(filePath, filename);
   } catch (err: any) {
     console.error("exportReporteEntregasSimplesExternasXlsx error:", err);
     return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+
+export const getReporteEntregasSimplesExternas = async (req: Request, res: Response) => {
+  try {
+    const mes = typeof req.query?.mes === "string" ? String(req.query.mes).trim() : "";
+    const meses = parseStringArrayInput(req.query?.meses) || [];
+    const sucursalIds = parseStringArrayInput(req.query?.sucursales);
+
+    if (!mes && !meses.length) {
+      return res.status(400).json({ ok: false, msg: "mes o meses es requerido" });
+    }
+
+    const data = await ReportsService.getReporteEntregasSimplesExternas({
+      mes,
+      meses,
+      sucursalIds,
+    });
+    return res.json(data);
+  } catch (err: any) {
+    console.error("getReporteEntregasSimplesExternas error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar la vista previa", error: err?.message });
   }
 };
 
