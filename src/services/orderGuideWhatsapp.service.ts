@@ -102,9 +102,18 @@ const getBranchLocationLink = (branchName: string) => {
 
 const getBranchLocationButtonValue = (branchName: string) => {
   const normalized = normalizeName(branchName);
-  return BRANCH_LOCATION_LINKS.find((entry) =>
+  const matchedValue = BRANCH_LOCATION_LINKS.find((entry) =>
     entry.matches.some((match) => normalized.includes(normalizeName(match)))
-  )?.buttonValue || "";
+  )?.buttonValue;
+
+  if (matchedValue) return matchedValue;
+
+  const fallbackValue = toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_BUTTON_VALUE) || BRANCH_LOCATION_LINKS[0].buttonValue;
+  console.warn("[order-guide-whatsapp] Sucursal sin link configurado, usando link por defecto", {
+    branchName,
+    fallbackValue,
+  });
+  return fallbackValue;
 };
 
 const getPickupDateLabel = (value: unknown) => {
@@ -267,7 +276,7 @@ const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsap
   try {
     const result = await sendForRows(rows);
     if (!result.success) {
-      console.warn(`[${context}] WhatsApp sin envios exitosos`, result);
+      console.warn(`[${context}] WhatsApp sin envios exitosos`, JSON.stringify(result, null, 2));
     }
     return result;
   } catch (error) {
