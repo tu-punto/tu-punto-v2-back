@@ -47,7 +47,7 @@ const normalizePaidStatus = (value: unknown): "si" | "no" => {
 const normalizePaymentMethod = (value: unknown): PackagePaymentMethod => {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "efectivo" || normalized === "qr") return normalized;
-  return "efectivo";
+  return "";
 };
 
 const toObjectIdOrUndefined = (value?: string) =>
@@ -405,8 +405,11 @@ const buildSimplePackageRecord = async (params: {
   );
 
   const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
-  const displaySellerName =
-    toTrimmed(seller?.marca) || `${seller?.nombre || ""} ${seller?.apellido || ""}`.trim();
+  const sellerFullName = `${seller?.nombre || ""} ${seller?.apellido || ""}`.trim();
+  const sellerBrand = toTrimmed(seller?.marca);
+  const displaySellerName = sellerBrand && sellerFullName
+    ? `${sellerBrand} - ${sellerFullName}`
+    : sellerBrand || sellerFullName;
 
   return {
     id_vendedor: new Types.ObjectId(sellerId),
