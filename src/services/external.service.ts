@@ -7,6 +7,7 @@ import { SellerRepository } from "../repositories/seller.repository";
 import { OrderGuideService } from "./orderGuide.service";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
+import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -301,10 +302,9 @@ const applyExternalMixedIncomeFromRecords = async (records: IVentaExterna[]) => 
 };
 
 const validateBuyerIdentity = (input: any) => {
-  const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
-  if (!buyerName && !buyerPhone) {
-    throw new Error("Debe ingresar al menos el nombre o el celular del comprador");
+  if (!buyerPhone) {
+    throw new Error("Debe ingresar el celular del comprador");
   }
 };
 
@@ -450,6 +450,8 @@ const registerExternalSale = async (externalSale: any) => {
   await assignExternalGuideAndQR(record);
   const created = await ExternalSaleRepository.registerExternalSale(record);
   await applyExternalMixedIncomeFromRecords([record]);
+  const populatedCreated = await ExternalSaleRepository.getExternalSaleByID(String(created._id));
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort([populatedCreated || created]);
   return created;
 };
 
@@ -491,6 +493,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
 
   const created = await ExternalSaleRepository.registerExternalSales(toCreate);
   await applyExternalMixedIncomeFromRecords(toCreate);
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created);
   return created;
 };
 
@@ -504,8 +507,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
   const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
-  if (!buyerName && !buyerPhone) {
-    throw new Error("Debe ingresar al menos el nombre o el celular del comprador");
+  if (!buyerPhone) {
+    throw new Error("Debe ingresar el celular del comprador");
   }
 
   const price = toNumber(

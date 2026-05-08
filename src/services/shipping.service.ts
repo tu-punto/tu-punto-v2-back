@@ -402,6 +402,10 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
+  if (shipping?.simple_package_order === true && !normalizeTextValue(shipping?.telefono_cliente)) {
+    throw new Error("Debe ingresar el celular del comprador");
+  }
+
   normalizeOrderPaymentData(shipping);
   await normalizeShippingBranches(shipping);
   if (shipping?.simple_package_order === true) {
