@@ -170,10 +170,19 @@ const getExternalDeliveredPaymentTotals = (sale: any) => {
 };
 
 const getExternalSellerPaymentTotals = (sale: any) => {
+  if (String(sale?.service_origin || "").trim() === "simple_package" && sale?.is_external !== true) {
+    return {
+      subtotalQr: 0,
+      subtotalEfectivo: 0,
+      montoTotal: 0,
+      tipoDePago: "No pagado",
+    };
+  }
+
   const amount = roundCurrency(Number(sale?.monto_paga_vendedor || sale?.amortizacion_vendedor || 0));
   const method = String(sale?.metodo_pago || "").trim().toLowerCase();
 
-  if (amount <= 0) {
+  if (amount <= 0 || !method) {
     return {
       subtotalQr: 0,
       subtotalEfectivo: 0,
@@ -232,13 +241,6 @@ const getSimplePackageBalanceToApply = async (
 
   return { sellerId, amount };
 };
-
-const isPendingSimplePackageCashRecord = (shipping: any) =>
-  Boolean(
-    shipping?.simple_package_order &&
-      String(shipping?.estado_pedido || "").trim().toLowerCase() === "en espera" &&
-      (Number(shipping?.subtotal_qr || 0) > 0 || Number(shipping?.subtotal_efectivo || 0) > 0)
-  );
 
 const attachSimplePackageFieldsToShipping = async (shipping: any) => {
   if (!shipping) return shipping;
@@ -402,6 +404,10 @@ const getShippingByIds = async (shippingIds: string[]) => {
 };
 
 const registerShipping = async (shipping: any) => {
+  if (shipping?.simple_package_order === true && !normalizeTextValue(shipping?.telefono_cliente)) {
+    throw new Error("Debe ingresar el celular del comprador");
+  }
+
   normalizeOrderPaymentData(shipping);
   await normalizeShippingBranches(shipping);
   if (shipping?.simple_package_order === true) {
@@ -905,7 +911,6 @@ const getDailySalesHistory = async (
 
   const getHistoryDate = (pedido: any): Date => {
     const estado = String(pedido?.estado_pedido || "").trim().toLowerCase();
-    if (isPendingSimplePackageCashRecord(pedido)) return pedido?.fecha_pedido;
     if (estado === "interno") return pedido?.fecha_pedido;
     if (estado === "entregado") return pedido?.hora_entrega_real || pedido?.fecha_pedido;
     return pedido?.hora_entrega_acordada || pedido?.fecha_pedido;
@@ -943,15 +948,6 @@ const getDailySalesHistory = async (
             estado_pedido: "Entregado",
             hora_entrega_real: { $gt: periodStart, $lte: periodEnd },
           },
-          {
-            simple_package_order: true,
-            estado_pedido: "En Espera",
-            $or: [
-              { subtotal_qr: { $gt: 0 } },
-              { subtotal_efectivo: { $gt: 0 } },
-            ],
-            fecha_pedido: { $gt: periodStart, $lte: periodEnd },
-          },
         ],
       },
     ];
@@ -961,30 +957,12 @@ const getDailySalesHistory = async (
         estado_pedido: { $ne: "En Espera" },
         hora_entrega_acordada: { $gte: startOfDay, $lte: periodEnd },
       },
-      {
-        simple_package_order: true,
-        estado_pedido: "En Espera",
-        $or: [
-          { subtotal_qr: { $gt: 0 } },
-          { subtotal_efectivo: { $gt: 0 } },
-        ],
-        fecha_pedido: { $gte: startOfDay, $lte: periodEnd },
-      },
     ];
   } else {
     filter.$or = [
       {
         estado_pedido: { $ne: "En Espera" },
         hora_entrega_acordada: { $lte: new Date() },
-      },
-      {
-        simple_package_order: true,
-        estado_pedido: "En Espera",
-        $or: [
-          { subtotal_qr: { $gt: 0 } },
-          { subtotal_efectivo: { $gt: 0 } },
-        ],
-        fecha_pedido: { $lte: new Date() },
       },
     ];
   }

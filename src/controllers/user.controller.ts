@@ -35,7 +35,7 @@ const clearAuthCookie = (res: Response) =>
   res.clearCookie("token", {
     httpOnly: true,
     secure: isSecure,
-    sameSite: isSecure ? "strict" : "lax",
+    sameSite: isSecure ? "none" : "lax",
     path: "/",
   });
 
@@ -187,7 +187,7 @@ export const loginUserController = async (req: Request, res: Response) => {
         maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
         secure: isSecure,
-        sameSite: isSecure ? "strict" : "lax",
+        sameSite: isSecure ? "none" : "lax",
         path: "/",
       })
       .json({

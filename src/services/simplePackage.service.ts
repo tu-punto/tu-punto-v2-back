@@ -9,6 +9,7 @@ import { SimplePackageRepository } from "../repositories/simplePackage.repositor
 import { ShippingService } from "./shipping.service";
 import { hasConfiguredSimplePackageService } from "../utils";
 import { OrderGuideService } from "./orderGuide.service";
+import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -46,17 +47,16 @@ const normalizePaidStatus = (value: unknown): "si" | "no" => {
 const normalizePaymentMethod = (value: unknown): PackagePaymentMethod => {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "efectivo" || normalized === "qr") return normalized;
-  return "efectivo";
+  return "";
 };
 
 const toObjectIdOrUndefined = (value?: string) =>
   value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
 
 const ensureBuyerIdentity = (row: any) => {
-  const buyerName = toTrimmed(row?.comprador);
   const buyerPhone = toTrimmed(row?.telefono_comprador);
-  if (!buyerName && !buyerPhone) {
-    throw new Error("Cada paquete debe tener al menos nombre o celular del comprador");
+  if (!buyerPhone) {
+    throw new Error("Cada paquete debe tener celular del comprador");
   }
 };
 
@@ -405,8 +405,11 @@ const buildSimplePackageRecord = async (params: {
   );
 
   const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
-  const displaySellerName =
-    toTrimmed(seller?.marca) || `${seller?.nombre || ""} ${seller?.apellido || ""}`.trim();
+  const sellerFullName = `${seller?.nombre || ""} ${seller?.apellido || ""}`.trim();
+  const sellerBrand = toTrimmed(seller?.marca);
+  const displaySellerName = sellerBrand && sellerFullName
+    ? `${sellerBrand} - ${sellerFullName}`
+    : sellerBrand || sellerFullName;
 
   return {
     id_vendedor: new Types.ObjectId(sellerId),
@@ -583,6 +586,9 @@ const createSimplePackageOrders = async (params: {
       packageCount: qrCount,
     });
   }
+
+  const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
+  void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
 
   return shippingResults;
 };
@@ -799,8 +805,8 @@ const updateSimplePackageByID = async (params: {
   if (role === "seller") {
     const nextBuyer = toTrimmed(params.payload?.comprador ?? existing.comprador);
     const nextPhone = toTrimmed(params.payload?.telefono_comprador ?? existing.telefono_comprador);
-    if (!nextBuyer && !nextPhone) {
-      throw new Error("Debe ingresar al menos nombre o celular del comprador");
+    if (!nextPhone) {
+      throw new Error("Debe ingresar el celular del comprador");
     }
     const nextDescription = toTrimmed(params.payload?.descripcion_paquete ?? existing.descripcion_paquete);
     if (!nextDescription) {

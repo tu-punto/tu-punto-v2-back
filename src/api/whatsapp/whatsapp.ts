@@ -13,6 +13,13 @@ export type WhatsAppTemplateParameter = {
     text: string;
 };
 
+export type WhatsAppTemplateComponent = {
+    type: "header" | "body" | "button";
+    parameters: WhatsAppTemplateParameter[];
+    sub_type?: "url" | "quick_reply";
+    index?: string;
+};
+
 const getWhatsAppConfig = () => {
     const version = process.env.W_VERSION;
     const phoneNumberId = process.env.W_PHONE_NUMBER_ID;
@@ -69,6 +76,10 @@ export const sendTemplateMessage = async (params: {
     templateName: string;
     languageCode?: string;
     bodyParameters?: WhatsAppTemplateParameter[];
+    headerParameters?: WhatsAppTemplateParameter[];
+    buttonUrlParameters?: WhatsAppTemplateParameter[];
+    buttonIndex?: string;
+    components?: WhatsAppTemplateComponent[];
 }): Promise<WhatsAppSendResult> => {
     const to = String(params.phone || "").trim();
     const templateName = String(params.templateName || "").trim();
@@ -79,6 +90,9 @@ export const sendTemplateMessage = async (params: {
 
     const config = getWhatsAppConfig();
     const bodyParameters = Array.isArray(params.bodyParameters) ? params.bodyParameters : [];
+    const headerParameters = Array.isArray(params.headerParameters) ? params.headerParameters : [];
+    const buttonUrlParameters = Array.isArray(params.buttonUrlParameters) ? params.buttonUrlParameters : [];
+    const explicitComponents = Array.isArray(params.components) ? params.components : [];
     const body: any = {
         messaging_product: "whatsapp",
         to,
@@ -91,13 +105,23 @@ export const sendTemplateMessage = async (params: {
         },
     };
 
-    if (bodyParameters.length) {
-        body.template.components = [
-            {
-                type: "body",
-                parameters: bodyParameters,
-            },
+    const components: WhatsAppTemplateComponent[] = explicitComponents.length
+        ? explicitComponents
+        : [
+            ...(headerParameters.length ? [{ type: "header" as const, parameters: headerParameters }] : []),
+            ...(bodyParameters.length ? [{ type: "body" as const, parameters: bodyParameters }] : []),
+            ...(buttonUrlParameters.length
+                ? [{
+                    type: "button" as const,
+                    sub_type: "url" as const,
+                    index: String(params.buttonIndex || "0"),
+                    parameters: buttonUrlParameters,
+                }]
+                : []),
         ];
+
+    if (components.length) {
+        body.template.components = components;
     }
 
     const res = await fetch(config.uri, {

@@ -122,6 +122,55 @@ const getUploadedSimplePackageSellers = async (originBranchId?: string) => {
         ultimo_pedido: { $max: "$fecha_pedido" },
       },
     },
+    {
+      $lookup: {
+        from: "Vendedor",
+        localField: "_id",
+        foreignField: "_id",
+        as: "seller",
+      },
+    },
+    { $unwind: { path: "$seller", preserveNullAndEmptyArrays: true } },
+    {
+      $addFields: {
+        nombre_vendedor: {
+          $trim: {
+            input: {
+              $concat: [
+                { $ifNull: ["$seller.nombre", ""] },
+                " ",
+                { $ifNull: ["$seller.apellido", ""] },
+              ],
+            },
+          },
+        },
+        marca_vendedor: { $trim: { input: { $ifNull: ["$seller.marca", ""] } } },
+      },
+    },
+    {
+      $addFields: {
+        vendedor: {
+          $cond: [
+            { $and: [{ $ne: ["$marca_vendedor", ""] }, { $ne: ["$nombre_vendedor", ""] }] },
+            { $concat: ["$marca_vendedor", " - ", "$nombre_vendedor"] },
+            {
+              $cond: [
+                { $ne: ["$nombre_vendedor", ""] },
+                "$nombre_vendedor",
+                {
+                  $cond: [
+                    { $ne: ["$marca_vendedor", ""] },
+                    "$marca_vendedor",
+                    "$vendedor",
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $project: { seller: 0, nombre_vendedor: 0, marca_vendedor: 0 } },
     { $match: { _id: { $ne: null } } },
     { $sort: { vendedor: 1 } },
   ]);

@@ -66,7 +66,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
         res.clearCookie("token", {
           httpOnly: true,
           secure: isSecure,
-          sameSite: isSecure ? "strict" : "lax",
+          sameSite: isSecure ? "none" : "lax",
           path: "/",
         });
         return res.status(403).json({

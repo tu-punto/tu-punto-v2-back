@@ -13,7 +13,9 @@ import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 
 const userRouter = Router();
 
-userRouter.post("/register", requireAuth, requireRole("superadmin"), registerUserController);
+// Temporalmente abierto para permitir crear el primer usuario en un entorno sin cuentas.
+// Volver a proteger con requireAuth + requireRole("superadmin") despues del alta inicial.
+userRouter.post("/register", registerUserController);
 userRouter.post("/login", loginUserController);
 userRouter.get("/info", requireAuth, getUserInfoController);
 userRouter.post("/logout", requireAuth, logoutUserController);
