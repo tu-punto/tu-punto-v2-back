@@ -507,9 +507,6 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
   const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
-  if (!buyerPhone) {
-    throw new Error("Debe ingresar el celular del comprador");
-  }
 
   const price = toNumber(
     externalSale.precio_paquete ?? existing.precio_paquete ?? externalSale.precio_total ?? existing.precio_total,

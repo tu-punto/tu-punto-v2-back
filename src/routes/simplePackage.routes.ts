@@ -12,6 +12,7 @@ import {
   upsertSimplePackageBranchPrice,
   updateSimplePackageByID,
 } from "../controllers/simplePackage.controller";
+import { requireRole } from "../middlewares/auth.middleware";
 
 const simplePackageRouter = Router();
 
@@ -21,7 +22,7 @@ simplePackageRouter.get("/seller-accounting", getSellerAccountingSimplePackages)
 simplePackageRouter.get("/branch-prices", getSimplePackageBranchPrices);
 simplePackageRouter.post("/register", registerSimplePackages);
 simplePackageRouter.post("/print-guides", printSimplePackageGuidesController);
-simplePackageRouter.post("/send-guide-whatsapp", sendSimplePackageGuideWhatsappController);
+simplePackageRouter.post("/send-guide-whatsapp", requireRole("superadmin"), sendSimplePackageGuideWhatsappController);
 simplePackageRouter.post("/create-orders", createSimplePackageOrders);
 simplePackageRouter.post("/branch-prices", upsertSimplePackageBranchPrice);
 simplePackageRouter.put("/:id", updateSimplePackageByID);
