@@ -20,6 +20,8 @@ type SendAttempt = {
 const DEFAULT_BUYER_SAME_BRANCH_TEMPLATE = "pedido_recojo_sucursal";
 const DEFAULT_BUYER_TRANSFER_TEMPLATE = "pedido_listo_traslado";
 const DEFAULT_SELLER_TEMPLATE = "paquetes_entregados_sucursal";
+const SEND_SELLER_GUIDE_MESSAGES =
+  String(process.env.W_SEND_SELLER_GUIDE_MESSAGES || "").trim().toLowerCase() === "true";
 
 const BRANCH_LOCATION_LINKS = [
   {
@@ -257,7 +259,9 @@ const sendForRows = async (rows: any[]) => {
   ensureGuides(rows);
 
   const attempts: SendAttempt[] = [];
-  if (rows.length) attempts.push(await sendSellerTemplate(rows));
+  if (rows.length && SEND_SELLER_GUIDE_MESSAGES) {
+    attempts.push(await sendSellerTemplate(rows));
+  }
 
   for (const row of rows) {
     attempts.push(await sendBuyerTemplate(row));
