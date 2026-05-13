@@ -310,7 +310,7 @@ const validateBuyerIdentity = (input: any) => {
 
 const resolvePaymentSplit = (
   paidStatus: ExternalPaidStatus,
-  packagePrice: number,
+  amountToCharge: number,
   montoVendedorRaw: unknown,
   montoCompradorRaw: unknown
 ) => {
@@ -323,7 +323,7 @@ const resolvePaymentSplit = (
 
   if (paidStatus === "si") {
     return {
-      montoPagaVendedor: +packagePrice.toFixed(2),
+      montoPagaVendedor: +amountToCharge.toFixed(2),
       montoPagaComprador: 0,
       saldoCobrar: 0,
     };
@@ -333,22 +333,22 @@ const resolvePaymentSplit = (
     return {
       montoPagaVendedor: 0,
       montoPagaComprador: 0,
-      saldoCobrar: +packagePrice.toFixed(2),
+      saldoCobrar: +amountToCharge.toFixed(2),
     };
   }
 
   const mixedTotal = +(montoPagaVendedor + montoPagaComprador).toFixed(2);
-  if (packagePrice <= 0) {
+  if (amountToCharge <= 0) {
     throw new Error("Para pago mixto el precio del paquete debe ser mayor a 0");
   }
   if (montoPagaVendedor <= 0 || montoPagaComprador <= 0) {
     throw new Error("En pago mixto ambos deben pagar un monto mayor a 0");
   }
-  if (montoPagaVendedor >= packagePrice || montoPagaComprador >= packagePrice) {
-    throw new Error("En pago mixto ninguna parte puede pagar todo el paquete");
+  if (montoPagaVendedor >= amountToCharge || montoPagaComprador >= amountToCharge) {
+    throw new Error("En pago mixto ninguna parte puede pagar todo el monto");
   }
-  if (Math.abs(mixedTotal - packagePrice) > 0.01) {
-    throw new Error("En pago mixto la suma debe ser exactamente igual al precio del paquete");
+  if (Math.abs(mixedTotal - amountToCharge) > 0.01) {
+    throw new Error("En pago mixto la suma debe ser exactamente igual al monto total a cobrar");
   }
 
   return {
@@ -375,14 +375,14 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const delivered = estadoPedido === "Entregado";
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,
-    packagePrice,
+    totalServicePrice,
     input.monto_paga_vendedor,
     input.monto_paga_comprador
   );
-  const totalSaldoCobrar = roundCurrency(saldoCobrar + branchRoutePrice);
+  const totalSaldoCobrar = roundCurrency(saldoCobrar);
   const totalBuyerDebt =
     paid === "mixto"
-      ? roundCurrency(montoPagaComprador + branchRoutePrice)
+      ? roundCurrency(montoPagaComprador)
       : toNumber(input.deuda_comprador ?? totalSaldoCobrar ?? input.monto_paga_comprador ?? totalServicePrice, totalServicePrice);
   const sellerPaymentMethod =
     montoPagaVendedor > 0
@@ -531,9 +531,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     precio_entre_sucursal: branchRoutePrice,
   });
   const amountToCharge =
-    serviceOrigin === "simple_package" ? simplePackageFinancials.totalToCharge : price;
+    serviceOrigin === "simple_package" ? simplePackageFinancials.totalToCharge : roundCurrency(price + branchRoutePrice);
   const totalPrice =
-    serviceOrigin === "simple_package" ? simplePackageFinancials.totalServicePrice : roundCurrency(price + branchRoutePrice);
+    serviceOrigin === "simple_package" ? simplePackageFinancials.totalServicePrice : amountToCharge;
   const paid = normalizePaidStatus(externalSale.esta_pagado ?? existing.esta_pagado);
   const status = normalizeOrderStatus(
     externalSale.estado_pedido ?? existing.estado_pedido,
@@ -548,22 +548,25 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
     externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
   );
-  const buyerDebtAmount =
-    serviceOrigin === "simple_package"
-      ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
-      : toNumber(
-          externalSale.deuda_comprador ??
-            existing.deuda_comprador ??
-            roundCurrency(saldoCobrar + branchRoutePrice) ??
-            roundCurrency(amountToCharge + branchRoutePrice),
-          roundCurrency(amountToCharge + branchRoutePrice)
-        );
-  const existingSellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const hasPaymentStatusUpdate = Object.prototype.hasOwnProperty.call(externalSale, "esta_pagado");
   const hasSellerMethodUpdate = Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
   const hasSellerAmountUpdate =
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador");
+  const shouldRecalculateExternalBuyerDebt = hasPaymentStatusUpdate || hasSellerAmountUpdate;
+  const buyerDebtAmount =
+    serviceOrigin === "simple_package"
+      ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
+      : shouldRecalculateExternalBuyerDebt
+        ? roundCurrency(saldoCobrar)
+      : toNumber(
+          externalSale.deuda_comprador ??
+            existing.deuda_comprador ??
+            roundCurrency(saldoCobrar) ??
+            amountToCharge,
+          amountToCharge
+        );
+  const existingSellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const isLegacyMixedWithoutSellerMethod =
     existing.esta_pagado === "mixto" &&
     !existingSellerPaymentMethod &&
@@ -605,7 +608,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     esta_pagado: paid,
     monto_paga_vendedor: montoPagaVendedor,
     monto_paga_comprador: montoPagaComprador,
-    saldo_cobrar: serviceOrigin === "external" ? roundCurrency(saldoCobrar + branchRoutePrice) : saldoCobrar,
+    saldo_cobrar: serviceOrigin === "external" ? roundCurrency(saldoCobrar) : saldoCobrar,
     deuda_comprador: buyerDebtAmount,
     metodo_pago: sellerPaymentMethod,
     tipo_de_pago: deliveryPayment.tipoDePago,
