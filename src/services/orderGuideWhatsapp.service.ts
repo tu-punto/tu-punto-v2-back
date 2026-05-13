@@ -20,8 +20,7 @@ type SendAttempt = {
 const DEFAULT_BUYER_SAME_BRANCH_TEMPLATE = "pedido_recojo_sucursal";
 const DEFAULT_BUYER_TRANSFER_TEMPLATE = "pedido_listo_traslado";
 const DEFAULT_SELLER_TEMPLATE = "paquetes_entregados_sucursal";
-const SEND_SELLER_GUIDE_MESSAGES =
-  String(process.env.W_SEND_SELLER_GUIDE_MESSAGES || "").trim().toLowerCase() === "true";
+const GUIDE_WHATSAPP_MESSAGES_DISABLED = process.env.W_DISABLE_GUIDE_WHATSAPP_MESSAGES !== undefined;
 
 const BRANCH_LOCATION_LINKS = [
   {
@@ -52,7 +51,11 @@ const BRANCH_LOCATION_LINKS = [
 ];
 
 const toTrimmed = (value: unknown) => String(value ?? "").trim();
-const templateParam = (value: unknown) => ({ type: "text" as const, text: toTrimmed(value) });
+const sanitizeTemplateText = (value: unknown) =>
+  toTrimmed(value)
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ");
+const templateParam = (value: unknown) => ({ type: "text" as const, text: sanitizeTemplateText(value) });
 
 const normalizeWhatsAppPhone = (value: unknown): string => {
   const raw = toTrimmed(value);
@@ -110,12 +113,7 @@ const getBranchLocationButtonValue = (branchName: string) => {
 
   if (matchedValue) return matchedValue;
 
-  const fallbackValue = toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_BUTTON_VALUE) || BRANCH_LOCATION_LINKS[0].buttonValue;
-  console.warn("[order-guide-whatsapp] Sucursal sin link configurado, usando link por defecto", {
-    branchName,
-    fallbackValue,
-  });
-  return fallbackValue;
+  return toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_BUTTON_VALUE) || BRANCH_LOCATION_LINKS[0].buttonValue;
 };
 
 const getPickupDateLabel = (value: unknown) => {
@@ -128,7 +126,7 @@ const getPickupDateLabel = (value: unknown) => {
 const compactGuideList = (rows: any[]) =>
   rows
     .map((row, index) => `${index + 1}. ${getGuide(row)}`)
-    .join("\n");
+    .join(" | ");
 
 const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
   const phone = normalizeWhatsAppPhone(row?.telefono_comprador);
@@ -204,6 +202,7 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
   const phone = normalizeWhatsAppPhone(firstSeller?.telefono_vendedor);
   const templateName = toTrimmed(process.env.W_SELLER_PACKAGES_TEMPLATE_NAME) || DEFAULT_SELLER_TEMPLATE;
   const languageCode = toTrimmed(process.env.W_GUIDE_TEMPLATE_LANGUAGE) || "es";
+  const guideList = compactGuideList(rows);
 
   if (!phone) {
     return {
@@ -217,15 +216,17 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
   }
 
   try {
+    const bodyParameters = [
+      templateParam(sellerName),
+      templateParam(originName),
+      templateParam(guideList),
+    ];
+
     const response = await sendTemplateMessage({
       phone,
       templateName,
       languageCode,
-      bodyParameters: [
-        templateParam(sellerName),
-        templateParam(originName),
-        templateParam(compactGuideList(rows)),
-      ],
+      bodyParameters,
     });
 
     return {
@@ -259,12 +260,42 @@ const sendForRows = async (rows: any[]) => {
   ensureGuides(rows);
 
   const attempts: SendAttempt[] = [];
-  if (rows.length && SEND_SELLER_GUIDE_MESSAGES) {
-    attempts.push(await sendSellerTemplate(rows));
-  }
 
-  for (const row of rows) {
-    attempts.push(await sendBuyerTemplate(row));
+  if (GUIDE_WHATSAPP_MESSAGES_DISABLED) {
+    if (rows.length) {
+      attempts.push({
+        type: "seller",
+        template: toTrimmed(process.env.W_SELLER_PACKAGES_TEMPLATE_NAME) || DEFAULT_SELLER_TEMPLATE,
+        phone: rows[0]?.telefono_vendedor,
+        success: false,
+        skipped: true,
+        reason: "Envios de WhatsApp deshabilitados por configuracion",
+      });
+    }
+
+    for (const row of rows) {
+      const templateName = isSameBranchDelivery(row)
+        ? toTrimmed(process.env.W_BUYER_SAME_BRANCH_TEMPLATE_NAME) || DEFAULT_BUYER_SAME_BRANCH_TEMPLATE
+        : toTrimmed(process.env.W_BUYER_TRANSFER_TEMPLATE_NAME) || DEFAULT_BUYER_TRANSFER_TEMPLATE;
+      attempts.push({
+        type: "buyer",
+        template: templateName,
+        orderId: String(row?._id || ""),
+        guide: getGuide(row),
+        phone: row?.telefono_comprador,
+        success: false,
+        skipped: true,
+        reason: "Envios de WhatsApp deshabilitados por configuracion",
+      });
+    }
+  } else {
+    if (rows.length) {
+      attempts.push(await sendSellerTemplate(rows));
+    }
+
+    for (const row of rows) {
+      attempts.push(await sendBuyerTemplate(row));
+    }
   }
 
   return {
@@ -279,9 +310,6 @@ const sendForRows = async (rows: any[]) => {
 const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsapp") => {
   try {
     const result = await sendForRows(rows);
-    if (!result.success) {
-      console.warn(`[${context}] WhatsApp sin envios exitosos`, JSON.stringify(result, null, 2));
-    }
     return result;
   } catch (error) {
     console.error(`[${context}] Error enviando WhatsApp`, error);
