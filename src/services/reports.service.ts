@@ -6,6 +6,7 @@ import moment from "moment-timezone";
 import { Types } from "mongoose";
 import { ReportsRepository } from "../repositories/reports.repository";
 import { variantFingerprint, variantLabel, variantsToEntries } from "../utils/variantKey";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
 
 const TZ = "America/La_Paz";
 
@@ -4136,6 +4137,132 @@ async exportVentasQrXlsx({ meses, sucursalIds }: VentasQrParams) {
       ? `ventas_qr_${data.meses[0]}.xlsx`
       : `ventas_qr_${data.meses[0]}_a_${data.meses[data.meses.length - 1]}.xlsx`;
 
+  const outDir = path.join(process.cwd(), "reports");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const filePath = path.join(outDir, filename);
+
+  await wb.xlsx.writeFile(filePath);
+  return { filePath, filename };
+},
+async exportPagadoAlDuenoLegacyXlsx() {
+  const pedidos = await PedidoModel.find({
+    tipo_de_pago: /^Pagado al dueno$/i,
+  })
+    .populate({
+      path: "venta",
+      populate: [
+        { path: "vendedor", select: "nombre apellido marca" },
+        { path: "producto", select: "nombre_producto" },
+      ],
+    })
+    .sort({ fecha_pedido: -1 })
+    .lean();
+
+  const rows: Array<Record<string, unknown>> = [];
+
+  for (const pedido of pedidos as any[]) {
+    const ventas = Array.isArray(pedido?.venta) ? pedido.venta : [];
+
+    for (const venta of ventas) {
+      const cantidad = Number(venta?.cantidad || 0);
+      const precioUnitario = Number(venta?.precio_unitario || 0);
+      const monto = Number((cantidad * precioUnitario).toFixed(2));
+      const vendedor = venta?.vendedor || {};
+      const vendedorNombre = `${vendedor?.nombre || ""} ${vendedor?.apellido || ""}`.trim();
+
+      rows.push({
+        fecha: pedido?.fecha_pedido
+          ? moment(pedido.fecha_pedido).tz(TZ).format("YYYY-MM-DD HH:mm")
+          : "",
+        pedido_id: String(pedido?._id || ""),
+        numero_guia: pedido?.numero_guia || "",
+        cliente: pedido?.cliente || "",
+        venta_id: String(venta?._id || ""),
+        producto: venta?.nombre_variante || venta?.producto?.nombre_producto || "",
+        cantidad,
+        precio_unitario_bs: precioUnitario,
+        monto_bs: monto,
+        utilidad_bs: Number(venta?.utilidad || 0),
+        vendedor: vendedorNombre || vendedor?.marca || "",
+        vendedor_marca: vendedor?.marca || "",
+        tipo_de_pago: pedido?.tipo_de_pago || "",
+        pagado_al_vendedor: pedido?.pagado_al_vendedor === true ? "si" : "no",
+      });
+    }
+
+    if (!ventas.length) {
+      const temporales = Array.isArray(pedido?.productos_temporales) ? pedido.productos_temporales : [];
+      for (const producto of temporales) {
+        const cantidad = Number(producto?.cantidad || 0);
+        const precioUnitario = Number(producto?.precio_unitario || 0);
+
+        rows.push({
+          fecha: pedido?.fecha_pedido
+            ? moment(pedido.fecha_pedido).tz(TZ).format("YYYY-MM-DD HH:mm")
+            : "",
+          pedido_id: String(pedido?._id || ""),
+          numero_guia: pedido?.numero_guia || "",
+          cliente: pedido?.cliente || "",
+          venta_id: "",
+          producto: producto?.producto || producto?.nombre_producto || producto?.nombre_variante || "",
+          cantidad,
+          precio_unitario_bs: precioUnitario,
+          monto_bs: Number((cantidad * precioUnitario).toFixed(2)),
+          utilidad_bs: Number(producto?.utilidad || 0),
+          vendedor: String(producto?.id_vendedor || ""),
+          vendedor_marca: "",
+          tipo_de_pago: pedido?.tipo_de_pago || "",
+          pagado_al_vendedor: pedido?.pagado_al_vendedor === true ? "si" : "no",
+        });
+      }
+    }
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "TuPunto Reports";
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet("Pagado_al_dueno");
+  const headers = [
+    "fecha",
+    "pedido_id",
+    "numero_guia",
+    "cliente",
+    "venta_id",
+    "producto",
+    "cantidad",
+    "precio_unitario_bs",
+    "monto_bs",
+    "utilidad_bs",
+    "vendedor",
+    "vendedor_marca",
+    "tipo_de_pago",
+    "pagado_al_vendedor",
+  ];
+
+  ws.addRow(headers);
+  ws.getRow(1).font = { bold: true };
+  rows.forEach((row) => ws.addRow(headers.map((header) => row[header] ?? "")));
+  ws.columns.forEach((column) => {
+    column.width = 24;
+  });
+
+  const totalRow = ws.addRow([]);
+  ws.addRow([
+    "TOTAL",
+    "",
+    "",
+    "",
+    "",
+    "",
+    rows.reduce((sum, row) => sum + Number(row.cantidad || 0), 0),
+    "",
+    rows.reduce((sum, row) => sum + Number(row.monto_bs || 0), 0),
+    rows.reduce((sum, row) => sum + Number(row.utilidad_bs || 0), 0),
+  ]);
+  ws.getRow(totalRow.number + 1).font = { bold: true };
+
+  const filename = `pagado_al_dueno_legacy.xlsx`;
   const outDir = path.join(process.cwd(), "reports");
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
   const filePath = path.join(outDir, filename);

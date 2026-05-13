@@ -106,8 +106,14 @@ const updateShipping = async (req: Request, res: Response) => {
 
   try {
     const auth = res.locals.auth as { id?: string; role?: string; sucursalId?: string } | undefined;
+    const role = String(auth?.role || "").toLowerCase();
+    const currentBranchIdFromBody =
+      role === "admin" || role === "operator"
+        ? String(req.body?.currentBranchId || req.body?.sucursalId || "").trim()
+        : "";
+    delete newData.currentBranchId;
     const shippingUpdated = await ShippingService.updateShipping(newData, id, {
-      currentBranchId: auth?.sucursalId,
+      currentBranchId: currentBranchIdFromBody || auth?.sucursalId,
       source: "manual",
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
     });

@@ -31,10 +31,12 @@ import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
 import { requireAuth, requireRole } from "./middlewares/auth.middleware";
 import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
+import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller";
 
 const router = Router();
 
 router.use("/whatsapp/webhook", whatsappWebhookRouter);
+router.get("/public-reports/pagado-al-dueno/xlsx", exportPagadoAlDuenoLegacyXlsx);
 router.use("/seller", requireAuth, sellerRouter);
 // router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
 router.use("/product", productRouter);

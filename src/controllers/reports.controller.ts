@@ -531,3 +531,13 @@ export const exportVentasTemporalesPorVendedorXlsx = async (req: Request, res: R
     return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
   }
 };
+
+export const exportPagadoAlDuenoLegacyXlsx = async (_req: Request, res: Response) => {
+  try {
+    const { filePath, filename } = await ReportsService.exportPagadoAlDuenoLegacyXlsx();
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportPagadoAlDuenoLegacyXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
