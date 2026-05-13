@@ -122,10 +122,58 @@ const resolvePaymentBranchId = (shipping: any): string =>
 
 const resolveOriginBranchId = (shipping: any): string => resolveBranchId(shipping?.lugar_origen);
 
-const canMarkDeliveredFromBranch = (shipping: any, branchId?: string | null): boolean => {
-  if (!branchId) return true;
-  const paymentBranchId = resolvePaymentBranchId(shipping);
-  return !paymentBranchId || paymentBranchId === String(branchId);
+const resolveBranchReferenceId = async (value?: string | null): Promise<string> => {
+  const safeValue = normalizeTextValue(value);
+  if (!safeValue) return "";
+  if (Types.ObjectId.isValid(safeValue)) return safeValue;
+  const branchByName = await findBranchByName(safeValue);
+  return resolveBranchId(branchByName?._id);
+};
+
+const resolveDeliveryBranchId = async (shipping: any): Promise<string> => {
+  const simplePackageSourceId = String(shipping?.simple_package_source_id || "").trim();
+  if (simplePackageSourceId) {
+    const simplePackage = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+    const simplePackageDestinationId = resolveBranchId(
+      (simplePackage as any)?.destino_sucursal?._id ?? (simplePackage as any)?.destino_sucursal
+    );
+    if (simplePackageDestinationId) return simplePackageDestinationId;
+  }
+
+  return resolvePaymentBranchId(shipping);
+};
+
+const getSimplePackageSource = async (shipping: any) => {
+  const simplePackageSourceId = String(
+    shipping?.simple_package_source_id?._id || shipping?.simple_package_source_id || ""
+  ).trim();
+  if (!simplePackageSourceId) return null;
+  return await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+};
+
+const resolveSimplePackageDestination = async (shipping: any) => {
+  const simplePackage = await getSimplePackageSource(shipping);
+  if (!simplePackage) return null;
+
+  const destinationBranchId = resolveBranchId(
+    (simplePackage as any)?.destino_sucursal?._id ?? (simplePackage as any)?.destino_sucursal
+  );
+  const destinationBranchName = normalizeTextValue(
+    (simplePackage as any)?.destino_sucursal?.nombre ?? (simplePackage as any)?.lugar_entrega
+  );
+
+  if (!destinationBranchId) return null;
+  return {
+    id: destinationBranchId,
+    name: destinationBranchName,
+  };
+};
+
+const canMarkDeliveredFromBranch = async (shipping: any, branchId?: string | null): Promise<boolean> => {
+  const currentBranchId = await resolveBranchReferenceId(branchId);
+  if (!currentBranchId) return true;
+  const deliveryBranchId = await resolveDeliveryBranchId(shipping);
+  return !deliveryBranchId || deliveryBranchId === currentBranchId;
 };
 
 const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {
@@ -319,6 +367,9 @@ const normalizeShippingBranches = async (payload: any, currentShipping?: any) =>
   const originId = resolveBranchId(
     payload?.lugar_origen ?? currentShipping?.lugar_origen
   );
+  const requestedDestinationBranchId = resolveBranchId(
+    payload?.destino_sucursal_id ?? payload?.destino_sucursal
+  );
   const requestedPaymentBranchId = resolveBranchId(
     payload?.sucursal ?? payload?.id_sucursal ?? currentShipping?.sucursal
   );
@@ -333,12 +384,13 @@ const normalizeShippingBranches = async (payload: any, currentShipping?: any) =>
   const legacyDestinationBranchId = resolveBranchId(matchedBranchByName?._id);
   const destinationType = storedDestinationType
     ? normalizeDestinationType(storedDestinationType)
-    : ((requestedPaymentBranchId && requestedPaymentBranchId !== originId) || legacyDestinationBranchId
+    : (requestedDestinationBranchId || (requestedPaymentBranchId && requestedPaymentBranchId !== originId) || legacyDestinationBranchId
       ? "sucursal"
       : "otro_lugar");
   const destinationBranchId =
     destinationType === "sucursal"
       ? (
+        requestedDestinationBranchId ||
         (requestedPaymentBranchId && requestedPaymentBranchId !== originId
           ? requestedPaymentBranchId
           : "") ||
@@ -614,6 +666,15 @@ const updateShipping = async (
 
   normalizeOrderPaymentData(newData, shipping);
   await normalizeShippingBranches(newData, shipping);
+  const simplePackageDestination = isSimplePackageOrder
+    ? await resolveSimplePackageDestination(shipping)
+    : null;
+
+  if (simplePackageDestination?.id) {
+    newData.tipo_destino = "sucursal";
+    newData.sucursal = simplePackageDestination.id;
+    newData.lugar_entrega = simplePackageDestination.name || newData.lugar_entrega;
+  }
 
   if ('fecha_pedido' in newData) {
     delete newData.fecha_pedido;
@@ -650,7 +711,7 @@ const updateShipping = async (
     ...newData,
   };
 
-  if (willBeDelivered && !canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId)) {
+  if (willBeDelivered && !(await canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId))) {
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
   }
 
@@ -666,7 +727,7 @@ const updateShipping = async (
         utilidad: Number(prod.utilidad || 0),
         id_vendedor: prod.id_vendedor,
         id_pedido: shippingId,
-        id_sucursal: (shipping as any)?.sucursal ?? (shipping as any)?.lugar_origen ?? null,
+        id_sucursal: simplePackageDestination?.id ?? (shipping as any)?.sucursal ?? (shipping as any)?.lugar_origen ?? null,
         deposito_realizado: false,
         esTemporal: true,
       }));
@@ -978,9 +1039,18 @@ const getDailySalesHistory = async (
     .sort(fromLastClose ? { hora_entrega_real: -1, fecha_pedido: -1 } : { hora_entrega_acordada: -1 })
     .lean();
 
-  const pedidosFiltrados = pedidos.filter((pedido: any) => {
+  const pedidosWithSimplePackageDestination = await Promise.all(
+    pedidos.map(async (pedido: any) => ({
+      pedido,
+      simplePackageDestination: (pedido as any)?.simple_package_order || (pedido as any)?.simple_package_source_id
+        ? await resolveSimplePackageDestination(pedido)
+        : null,
+    }))
+  );
+
+  const pedidosFiltrados = pedidosWithSimplePackageDestination.filter(({ pedido, simplePackageDestination }) => {
     const estado = String(pedido?.estado_pedido || "").trim().toLowerCase();
-    const paymentBranchId = resolvePaymentBranchId(pedido);
+    const paymentBranchId = simplePackageDestination?.id || resolvePaymentBranchId(pedido);
     const originBranchId = resolveOriginBranchId(pedido);
 
     if (estado === "interno") {
@@ -988,7 +1058,7 @@ const getDailySalesHistory = async (
     }
 
     return paymentBranchId === sucursalId;
-  });
+  }).map(({ pedido }) => pedido);
 
   const externalCandidates = await ExternalSaleRepository.getExternalSalesHistoryCandidates(
     fromLastClose ? periodStart : (date ? startOfDay : undefined),
@@ -1044,7 +1114,7 @@ const getDailySalesHistory = async (
         : [...ventasNormales, ...ventasTemporales];
 
     const montoBase = ventasParaMontoTotal.reduce(
-      (acc, v: any) => acc + (v.precio_unitario * v.cantidad), 0
+      (acc: number, v: any) => acc + (v.precio_unitario * v.cantidad), 0
     );
     const montoTotal =
       (p as any)?.simple_package_order
@@ -1128,7 +1198,7 @@ const getDailySalesHistory = async (
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
-  const totales = resumen.reduce((acc, curr) => {
+  const totales = resumen.reduce((acc: { efectivo: number; qr: number }, curr: any) => {
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
     return acc;

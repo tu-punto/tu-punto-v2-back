@@ -108,7 +108,7 @@ const updateShipping = async (req: Request, res: Response) => {
     const auth = res.locals.auth as { id?: string; role?: string; sucursalId?: string } | undefined;
     const role = String(auth?.role || "").toLowerCase();
     const currentBranchIdFromBody =
-      role === "admin" || role === "operator"
+      role === "admin" || role === "operator" || role === "superadmin"
         ? String(req.body?.currentBranchId || req.body?.sucursalId || "").trim()
         : "";
     delete newData.currentBranchId;
