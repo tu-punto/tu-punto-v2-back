@@ -631,7 +631,10 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   }
 
   if (delivered && !externalSale.hora_entrega_real) {
-    updatePayload.hora_entrega_real = normalizeExternalDate(existing.hora_entrega_real ?? existing.fecha_pedido);
+    updatePayload.hora_entrega_real =
+      existingDelivered && existing.hora_entrega_real
+        ? existing.hora_entrega_real
+        : normalizeExternalDate(new Date());
   } else if (!delivered) {
     updatePayload.hora_entrega_real = undefined;
   }

@@ -214,12 +214,16 @@ const getExternalSalesHistoryCandidates = async (
     sucursalIds?: string[]
 ): Promise<IVentaExternaDocument[]> => {
     const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
-    const match: any = { ...EXTERNAL_SERVICE_FILTER };
+    const match: any = { $and: [EXTERNAL_SERVICE_FILTER] };
 
     if (validSucursalIds.length) {
-        match.sucursal = {
-            $in: validSucursalIds.map((id) => new Types.ObjectId(id))
-        };
+        const branchObjectIds = validSucursalIds.map((id) => new Types.ObjectId(id));
+        match.$and.push({
+            $or: [
+                { sucursal: { $in: branchObjectIds } },
+                { destino_sucursal: { $in: branchObjectIds } }
+            ]
+        });
     }
 
     if (from || to) {
@@ -234,10 +238,12 @@ const getExternalSalesHistoryCandidates = async (
             horaEntregaRange.$lte = to;
         }
 
-        match.$or = [
+        match.$and.push({
+          $or: [
             { fecha_pedido: fechaPedidoRange },
             { hora_entrega_real: horaEntregaRange }
-        ];
+          ]
+        });
     }
 
     return await VentaExternaModel.find(match)

@@ -800,6 +800,7 @@ const updateShipping = async (
       seller_balance_applied: String((resShip as any).estado_pedido || "").trim() === "Entregado",
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
+      hora_entrega_real: (resShip as any).hora_entrega_real,
     };
     await SimplePackageRepository.updateSimplePackageByID(simplePackageSourceId, {
       ...simplePackageUpdatePayload,
@@ -984,6 +985,10 @@ const getDailySalesHistory = async (
     }
     return sale?.fecha_pedido;
   };
+  const getExternalOriginBranchId = (sale: any): string =>
+    String((sale?.sucursal as any)?._id || sale?.sucursal || (sale?.origen_sucursal as any)?._id || sale?.origen_sucursal || "").trim();
+  const getExternalDestinationBranchId = (sale: any): string =>
+    String((sale?.destino_sucursal as any)?._id || sale?.destino_sucursal || (sale?.sucursal as any)?._id || sale?.sucursal || "").trim();
 
   if (fromLastClose) {
     const lastClose = await BoxCloseRepository.findLatestBySucursalBefore(
@@ -1015,15 +1020,23 @@ const getDailySalesHistory = async (
   } else if (date) {
     filter.$or = [
       {
-        estado_pedido: { $ne: "En Espera" },
-        hora_entrega_acordada: { $gte: startOfDay, $lte: periodEnd },
+        estado_pedido: "interno",
+        fecha_pedido: { $gte: startOfDay, $lte: periodEnd },
+      },
+      {
+        estado_pedido: "Entregado",
+        hora_entrega_real: { $gte: startOfDay, $lte: periodEnd },
       },
     ];
   } else {
     filter.$or = [
       {
-        estado_pedido: { $ne: "En Espera" },
-        hora_entrega_acordada: { $lte: new Date() },
+        estado_pedido: "interno",
+        fecha_pedido: { $lte: new Date() },
+      },
+      {
+        estado_pedido: "Entregado",
+        hora_entrega_real: { $lte: new Date() },
       },
     ];
   }
@@ -1036,7 +1049,7 @@ const getDailySalesHistory = async (
         { path: 'producto', select: 'nombre_producto' }
       ]
     })
-    .sort(fromLastClose ? { hora_entrega_real: -1, fecha_pedido: -1 } : { hora_entrega_acordada: -1 })
+    .sort({ hora_entrega_real: -1, fecha_pedido: -1 })
     .lean();
 
   const pedidosWithSimplePackageDestination = await Promise.all(
@@ -1067,28 +1080,32 @@ const getDailySalesHistory = async (
   );
 
   const externalFiltrados = externalCandidates.filter((sale: any) => {
-    const branchId = String((sale?.sucursal as any)?._id || sale?.sucursal || "").trim();
-    if (branchId !== String(sucursalId || "").trim()) return false;
+    const currentBranchId = String(sucursalId || "").trim();
+    const sellerPaymentBranchId = getExternalOriginBranchId(sale);
+    const buyerPaymentBranchId = getExternalDestinationBranchId(sale);
+    const sellerBranchMatches = sellerPaymentBranchId === currentBranchId;
+    const buyerBranchMatches = buyerPaymentBranchId === currentBranchId;
+    if (!sellerBranchMatches && !buyerBranchMatches) return false;
 
     const sellerPayment = getExternalSellerPaymentTotals(sale);
     const hasSellerPayment = sellerPayment.montoTotal > 0;
     const isDelivered = String(sale?.estado_pedido || "").trim().toLowerCase() === "entregado" || sale?.delivered === true;
-    if (!isDelivered && !hasSellerPayment) return false;
+    if (!(isDelivered && buyerBranchMatches) && !(hasSellerPayment && sellerBranchMatches)) return false;
 
     if (fromLastClose) {
       const deliveredDate = sale?.hora_entrega_real ? new Date(sale.hora_entrega_real) : null;
       const sellerPaymentDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
-      if (hasSellerPayment && sellerPaymentDate && sellerPaymentDate > periodStart && sellerPaymentDate <= periodEnd) return true;
-      if (isDelivered && deliveredDate && deliveredDate > periodStart && deliveredDate <= periodEnd) return true;
+      if (sellerBranchMatches && hasSellerPayment && sellerPaymentDate && sellerPaymentDate > periodStart && sellerPaymentDate <= periodEnd) return true;
+      if (buyerBranchMatches && isDelivered && deliveredDate && deliveredDate > periodStart && deliveredDate <= periodEnd) return true;
 
       const orderDate = sale?.fecha_pedido ? new Date(sale.fecha_pedido) : null;
-      return isDelivered && !!orderDate && orderDate > periodStart && orderDate <= periodEnd;
+      return buyerBranchMatches && isDelivered && !!orderDate && orderDate > periodStart && orderDate <= periodEnd;
     }
 
     if (date) {
       return (
-        (hasSellerPayment && isDateInSalesHistoryRange(sale?.fecha_pedido, startOfDay, periodEnd, false)) ||
-        (isDelivered && isDateInSalesHistoryRange(getExternalHistoryDate(sale), startOfDay, periodEnd, false))
+        (sellerBranchMatches && hasSellerPayment && isDateInSalesHistoryRange(sale?.fecha_pedido, startOfDay, periodEnd, false)) ||
+        (buyerBranchMatches && isDelivered && isDateInSalesHistoryRange(getExternalHistoryDate(sale), startOfDay, periodEnd, false))
       );
     }
 
@@ -1134,6 +1151,9 @@ const getDailySalesHistory = async (
   });
 
   const resumenExternas = externalFiltrados.flatMap((sale: any) => {
+    const currentBranchId = String(sucursalId || "").trim();
+    const sellerBranchMatches = getExternalOriginBranchId(sale) === currentBranchId;
+    const buyerBranchMatches = getExternalDestinationBranchId(sale) === currentBranchId;
     const paymentTotals = getExternalDeliveredPaymentTotals(sale);
     const buyerAmount = paymentTotals.montoTotal;
     const sellerPaymentTotals = getExternalSellerPaymentTotals(sale);
@@ -1148,6 +1168,7 @@ const getDailySalesHistory = async (
 
     const rows: any[] = [];
     const shouldIncludeSellerPayment =
+      sellerBranchMatches &&
       sellerPaymentTotals.montoTotal > 0 &&
       (fromLastClose
         ? isDateInSalesHistoryRange(sale?.fecha_pedido, periodStart, periodEnd, true)
@@ -1155,6 +1176,7 @@ const getDailySalesHistory = async (
           ? isDateInSalesHistoryRange(sale?.fecha_pedido, startOfDay, periodEnd, false)
           : true);
     const shouldIncludeBuyerPayment =
+      buyerBranchMatches &&
       isDelivered &&
       buyerAmount > 0 &&
       (fromLastClose
@@ -1166,6 +1188,8 @@ const getDailySalesHistory = async (
     if (shouldIncludeSellerPayment) {
       rows.push({
         _id: `${sale._id}-seller-payment`,
+        external_sale_id: sale._id,
+        payment_kind: "seller",
         fecha: sale.fecha_pedido,
         hora: dayjs(sale.fecha_pedido).format("HH:mm"),
         tipo_de_pago: sellerPaymentTotals.tipoDePago,
@@ -1180,6 +1204,8 @@ const getDailySalesHistory = async (
     if (shouldIncludeBuyerPayment) {
       rows.push({
         _id: `${sale._id}-buyer-payment`,
+        external_sale_id: sale._id,
+        payment_kind: "buyer",
         fecha: getExternalHistoryDate(sale),
         hora: dayjs(getExternalHistoryDate(sale)).format("HH:mm"),
         tipo_de_pago: tipoDePago,
