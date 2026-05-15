@@ -8,6 +8,7 @@ import { OrderGuideService } from "./orderGuide.service";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
+import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -79,6 +80,9 @@ const normalizeSellerPaymentMethod = (value: unknown): PackagePaymentMethod => {
   return "";
 };
 
+const normalizePackageSize = (value: unknown) =>
+  String(value || "").trim().toLowerCase() === "grande" ? "grande" : "estandar";
+
 const normalizeDeliveryPaymentType = (value: unknown): string => {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return "";
@@ -106,6 +110,7 @@ const resolveExternalBranchRoutePricing = async (originBranchId?: string, destin
       originBranchId: "",
       destinationBranchId: "",
       destinationBranchName: "",
+      routeId: "",
     };
   }
 
@@ -116,12 +121,17 @@ const resolveExternalBranchRoutePricing = async (originBranchId?: string, destin
   }
 
   if (safeOriginBranchId === safeDestinationBranchId) {
+    const route = await SimplePackageBranchPriceRepository.findPriceByRoute(
+      safeOriginBranchId,
+      safeDestinationBranchId
+    );
     const branch = await SucursalModel.findById(safeOriginBranchId).select("nombre").lean();
     return {
       precioEntreSucursal: 0,
       originBranchId: safeOriginBranchId,
       destinationBranchId: safeDestinationBranchId,
       destinationBranchName: String((branch as any)?.nombre || "").trim(),
+      routeId: String((route as any)?._id || ""),
     };
   }
 
@@ -138,6 +148,7 @@ const resolveExternalBranchRoutePricing = async (originBranchId?: string, destin
     originBranchId: safeOriginBranchId,
     destinationBranchId: safeDestinationBranchId,
     destinationBranchName: String((route as any)?.destino_sucursal?.nombre || "").trim(),
+    routeId: String((route as any)?._id || ""),
   };
 };
 
@@ -362,11 +373,18 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   validateBuyerIdentity(input);
 
   const paid = normalizePaidStatus(input.esta_pagado);
-  const packagePrice = toNumber(input.precio_paquete ?? input.precio_total, 0);
   const originBranchId = toTrimmed(input.origen_sucursal_id ?? input.origen_sucursal ?? input.sucursal ?? input.id_sucursal);
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
   const branchRoutePrice = branchRoute.precioEntreSucursal;
+  const packageSize = normalizePackageSize(input.package_size ?? input.tamano);
+  const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
+  const configuredPackagePrice = await PackageEscalationConfigService.getExternalUnitPrice({
+    routeId: branchRoute.routeId,
+    packageCount: batchPackageCount,
+    packageSize,
+  });
+  const packagePrice = roundCurrency(toNumber(input.precio_paquete ?? input.precio_total, configuredPackagePrice));
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
@@ -403,7 +421,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     origen_sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
-    package_size: "estandar",
+    package_size: packageSize,
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
     deuda_comprador: totalBuyerDebt,
@@ -473,6 +491,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
       vendedor: payload?.vendedor,
       telefono_vendedor: payload?.telefono_vendedor,
       origen_sucursal_id: payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal,
+      batch_package_count: paquetes.length,
     };
 
     if (merged.id_sucursal) {

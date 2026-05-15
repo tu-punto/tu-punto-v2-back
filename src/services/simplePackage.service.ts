@@ -10,6 +10,7 @@ import { ShippingService } from "./shipping.service";
 import { hasConfiguredSimplePackageService } from "../utils";
 import { OrderGuideService } from "./orderGuide.service";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
+import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -117,6 +118,7 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
   }
 
   if (String(originBranchId) === String(destinationBranchId)) {
+    const route = await SimplePackageBranchPriceRepository.findPriceByRoute(originBranchId, destinationBranchId);
     const branch = await SucursalModel.findById(originBranchId).select("nombre").lean();
     const originBranchName = String((branch as any)?.nombre || "").trim();
 
@@ -124,6 +126,7 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
       precio_entre_sucursal: 0,
       originBranchName,
       destinationBranchName: originBranchName,
+      routeId: String((route as any)?._id || ""),
     };
   }
 
@@ -136,19 +139,19 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
     precio_entre_sucursal: roundCurrency(Number((route as any)?.precio || 0)),
     originBranchName: String((route as any)?.origen_sucursal?.nombre || "").trim(),
     destinationBranchName: String((route as any)?.destino_sucursal?.nombre || "").trim(),
+    routeId: String((route as any)?._id || ""),
   };
 };
 
 const buildPackagePricing = (
-  unitPrice: number,
+  smallPackagePrice: number,
   amortizacion: number,
   saldoPorPaquete: number,
   packageSize: PackageSize,
   branchRoutePrice = 0
 ) => {
-  const priceMultiplier = packageSize === "grande" ? 2 : 1;
-  const precioPaqueteUnitario = roundCurrency(unitPrice);
-  const precioPaquete = roundCurrency(precioPaqueteUnitario * priceMultiplier);
+  const precioPaqueteUnitario = roundCurrency(smallPackagePrice);
+  const precioPaquete = roundCurrency(smallPackagePrice);
   const deudaVendedor = roundCurrency(amortizacion);
   const deudaComprador = roundCurrency(Math.max(0, precioPaquete + branchRoutePrice - deudaVendedor));
   const precioEntreSucursal = roundCurrency(branchRoutePrice);
@@ -387,8 +390,13 @@ const buildSimplePackageRecord = async (params: {
           String(row?.precio_entre_sucursal).trim() !== ""
         ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, branchRoutePricing.precio_entre_sucursal)))
         : branchRoutePricing.precio_entre_sucursal;
-  const precioPaqueteUnitario = toNumber(seller?.precio_paquete ?? 0);
-  const precioPaquete = roundCurrency(precioPaqueteUnitario * (packageSize === "grande" ? 2 : 1));
+  const precioPaquete = await PackageEscalationConfigService.getSimpleUnitPrice({
+    routeId: branchRoutePricing.routeId,
+    sellerId,
+    packageIndexInBatch: index,
+    packageSize,
+  });
+  const precioPaqueteUnitario = precioPaquete;
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
   if (amortizacionVendedor < 0) {
     throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser menor a 0`);
@@ -684,10 +692,6 @@ const upsertSimplePackageBranchPrice = async (params: {
   if (!Types.ObjectId.isValid(originBranchId) || !Types.ObjectId.isValid(destinationBranchId)) {
     throw new Error("Debe seleccionar sucursales validas");
   }
-  if (originBranchId === destinationBranchId) {
-    throw new Error("La sucursal origen y destino no pueden ser la misma");
-  }
-
   const precio = roundCurrency(toNumber(params.precio, 0));
   if (precio < 0) {
     throw new Error("El precio entre sucursales no puede ser negativo");
@@ -768,9 +772,7 @@ const updateSimplePackageByID = async (params: {
             precio_entre_sucursal: nextBranchRoutePrice,
           }
         : await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
-  const nextPrecioPaquete = roundCurrency(
-    toNumber(existing.precio_paquete_unitario, 0) * (nextPackageSize === "grande" ? 2 : 1)
-  );
+  const nextPrecioPaquete = roundCurrency(toNumber(existing.precio_paquete, existing.precio_paquete_unitario || 0));
   const nextAmortizacionVendedor = roundCurrency(
     toNumber(
       role === "seller"
@@ -786,7 +788,7 @@ const updateSimplePackageByID = async (params: {
     throw new Error("El monto que cubrira el vendedor no puede ser mayor al precio del paquete");
   }
   const pricing = buildPackagePricing(
-    toNumber(existing.precio_paquete_unitario, 0),
+    nextPrecioPaquete,
     nextAmortizacionVendedor,
     nextSaldoPorPaquete,
     nextPackageSize,

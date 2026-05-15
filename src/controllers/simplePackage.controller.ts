@@ -1,6 +1,11 @@
 import { Request, Response } from "express";
 import { SimplePackageService } from "../services/simplePackage.service";
 import { OrderGuideWhatsappService } from "../services/orderGuideWhatsapp.service";
+export {
+  getPackageEscalationConfig,
+  getSimplePackageEscalationStatus,
+  upsertPackageEscalationConfig,
+} from "./packageEscalationConfig.controller";
 
 const resolveActor = (res: Response) => ({
   role: String(res.locals.auth?.role || "").toLowerCase(),

@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import moment from "moment-timezone";
 import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
 import { IVentaExterna } from "../entities/IVentaExterna";
 import { IVentaExternaDocument } from "../entities/documents/IVentaExternaDocument";
@@ -70,6 +71,23 @@ const getNextPackageNumberForSeller = async (sellerId: string) => {
     .lean();
 
   return Number(lastRow?.numero_paquete || 0) + 1;
+};
+
+const countSimplePackagesForSellerInCurrentMonth = async (sellerId: string) => {
+  if (!Types.ObjectId.isValid(sellerId)) return 0;
+
+  const now = moment().tz("America/La_Paz");
+  const monthStart = now.clone().startOf("month").toDate();
+  const nextMonthStart = now.clone().add(1, "month").startOf("month").toDate();
+
+  return await VentaExternaModel.countDocuments({
+    ...SIMPLE_PACKAGE_FILTER,
+    id_vendedor: new Types.ObjectId(sellerId),
+    fecha_pedido: {
+      $gte: monthStart,
+      $lt: nextMonthStart,
+    },
+  });
 };
 
 const registerSimplePackages = async (rows: IVentaExterna[]): Promise<IVentaExternaDocument[]> => {
@@ -213,6 +231,7 @@ export const SimplePackageRepository = {
   getSimplePackagesByIDs,
   getSimplePackagesList,
   getNextPackageNumberForSeller,
+  countSimplePackagesForSellerInCurrentMonth,
   registerSimplePackages,
   updateSimplePackageByID,
   deleteSimplePackageByID,
