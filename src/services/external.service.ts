@@ -1,6 +1,6 @@
 import moment from "moment-timezone";
 import { Types } from "mongoose";
-import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod } from "../entities/IVentaExterna";
+import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
@@ -376,8 +376,13 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const originBranchId = toTrimmed(input.origen_sucursal_id ?? input.origen_sucursal ?? input.sucursal ?? input.id_sucursal);
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
-  const packageSize = normalizePackageSize(input.package_size ?? input.tamano);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
+  const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
+  const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
+    routeId: branchRoute.routeId,
+    deliverySpaces: requestedDeliverySpaces,
+    fallbackSize: normalizePackageSize(input.package_size ?? input.tamano),
+  }) as PackageSize;
   const deliveryPricing =
     branchRoute.originBranchId === branchRoute.destinationBranchId
       ? { total: 0, spaces: 1 }
@@ -385,7 +390,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
           routeId: branchRoute.routeId,
           packageCount: batchPackageCount,
           packageSize,
-          deliverySpaces: input.delivery_spaces,
+          deliverySpaces: requestedDeliverySpaces,
           fallbackRoutePrice: branchRoute.precioEntreSucursal,
         });
   const branchRoutePrice = deliveryPricing.total;
@@ -432,7 +437,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
     package_size: packageSize,
-    delivery_spaces: deliveryPricing.spaces,
+    delivery_spaces: requestedDeliverySpaces,
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
     deuda_comprador: totalBuyerDebt,

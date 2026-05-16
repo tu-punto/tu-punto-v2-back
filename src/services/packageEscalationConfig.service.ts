@@ -26,8 +26,7 @@ const DEFAULT_RANGES: Record<PackageEscalationServiceOrigin, IPackageEscalationR
 };
 
 const DEFAULT_DELIVERY_SPACES: IPackageDeliverySpace[] = [
-  { size: "estandar", spaces: 1 },
-  { size: "grande", spaces: 2 },
+  { size: "small_limit", spaces: 1 },
 ];
 
 const normalizeServiceOrigin = (value: unknown): PackageEscalationServiceOrigin => {
@@ -90,6 +89,39 @@ const normalizeDeliverySpaces = (rows: any[] | undefined): IPackageDeliverySpace
   return normalized.length ? normalized : DEFAULT_DELIVERY_SPACES;
 };
 
+const getSmallSpaceLimitFromRows = (rows: any[] | undefined) => {
+  const normalized = normalizeDeliverySpaces(rows);
+  return Math.max(
+    1,
+    Number(
+      normalized.find((row) => row.size === "small_limit")?.spaces ??
+        normalized.find((row) => row.size === "estandar")?.spaces ??
+        1
+    )
+  );
+};
+
+const getSmallSpaceLimitForRoute = async (routeId?: string) => {
+  const config = routeId
+    ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, "delivery")
+    : null;
+  const globalConfig = await PackageEscalationConfigRepository.findGlobalByOrigin("delivery");
+  return getSmallSpaceLimitFromRows((globalConfig as any)?.delivery_spaces || (config as any)?.delivery_spaces || []);
+};
+
+const resolvePackageSizeBySpaces = async (params: {
+  routeId?: string;
+  deliverySpaces?: number;
+  fallbackSize?: string;
+}) => {
+  if (params.deliverySpaces === undefined || params.deliverySpaces === null) {
+    return String(params.fallbackSize || "").toLowerCase() === "grande" ? "grande" : "estandar";
+  }
+
+  const limit = await getSmallSpaceLimitForRoute(params.routeId);
+  return Math.max(1, Number(params.deliverySpaces || 1)) > limit ? "grande" : "estandar";
+};
+
 const getRangesForRoute = async (routeId: string | undefined, serviceOrigin: PackageEscalationServiceOrigin) => {
   const config = routeId
     ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, serviceOrigin)
@@ -122,13 +154,16 @@ const getConfigForRoute = async (routeId: string) => {
 
   const existingRows = await PackageEscalationConfigRepository.listConfigs(routeId);
   const byOrigin = new Map(existingRows.map((row: any) => [String(row.service_origin), row]));
+  const globalDelivery = await PackageEscalationConfigRepository.findGlobalByOrigin("delivery");
 
   return {
     routeId,
     external: normalizeRanges((byOrigin.get("external") as any)?.ranges || [], "external"),
     simple_package: normalizeRanges((byOrigin.get("simple_package") as any)?.ranges || [], "simple_package"),
     delivery: normalizeRanges((byOrigin.get("delivery") as any)?.ranges || [], "delivery"),
-    delivery_spaces: normalizeDeliverySpaces((byOrigin.get("delivery") as any)?.delivery_spaces || []),
+    delivery_spaces: normalizeDeliverySpaces(
+      (globalDelivery as any)?.delivery_spaces || (byOrigin.get("delivery") as any)?.delivery_spaces || []
+    ),
   };
 };
 
@@ -139,13 +174,19 @@ const upsertConfig = async (params: {
   deliverySpaces?: any[];
 }) => {
   const routeId = String(params.routeId || "").trim();
-  if (!Types.ObjectId.isValid(routeId)) {
-    throw new Error("Debe seleccionar una ruta valida");
-  }
-
   const serviceOrigin = normalizeServiceOrigin(params.serviceOrigin);
   const ranges = normalizeRanges(params.ranges, serviceOrigin);
   validateRanges(ranges);
+  if (serviceOrigin === "delivery" && !routeId) {
+    return await PackageEscalationConfigRepository.upsertGlobalByOrigin({
+      serviceOrigin,
+      ranges,
+      deliverySpaces: normalizeDeliverySpaces(params.deliverySpaces),
+    });
+  }
+  if (!Types.ObjectId.isValid(routeId)) {
+    throw new Error("Debe seleccionar una ruta valida");
+  }
 
   return await PackageEscalationConfigRepository.upsertByRouteAndOrigin({
     routeId,
@@ -188,13 +229,7 @@ const getDeliveryPricing = async (params: {
     : null;
   const hasConfig = Boolean(config);
   const ranges = normalizeRanges((config as any)?.ranges || [], "delivery");
-  const spacesRows = normalizeDeliverySpaces((config as any)?.delivery_spaces || []);
-  const normalizedSize = String(params.packageSize || "estandar").trim().toLowerCase();
-  const configuredSpaces =
-    spacesRows.find((row) => row.size === normalizedSize)?.spaces ??
-    spacesRows.find((row) => row.size === "estandar")?.spaces ??
-    1;
-  const spaces = Math.max(1, Number(params.deliverySpaces || configuredSpaces || 1));
+  const spaces = Math.max(1, Number(params.deliverySpaces || 1));
 
   if (!hasConfig && params.fallbackRoutePrice !== undefined) {
     const fallbackSpaces = params.deliverySpaces !== undefined ? spaces : 1;
@@ -242,5 +277,7 @@ export const PackageEscalationConfigService = {
   getExternalUnitPrice,
   getSimpleUnitPrice,
   getDeliveryPricing,
+  getSmallSpaceLimitForRoute,
+  resolvePackageSizeBySpaces,
   getSimpleEscalationStatus,
 };

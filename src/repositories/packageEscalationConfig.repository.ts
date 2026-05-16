@@ -30,6 +30,45 @@ const findByRouteAndOrigin = async (routeId: string, serviceOrigin: PackageEscal
   }).lean();
 };
 
+const findGlobalByOrigin = async (serviceOrigin: PackageEscalationServiceOrigin) => {
+  return await PackageEscalationConfigModel.findOne({
+    service_origin: serviceOrigin,
+    sucursal: null,
+  }).lean();
+};
+
+const upsertGlobalByOrigin = async (params: {
+  serviceOrigin: PackageEscalationServiceOrigin;
+  ranges: any[];
+  deliverySpaces?: any[];
+}) => {
+  const existing = await PackageEscalationConfigModel.findOne({
+    service_origin: params.serviceOrigin,
+    sucursal: null,
+  });
+  const updatePayload: any = {
+    service_origin: params.serviceOrigin,
+    ranges: params.ranges,
+    updated_at: new Date(),
+  };
+  if (params.deliverySpaces !== undefined) {
+    updatePayload.delivery_spaces = params.deliverySpaces;
+  }
+
+  if (existing) {
+    existing.set(updatePayload);
+    existing.set("route", undefined);
+    existing.set("sucursal", undefined);
+    return await existing.save();
+  }
+
+  return await PackageEscalationConfigModel.create({
+    ...updatePayload,
+    route: undefined,
+    sucursal: undefined,
+  });
+};
+
 const upsertByRouteAndOrigin = async (params: {
   routeId: string;
   serviceOrigin: PackageEscalationServiceOrigin;
@@ -59,5 +98,7 @@ const upsertByRouteAndOrigin = async (params: {
 export const PackageEscalationConfigRepository = {
   listConfigs,
   findByRouteAndOrigin,
+  findGlobalByOrigin,
+  upsertGlobalByOrigin,
   upsertByRouteAndOrigin,
 };
