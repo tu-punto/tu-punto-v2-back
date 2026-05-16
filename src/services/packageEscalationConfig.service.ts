@@ -255,7 +255,7 @@ const getDeliveryPricing = async (params: {
     };
   }
 
-  const unitPrice = getUnitPriceForCount(ranges, params.packageCount, "estandar");
+  const unitPrice = getUnitPriceForCount(ranges, spaces, "estandar");
   return {
     unitPrice,
     spaces,
