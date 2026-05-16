@@ -21,6 +21,7 @@ export interface IVentaExterna {
 
     service_origin?: ExternalServiceOrigin;
     package_size?: PackageSize;
+    delivery_spaces?: number;
     precio_paquete_unitario?: number;
     amortizacion_vendedor?: number;
     deuda_comprador?: number;

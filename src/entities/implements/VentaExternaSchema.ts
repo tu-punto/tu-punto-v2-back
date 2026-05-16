@@ -54,6 +54,12 @@ const VentaExternaSchema = new Schema({
         enum: ["estandar", "grande"],
         default: "estandar"
     },
+    delivery_spaces: {
+        type: Number,
+        required: false,
+        min: 1,
+        default: 1
+    },
     precio_paquete_unitario: {
         type: Number,
         required: false,

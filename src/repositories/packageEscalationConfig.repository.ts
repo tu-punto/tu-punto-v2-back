@@ -34,18 +34,24 @@ const upsertByRouteAndOrigin = async (params: {
   routeId: string;
   serviceOrigin: PackageEscalationServiceOrigin;
   ranges: any[];
+  deliverySpaces?: any[];
 }) => {
+  const updatePayload: any = {
+    route: new Types.ObjectId(params.routeId),
+    service_origin: params.serviceOrigin,
+    ranges: params.ranges,
+    updated_at: new Date(),
+  };
+  if (params.deliverySpaces !== undefined) {
+    updatePayload.delivery_spaces = params.deliverySpaces;
+  }
+
   return await PackageEscalationConfigModel.findOneAndUpdate(
     {
       route: new Types.ObjectId(params.routeId),
       service_origin: params.serviceOrigin,
     },
-    {
-      route: new Types.ObjectId(params.routeId),
-      service_origin: params.serviceOrigin,
-      ranges: params.ranges,
-      updated_at: new Date(),
-    },
+    updatePayload,
     { new: true, upsert: true, setDefaultsOnInsert: true }
   ).populate({ path: "sucursal", select: "_id nombre" });
 };

@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 import {
+  IPackageDeliverySpace,
   IPackageEscalationRange,
   PackageEscalationServiceOrigin,
 } from "../entities/IPackageEscalationConfig";
@@ -17,10 +18,21 @@ const DEFAULT_RANGES: Record<PackageEscalationServiceOrigin, IPackageEscalationR
     { from: 31, to: 60, small_price: 3, large_price: 6 },
     { from: 61, to: null, small_price: 2.5, large_price: 5 },
   ],
+  delivery: [
+    { from: 1, to: 5, small_price: 5, large_price: 5 },
+    { from: 6, to: 15, small_price: 4, large_price: 4 },
+    { from: 16, to: null, small_price: 3, large_price: 3 },
+  ],
 };
+
+const DEFAULT_DELIVERY_SPACES: IPackageDeliverySpace[] = [
+  { size: "estandar", spaces: 1 },
+  { size: "grande", spaces: 2 },
+];
 
 const normalizeServiceOrigin = (value: unknown): PackageEscalationServiceOrigin => {
   const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "delivery") return "delivery";
   return normalized === "simple" || normalized === "simple_package" ? "simple_package" : "external";
 };
 
@@ -66,6 +78,18 @@ const validateRanges = (ranges: IPackageEscalationRange[]) => {
   });
 };
 
+const normalizeDeliverySpaces = (rows: any[] | undefined): IPackageDeliverySpace[] => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_DELIVERY_SPACES;
+  const normalized = source
+    .map((row) => ({
+      size: String(row?.size || row?.tamano || "").trim().toLowerCase(),
+      spaces: Math.max(1, Number(row?.spaces ?? row?.espacios ?? 1)),
+    }))
+    .filter((row) => row.size);
+
+  return normalized.length ? normalized : DEFAULT_DELIVERY_SPACES;
+};
+
 const getRangesForRoute = async (routeId: string | undefined, serviceOrigin: PackageEscalationServiceOrigin) => {
   const config = routeId
     ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, serviceOrigin)
@@ -103,6 +127,8 @@ const getConfigForRoute = async (routeId: string) => {
     routeId,
     external: normalizeRanges((byOrigin.get("external") as any)?.ranges || [], "external"),
     simple_package: normalizeRanges((byOrigin.get("simple_package") as any)?.ranges || [], "simple_package"),
+    delivery: normalizeRanges((byOrigin.get("delivery") as any)?.ranges || [], "delivery"),
+    delivery_spaces: normalizeDeliverySpaces((byOrigin.get("delivery") as any)?.delivery_spaces || []),
   };
 };
 
@@ -110,6 +136,7 @@ const upsertConfig = async (params: {
   routeId: string;
   serviceOrigin: unknown;
   ranges: any[];
+  deliverySpaces?: any[];
 }) => {
   const routeId = String(params.routeId || "").trim();
   if (!Types.ObjectId.isValid(routeId)) {
@@ -124,6 +151,7 @@ const upsertConfig = async (params: {
     routeId,
     serviceOrigin,
     ranges,
+    deliverySpaces: serviceOrigin === "delivery" ? normalizeDeliverySpaces(params.deliverySpaces) : undefined,
   });
 };
 
@@ -147,6 +175,44 @@ const getSimpleUnitPrice = async (params: {
   return getUnitPriceForCount(ranges, monthCount + params.packageIndexInBatch + 1, params.packageSize);
 };
 
+const getDeliveryPricing = async (params: {
+  routeId?: string;
+  packageCount: number;
+  packageSize?: string;
+  deliverySpaces?: number;
+  fallbackRoutePrice?: number;
+}) => {
+  const routeId = String(params.routeId || "");
+  const config = routeId
+    ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, "delivery")
+    : null;
+  const hasConfig = Boolean(config);
+  const ranges = normalizeRanges((config as any)?.ranges || [], "delivery");
+  const spacesRows = normalizeDeliverySpaces((config as any)?.delivery_spaces || []);
+  const normalizedSize = String(params.packageSize || "estandar").trim().toLowerCase();
+  const configuredSpaces =
+    spacesRows.find((row) => row.size === normalizedSize)?.spaces ??
+    spacesRows.find((row) => row.size === "estandar")?.spaces ??
+    1;
+  const spaces = Math.max(1, Number(params.deliverySpaces || configuredSpaces || 1));
+
+  if (!hasConfig && params.fallbackRoutePrice !== undefined) {
+    const fallbackSpaces = params.deliverySpaces !== undefined ? spaces : 1;
+    return {
+      unitPrice: roundCurrency(Number(params.fallbackRoutePrice || 0)),
+      spaces: fallbackSpaces,
+      total: roundCurrency(Number(params.fallbackRoutePrice || 0) * fallbackSpaces),
+    };
+  }
+
+  const unitPrice = getUnitPriceForCount(ranges, params.packageCount, "estandar");
+  return {
+    unitPrice,
+    spaces,
+    total: roundCurrency(unitPrice * spaces),
+  };
+};
+
 const getSimpleEscalationStatus = async (params: { routeId?: string; sellerId: string }) => {
   const ranges = await getRangesForRoute(params.routeId, "simple_package");
   const monthCount = await SimplePackageRepository.countSimplePackagesForSellerInCurrentMonth(params.sellerId);
@@ -167,6 +233,7 @@ const getSimpleEscalationStatus = async (params: { routeId?: string; sellerId: s
 
 export const PackageEscalationConfigService = {
   DEFAULT_RANGES,
+  DEFAULT_DELIVERY_SPACES,
   normalizeServiceOrigin,
   getUnitPriceForCount,
   listConfigs,
@@ -174,5 +241,6 @@ export const PackageEscalationConfigService = {
   upsertConfig,
   getExternalUnitPrice,
   getSimpleUnitPrice,
+  getDeliveryPricing,
   getSimpleEscalationStatus,
 };

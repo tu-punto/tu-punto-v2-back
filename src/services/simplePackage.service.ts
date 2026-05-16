@@ -148,7 +148,8 @@ const buildPackagePricing = (
   amortizacion: number,
   saldoPorPaquete: number,
   packageSize: PackageSize,
-  branchRoutePrice = 0
+  branchRoutePrice = 0,
+  deliverySpaces = 1
 ) => {
   const precioPaqueteUnitario = roundCurrency(smallPackagePrice);
   const precioPaquete = roundCurrency(smallPackagePrice);
@@ -163,6 +164,7 @@ const buildPackagePricing = (
     saldo_por_paquete: roundCurrency(saldoPorPaquete),
     precio_paquete: precioPaquete,
     precio_entre_sucursal: precioEntreSucursal,
+    delivery_spaces: Math.max(1, Number(deliverySpaces || 1)),
     precio_total: precioTotal,
     cargo_delivery: precioEntreSucursal,
     costo_delivery: 0,
@@ -381,6 +383,16 @@ const buildSimplePackageRecord = async (params: {
   ensureSellerSimpleBranch(seller, destinationBranchId, "La sucursal destino");
 
   const branchRoutePricing = await resolveBranchRoutePricing(originBranchId, destinationBranchId);
+  const deliveryPricing =
+    String(originBranchId || "") === String(destinationBranchId || "")
+      ? { total: 0, spaces: 1 }
+      : await PackageEscalationConfigService.getDeliveryPricing({
+          routeId: branchRoutePricing.routeId,
+          packageCount: index + 1,
+          packageSize,
+          deliverySpaces: row?.delivery_spaces,
+          fallbackRoutePrice: branchRoutePricing.precio_entre_sucursal,
+        });
   const branchRoutePrice =
     String(originBranchId || "") === String(destinationBranchId || "")
       ? 0
@@ -388,8 +400,8 @@ const buildSimplePackageRecord = async (params: {
           row?.precio_entre_sucursal !== undefined &&
           row?.precio_entre_sucursal !== null &&
           String(row?.precio_entre_sucursal).trim() !== ""
-        ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, branchRoutePricing.precio_entre_sucursal)))
-        : branchRoutePricing.precio_entre_sucursal;
+        ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, deliveryPricing.total)))
+        : deliveryPricing.total;
   const precioPaquete = await PackageEscalationConfigService.getSimpleUnitPrice({
     routeId: branchRoutePricing.routeId,
     sellerId,
@@ -409,7 +421,8 @@ const buildSimplePackageRecord = async (params: {
     amortizacionVendedor,
     saldoPorPaquete,
     packageSize,
-    branchRoutePrice
+    branchRoutePrice,
+    deliveryPricing.spaces
   );
 
   const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
@@ -755,23 +768,35 @@ const updateSimplePackageByID = async (params: {
     manualBranchRoutePriceRaw !== undefined &&
     manualBranchRoutePriceRaw !== null &&
     String(manualBranchRoutePriceRaw).trim() !== "";
+  const nextDeliverySpaces = Math.max(1, toNumber(params.payload?.delivery_spaces ?? (existing as any).delivery_spaces ?? 1, 1));
+  const resolvedBranchRoutePricing = await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+  const nextDeliveryPricing =
+    String(nextOriginBranchId) === String(nextDestinationBranchId)
+      ? { total: 0, spaces: 1 }
+      : await PackageEscalationConfigService.getDeliveryPricing({
+          routeId: resolvedBranchRoutePricing.routeId,
+          packageCount: Number((existing as any)?.numero_paquete || 1),
+          packageSize: nextPackageSize,
+          deliverySpaces: nextDeliverySpaces,
+          fallbackRoutePrice: resolvedBranchRoutePricing.precio_entre_sucursal,
+        });
   const nextBranchRoutePrice =
     String(nextOriginBranchId) === String(nextDestinationBranchId)
       ? 0
       : roundCurrency(
           hasManualBranchRoutePrice
             ? Math.max(0, toNumber(manualBranchRoutePriceRaw, Number(existing.precio_entre_sucursal || 0)))
-            : toNumber((await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)).precio_entre_sucursal, 0)
+            : nextDeliveryPricing.total
         );
   const branchRoutePricing =
     String(nextOriginBranchId) === String(nextDestinationBranchId)
-      ? await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)
+      ? resolvedBranchRoutePricing
       : hasManualBranchRoutePrice
         ? {
-            ...(await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)),
+            ...resolvedBranchRoutePricing,
             precio_entre_sucursal: nextBranchRoutePrice,
           }
-        : await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+        : { ...resolvedBranchRoutePricing, precio_entre_sucursal: nextBranchRoutePrice };
   const nextPrecioPaquete = roundCurrency(toNumber(existing.precio_paquete, existing.precio_paquete_unitario || 0));
   const nextAmortizacionVendedor = roundCurrency(
     toNumber(
@@ -792,7 +817,8 @@ const updateSimplePackageByID = async (params: {
     nextAmortizacionVendedor,
     nextSaldoPorPaquete,
     nextPackageSize,
-    nextBranchRoutePrice
+    nextBranchRoutePrice,
+    String(nextOriginBranchId) === String(nextDestinationBranchId) ? 1 : nextDeliverySpaces
   );
 
   const updatePayload: Partial<IVentaExterna> = {

@@ -36,6 +36,9 @@ export const upsertPackageEscalationConfig = async (req: Request, res: Response)
       routeId: String(req.body?.routeId || req.body?.rutaId || "").trim(),
       serviceOrigin: req.body?.serviceOrigin || req.body?.service_origin,
       ranges: Array.isArray(req.body?.ranges) ? req.body.ranges : [],
+      deliverySpaces: Array.isArray(req.body?.deliverySpaces || req.body?.delivery_spaces)
+        ? req.body.deliverySpaces || req.body.delivery_spaces
+        : undefined,
     });
 
     return res.json({ success: true, data });

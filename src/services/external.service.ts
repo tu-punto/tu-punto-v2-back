@@ -376,9 +376,19 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const originBranchId = toTrimmed(input.origen_sucursal_id ?? input.origen_sucursal ?? input.sucursal ?? input.id_sucursal);
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
-  const branchRoutePrice = branchRoute.precioEntreSucursal;
   const packageSize = normalizePackageSize(input.package_size ?? input.tamano);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
+  const deliveryPricing =
+    branchRoute.originBranchId === branchRoute.destinationBranchId
+      ? { total: 0, spaces: 1 }
+      : await PackageEscalationConfigService.getDeliveryPricing({
+          routeId: branchRoute.routeId,
+          packageCount: batchPackageCount,
+          packageSize,
+          deliverySpaces: input.delivery_spaces,
+          fallbackRoutePrice: branchRoute.precioEntreSucursal,
+        });
+  const branchRoutePrice = deliveryPricing.total;
   const configuredPackagePrice = await PackageEscalationConfigService.getExternalUnitPrice({
     routeId: branchRoute.routeId,
     packageCount: batchPackageCount,
@@ -422,6 +432,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
     package_size: packageSize,
+    delivery_spaces: deliveryPricing.spaces,
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
     deuda_comprador: totalBuyerDebt,

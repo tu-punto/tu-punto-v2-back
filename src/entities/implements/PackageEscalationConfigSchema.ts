@@ -11,6 +11,14 @@ const PackageEscalationRangeSchema = new Schema(
   { _id: false }
 );
 
+const PackageDeliverySpaceSchema = new Schema(
+  {
+    size: { type: String, required: true, trim: true },
+    spaces: { type: Number, required: true, min: 1, default: 1 },
+  },
+  { _id: false }
+);
+
 const PackageEscalationConfigSchema = new Schema(
   {
     route: {
@@ -27,13 +35,17 @@ const PackageEscalationConfigSchema = new Schema(
     },
     service_origin: {
       type: String,
-      enum: ["external", "simple_package"],
+      enum: ["external", "simple_package", "delivery"],
       required: true,
       index: true,
     },
     ranges: {
       type: [PackageEscalationRangeSchema],
       default: [],
+    },
+    delivery_spaces: {
+      type: [PackageDeliverySpaceSchema],
+      default: undefined,
     },
     updated_at: {
       type: Date,
