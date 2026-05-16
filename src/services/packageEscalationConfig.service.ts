@@ -210,8 +210,23 @@ const getSimpleUnitPrice = async (params: {
   sellerId: string;
   packageIndexInBatch: number;
   packageSize?: string;
+  fallbackSmallPrice?: number;
+  fallbackLargePrice?: number;
 }) => {
-  const ranges = await getRangesForRoute(params.routeId, "simple_package");
+  const routeConfig = params.routeId
+    ? await PackageEscalationConfigRepository.findByRouteAndOrigin(params.routeId, "simple_package")
+    : null;
+  if (!routeConfig) {
+    const fallbackSmallPrice = roundCurrency(Number(params.fallbackSmallPrice || 0));
+    const fallbackLargePrice = roundCurrency(Number(params.fallbackLargePrice || fallbackSmallPrice));
+    if (fallbackSmallPrice > 0 || fallbackLargePrice > 0) {
+      return String(params.packageSize || "").toLowerCase() === "grande"
+        ? fallbackLargePrice
+        : fallbackSmallPrice;
+    }
+  }
+
+  const ranges = normalizeRanges((routeConfig as any)?.ranges || [], "simple_package");
   const monthCount = await SimplePackageRepository.countSimplePackagesForSellerInCurrentMonth(params.sellerId);
   return getUnitPriceForCount(ranges, monthCount + params.packageIndexInBatch + 1, params.packageSize);
 };

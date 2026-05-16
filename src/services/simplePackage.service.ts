@@ -412,6 +412,8 @@ const buildSimplePackageRecord = async (params: {
     sellerId,
     packageIndexInBatch: index,
     packageSize,
+    fallbackSmallPrice: Number(seller?.precio_paquete || 0),
+    fallbackLargePrice: Number(seller?.precio_paquete || 0),
   });
   const precioPaqueteUnitario = precioPaquete;
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
@@ -730,8 +732,8 @@ const updateSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).qr_impreso || (existing as any).numero_guia) {
-    throw new Error("No se puede modificar un paquete con QR impreso");
+  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
+    throw new Error("No se puede modificar un paquete que ya fue convertido o entregado");
   }
 
   const role = String(params.role || "").toLowerCase();
@@ -878,8 +880,8 @@ const deleteSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).qr_impreso || (existing as any).numero_guia) {
-    throw new Error("No se puede eliminar un paquete con QR impreso");
+  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
+    throw new Error("No se puede eliminar un paquete que ya fue convertido o entregado");
   }
 
   const role = String(params.role || "").toLowerCase();

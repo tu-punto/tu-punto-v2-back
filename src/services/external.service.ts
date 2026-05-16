@@ -539,6 +539,11 @@ const deleteExternalSaleByID = async (id: string) => {
 const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
+  const existingDelivered = existing.estado_pedido === "Entregado" || existing.delivered === true;
+
+  if (existingDelivered) {
+    throw new Error("No se puede editar una entrega que ya fue entregada");
+  }
 
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
   const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
@@ -575,7 +580,6 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.delivered === true || existing.delivered === true
   );
   const delivered = status === "Entregado";
-  const existingDelivered = existing.estado_pedido === "Entregado";
 
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,
