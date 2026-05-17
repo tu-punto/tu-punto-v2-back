@@ -236,6 +236,7 @@ const getDeliveryPricing = async (params: {
   packageCount: number;
   packageSize?: string;
   deliverySpaces?: number;
+  escalationSpaces?: number;
   fallbackRoutePrice?: number;
 }) => {
   const routeId = String(params.routeId || "");
@@ -245,6 +246,7 @@ const getDeliveryPricing = async (params: {
   const hasConfig = Boolean(config);
   const ranges = normalizeRanges((config as any)?.ranges || [], "delivery");
   const spaces = Math.max(1, Number(params.deliverySpaces || 1));
+  const escalationSpaces = Math.max(1, Number(params.escalationSpaces || spaces));
 
   if (!hasConfig && params.fallbackRoutePrice !== undefined) {
     const fallbackSpaces = params.deliverySpaces !== undefined ? spaces : 1;
@@ -255,7 +257,7 @@ const getDeliveryPricing = async (params: {
     };
   }
 
-  const unitPrice = getUnitPriceForCount(ranges, spaces, "estandar");
+  const unitPrice = getUnitPriceForCount(ranges, escalationSpaces, "estandar");
   return {
     unitPrice,
     spaces,

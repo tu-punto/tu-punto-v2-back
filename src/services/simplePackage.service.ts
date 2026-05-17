@@ -367,9 +367,10 @@ const buildSimplePackageRecord = async (params: {
   seller: any;
   sellerId: string;
   originBranchId?: string;
+  deliveryEscalationSpaces?: number;
   allowManualBranchPrice?: boolean;
 }) => {
-  const { row, index, packageNumber, seller, sellerId, originBranchId, allowManualBranchPrice } = params;
+  const { row, index, packageNumber, seller, sellerId, originBranchId, deliveryEscalationSpaces, allowManualBranchPrice } = params;
   ensureBuyerIdentity(row);
   ensureDescription(row);
   ensureSellerSimpleBranch(seller, originBranchId, "La sucursal de origen");
@@ -396,6 +397,7 @@ const buildSimplePackageRecord = async (params: {
           packageCount: index + 1,
           packageSize,
           deliverySpaces: requestedDeliverySpaces,
+          escalationSpaces: deliveryEscalationSpaces || requestedDeliverySpaces,
           fallbackRoutePrice: branchRoutePricing.precio_entre_sucursal,
         });
   const branchRoutePrice =
@@ -488,6 +490,16 @@ const registerSimplePackages = async (params: {
 
   const seller = await resolveSeller(sellerId);
   const startPackageNumber = await SimplePackageRepository.getNextPackageNumberForSeller(sellerId);
+  const deliverySpacesByDestination = new Map<string, number>();
+  paquetes.forEach((row) => {
+    const destinationBranchId = toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal);
+    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return;
+    const spaces = Math.max(1, toNumber(row?.delivery_spaces ?? 1, 1));
+    deliverySpacesByDestination.set(
+      destinationBranchId,
+      roundCurrency((deliverySpacesByDestination.get(destinationBranchId) || 0) + spaces)
+    );
+  });
   const rows = await Promise.all(
     paquetes.map((row, index) =>
       buildSimplePackageRecord({
@@ -497,6 +509,9 @@ const registerSimplePackages = async (params: {
         seller,
         sellerId,
         originBranchId,
+        deliveryEscalationSpaces: deliverySpacesByDestination.get(
+          toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal)
+        ),
         allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
       })
     )

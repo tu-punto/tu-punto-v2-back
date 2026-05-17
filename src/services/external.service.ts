@@ -391,6 +391,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
           packageCount: batchPackageCount,
           packageSize,
           deliverySpaces: requestedDeliverySpaces,
+          escalationSpaces: Math.max(1, toNumber(input.batch_delivery_spaces ?? requestedDeliverySpaces, requestedDeliverySpaces)),
           fallbackRoutePrice: branchRoute.precioEntreSucursal,
         });
   const branchRoutePrice = deliveryPricing.total;
@@ -496,8 +497,20 @@ const assignExternalGuideAndQR = async (record: IVentaExterna) => {
 const registerExternalSalesByPackages = async (payload: any) => {
   const paquetes = Array.isArray(payload?.paquetes) ? payload.paquetes : [];
   if (!paquetes.length) throw new Error("Debe enviar al menos un paquete");
+  const originBranchId = toTrimmed(payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal);
+  const deliverySpacesByDestination = new Map<string, number>();
+  paquetes.forEach((pkg: any) => {
+    const destinationBranchId = toTrimmed(pkg?.destino_sucursal_id ?? pkg?.destino_sucursal ?? originBranchId);
+    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return;
+    const spaces = Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1));
+    deliverySpacesByDestination.set(
+      destinationBranchId,
+      roundCurrency((deliverySpacesByDestination.get(destinationBranchId) || 0) + spaces)
+    );
+  });
 
   const toCreate: IVentaExterna[] = await Promise.all(paquetes.map(async (pkg: any, index: number) => {
+    const destinationBranchId = toTrimmed(pkg?.destino_sucursal_id ?? pkg?.destino_sucursal ?? originBranchId);
     const merged = {
       ...payload,
       ...pkg,
@@ -506,7 +519,8 @@ const registerExternalSalesByPackages = async (payload: any) => {
       carnet_vendedor: payload?.carnet_vendedor,
       vendedor: payload?.vendedor,
       telefono_vendedor: payload?.telefono_vendedor,
-      origen_sucursal_id: payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal,
+      origen_sucursal_id: originBranchId,
+      batch_delivery_spaces: deliverySpacesByDestination.get(destinationBranchId) || Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1)),
       batch_package_count: paquetes.length,
     };
 

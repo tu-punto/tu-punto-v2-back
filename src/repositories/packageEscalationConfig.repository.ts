@@ -2,6 +2,30 @@ import { Types } from "mongoose";
 import { PackageEscalationServiceOrigin } from "../entities/IPackageEscalationConfig";
 import { PackageEscalationConfigModel } from "../entities/implements/PackageEscalationConfigSchema";
 
+let legacyIndexCleanupPromise: Promise<void> | null = null;
+
+const ensureLegacySucursalOriginIndexRemoved = async () => {
+  if (!legacyIndexCleanupPromise) {
+    legacyIndexCleanupPromise = (async () => {
+      try {
+        const indexes = await PackageEscalationConfigModel.collection.indexes();
+        const legacyIndex = indexes.find(
+          (index: any) => index?.name === "sucursal_1_service_origin_1" && index?.unique === true
+        );
+
+        if (legacyIndex) {
+          await PackageEscalationConfigModel.collection.dropIndex("sucursal_1_service_origin_1");
+        }
+      } catch (error: any) {
+        if (error?.codeName === "IndexNotFound" || error?.code === 27) return;
+        console.warn("No se pudo quitar el indice legacy de escalonamiento:", error?.message || error);
+      }
+    })();
+  }
+
+  return legacyIndexCleanupPromise;
+};
+
 const listConfigs = async (routeId?: string) => {
   const match: any = {};
   if (routeId && Types.ObjectId.isValid(routeId)) {
@@ -34,6 +58,7 @@ const findGlobalByOrigin = async (serviceOrigin: PackageEscalationServiceOrigin)
   return await PackageEscalationConfigModel.findOne({
     service_origin: serviceOrigin,
     sucursal: null,
+    route: null,
   }).lean();
 };
 
@@ -42,9 +67,12 @@ const upsertGlobalByOrigin = async (params: {
   ranges: any[];
   deliverySpaces?: any[];
 }) => {
+  await ensureLegacySucursalOriginIndexRemoved();
+
   const existing = await PackageEscalationConfigModel.findOne({
     service_origin: params.serviceOrigin,
     sucursal: null,
+    route: null,
   });
   const updatePayload: any = {
     service_origin: params.serviceOrigin,
@@ -75,6 +103,8 @@ const upsertByRouteAndOrigin = async (params: {
   ranges: any[];
   deliverySpaces?: any[];
 }) => {
+  await ensureLegacySucursalOriginIndexRemoved();
+
   const updatePayload: any = {
     route: new Types.ObjectId(params.routeId),
     service_origin: params.serviceOrigin,
