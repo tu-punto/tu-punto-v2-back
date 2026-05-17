@@ -56,6 +56,8 @@ export interface IVentaExterna {
     guia_sequence?: number;
 
     hora_entrega_real?: Date;
+    storage_fee_start_at?: Date;
+    late_pickup_fee?: number;
     lugar_entrega?: string;
 
     // Legacy compatibility fields

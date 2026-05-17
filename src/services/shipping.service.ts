@@ -17,6 +17,7 @@ import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { OrderGuideService } from "./orderGuide.service";
+import { addLatePickupFeeToPayment, calculateLatePickupFee } from "../utils/latePickupFee";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -174,6 +175,26 @@ const canMarkDeliveredFromBranch = async (shipping: any, branchId?: string | nul
   if (!currentBranchId) return true;
   const deliveryBranchId = await resolveDeliveryBranchId(shipping);
   return !deliveryBranchId || deliveryBranchId === currentBranchId;
+};
+
+const isBranchTransferShipping = async (shipping: any): Promise<boolean> => {
+  const originId = resolveOriginBranchId(shipping);
+  const destinationId = await resolveDeliveryBranchId(shipping);
+  return Boolean(originId && destinationId && originId !== destinationId);
+};
+
+const resolveStorageFeeStartForShipping = async (shipping: any) => {
+  if (shipping?.storage_fee_start_at) return shipping.storage_fee_start_at;
+  if (!(await isBranchTransferShipping(shipping))) return shipping?.fecha_pedido;
+
+  const inTransitHistory = await ShippingStatusHistoryModel.findOne({
+    shippingId: shipping?._id,
+    toStatus: "En camino",
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  return inTransitHistory?.createdAt || shipping?.fecha_pedido;
 };
 
 const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {
@@ -715,6 +736,30 @@ const updateShipping = async (
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
   }
 
+  if (toStatus === "En camino" && !shipping.storage_fee_start_at && await isBranchTransferShipping(nextShippingState)) {
+    newData.storage_fee_start_at = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
+  }
+
+  let latePickupFee = 0;
+  if (willBeDelivered && !wasDelivered && isSimplePackageOrder) {
+    latePickupFee = calculateLatePickupFee({
+      startAt: await resolveStorageFeeStartForShipping(nextShippingState),
+      pickedUpAt: newData.hora_entrega_real || new Date(),
+    });
+
+    if (latePickupFee > 0) {
+      const adjustedPayment = addLatePickupFeeToPayment({
+        fee: latePickupFee,
+        paymentType: newData.tipo_de_pago,
+        subtotalQr: newData.subtotal_qr,
+        subtotalEfectivo: newData.subtotal_efectivo,
+      });
+      newData.subtotal_qr = roundCurrency(adjustedPayment.subtotalQr);
+      newData.subtotal_efectivo = roundCurrency(adjustedPayment.subtotalEfectivo);
+      newData.late_pickup_fee = latePickupFee;
+    }
+  }
+
   if (willBeDelivered && !wasDelivered) {
     const sales = await SaleService.getSalesByShippingId(shippingId);
     const fallbackTemporarySales = (Array.isArray((shipping as any)?.productos_temporales) ? (shipping as any).productos_temporales : [])
@@ -801,9 +846,21 @@ const updateShipping = async (
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
       hora_entrega_real: (resShip as any).hora_entrega_real,
+      late_pickup_fee: (resShip as any).late_pickup_fee || 0,
     };
+    const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
+    const existingSource = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+    const simplePackageFinancialPatch =
+      lateFee > 0
+        ? {
+            deuda_comprador: roundCurrency(Number((existingSource as any)?.deuda_comprador || 0) + lateFee),
+            monto_paga_comprador: roundCurrency(Number((existingSource as any)?.monto_paga_comprador || 0) + lateFee),
+            saldo_cobrar: roundCurrency(Number((existingSource as any)?.saldo_cobrar || 0) + lateFee),
+          }
+        : {};
     await SimplePackageRepository.updateSimplePackageByID(simplePackageSourceId, {
       ...simplePackageUpdatePayload,
+      ...simplePackageFinancialPatch,
     });
   }
 

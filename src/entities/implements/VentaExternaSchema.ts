@@ -182,6 +182,14 @@ const VentaExternaSchema = new Schema({
         type: Date,
         required: false
     },
+    storage_fee_start_at: {
+        type: Date,
+        required: false
+    },
+    late_pickup_fee: {
+        type: Number,
+        default: 0
+    },
     lugar_entrega: {
         type: String,
         default: "Externo"

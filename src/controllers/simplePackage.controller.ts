@@ -199,6 +199,7 @@ export const createSimplePackageOrders = async (req: Request, res: Response) => 
       role: actor.role,
       currentBranchId: actor.role === "seller" ? undefined : actor.sucursalId,
       paymentMethod: paymentMethod === "efectivo" || paymentMethod === "qr" ? (paymentMethod as "efectivo" | "qr") : "",
+      skipGuideNotification: req.body?.skipGuideNotification === true,
     });
 
     return res.json({

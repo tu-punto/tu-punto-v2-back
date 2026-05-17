@@ -298,21 +298,22 @@ const applySimplePackageIncomeQR = async (params: {
   });
 };
 
-const buildSimplePackageShippingPayload = (row: any) => {
+const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) => {
   const buyerName = toTrimmed(row?.comprador) || `Paquete ${String(row?.numero_paquete || "").trim() || "simple"}`;
   const originBranchId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
   const destinationBranchId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal);
   const destinationBranchName = toTrimmed((row?.destino_sucursal as any)?.nombre ?? row?.lugar_entrega) || "Sucursal";
   const paymentData = resolveSimplePackagePaymentPayload(row);
   const tempProductPrice = roundCurrency(Number(row?.saldo_por_paquete || 0));
+  const createdAt = normalizeDate(orderCreatedAt ?? row?.fecha_pedido);
 
   return {
     cliente: buyerName,
     telefono_cliente: toTrimmed(row?.telefono_comprador),
     carnet_cliente: "",
     tipo_de_pago: paymentData.tipo_de_pago,
-    fecha_pedido: normalizeDate(row?.fecha_pedido),
-    hora_entrega_acordada: normalizeDate(row?.fecha_pedido),
+    fecha_pedido: createdAt,
+    hora_entrega_acordada: createdAt,
     observaciones: "",
     lugar_origen: originBranchId || undefined,
     tipo_destino: "sucursal",
@@ -526,18 +527,22 @@ const createSimplePackageOrders = async (params: {
   role: string;
   currentBranchId?: string;
   paymentMethod?: "efectivo" | "qr" | "";
+  skipGuideNotification?: boolean;
 }) => {
   const role = String(params.role || "").toLowerCase();
   const paymentMethod = normalizePaymentMethod(params.paymentMethod || "");
+  const skipGuideNotification = params.skipGuideNotification === true && role === "superadmin";
   const rows = await SimplePackageRepository.getSimplePackagesByIDs(params.packageIds || []);
   const pendingRows = rows.filter((row: any) => !row?.is_external);
   if (!pendingRows.length) {
     throw new Error("No hay paquetes pendientes para crear");
   }
 
-  const missingPrintedLabel = pendingRows.filter((row: any) => !row?.qr_impreso || !row?.numero_guia);
-  if (missingPrintedLabel.length) {
-    throw new Error("Debe imprimir las etiquetas antes de crear los pedidos simples");
+  if (!skipGuideNotification) {
+    const missingPrintedLabel = pendingRows.filter((row: any) => !row?.qr_impreso || !row?.numero_guia);
+    if (missingPrintedLabel.length) {
+      throw new Error("Debe imprimir las etiquetas antes de crear los pedidos simples");
+    }
   }
 
   if (
@@ -555,9 +560,10 @@ const createSimplePackageOrders = async (params: {
   let effectivoCount = 0;
   let qrAmount = 0;
   let qrCount = 0;
+  const orderCreatedAt = normalizeDate(new Date());
 
   for (const row of pendingRows as any[]) {
-    const shippingPayload = buildSimplePackageShippingPayload(row);
+    const shippingPayload = buildSimplePackageShippingPayload(row, orderCreatedAt);
     const salePayload = buildSimplePackageSalePayload(row);
     const createdShipping = await ShippingService.registerShipping(shippingPayload);
 
@@ -587,6 +593,7 @@ const createSimplePackageOrders = async (params: {
         seller_debt_applied: !paymentMethod,
         esta_pagado: "no",
         metodo_pago: paymentMethod,
+        fecha_pedido: orderCreatedAt as unknown as Date,
       });
 
       shippingResults.push({
@@ -630,8 +637,10 @@ const createSimplePackageOrders = async (params: {
     });
   }
 
-  const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
-  void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
+  if (!skipGuideNotification) {
+    const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
+    void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
+  }
 
   return shippingResults;
 };

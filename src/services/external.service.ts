@@ -9,6 +9,7 @@ import { SimplePackageBranchPriceRepository } from "../repositories/simplePackag
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
+import { calculateLatePickupFee } from "../utils/latePickupFee";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -49,6 +50,17 @@ const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 
 const toObjectIdOrUndefined = (value?: string) =>
   value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
+
+const isBranchTransferSale = (row: any) => {
+  const originId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
+  const destinationId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal ?? row?.sucursal);
+  return Boolean(originId && destinationId && originId !== destinationId);
+};
+
+const resolveStorageFeeStartForExternal = (row: any) =>
+  isBranchTransferSale(row)
+    ? row?.storage_fee_start_at || row?.fecha_pedido
+    : row?.fecha_pedido;
 
 const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
   "1": "Transferencia o QR",
@@ -619,6 +631,22 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
             amountToCharge,
           amountToCharge
         );
+  const deliveredAt =
+    delivered && !externalSale.hora_entrega_real
+      ? existingDelivered && existing.hora_entrega_real
+        ? existing.hora_entrega_real
+        : normalizeExternalDate(new Date())
+      : externalSale.hora_entrega_real;
+  const latePickupFee =
+    serviceOrigin === "external" && delivered && !existingDelivered
+      ? calculateLatePickupFee({
+          startAt: resolveStorageFeeStartForExternal(existing),
+          pickedUpAt: deliveredAt || new Date(),
+        })
+      : 0;
+  const finalBuyerDebtAmount = roundCurrency(buyerDebtAmount + latePickupFee);
+  const finalMontoPagaComprador = roundCurrency(montoPagaComprador + latePickupFee);
+  const finalSaldoCobrar = roundCurrency(saldoCobrar + latePickupFee);
   const existingSellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const isLegacyMixedWithoutSellerMethod =
     existing.esta_pagado === "mixto" &&
@@ -641,10 +669,13 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     serviceOrigin === "external"
       ? resolveExternalDeliveryPayment({
           delivered,
-          buyerAmount: buyerDebtAmount,
+          buyerAmount: finalBuyerDebtAmount,
           paymentType: externalSale.tipo_de_pago ?? existing.tipo_de_pago,
           subtotalQr: externalSale.subtotal_qr ?? existing.subtotal_qr,
-          subtotalEfectivo: externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
+          subtotalEfectivo:
+            latePickupFee > 0
+              ? roundCurrency(toNumber(externalSale.subtotal_efectivo ?? existing.subtotal_efectivo, 0) + latePickupFee)
+              : externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
         })
       : {
           tipoDePago: String(existing.tipo_de_pago || ""),
@@ -660,15 +691,16 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     precio_total: totalPrice,
     esta_pagado: paid,
     monto_paga_vendedor: montoPagaVendedor,
-    monto_paga_comprador: montoPagaComprador,
-    saldo_cobrar: serviceOrigin === "external" ? roundCurrency(saldoCobrar) : saldoCobrar,
-    deuda_comprador: buyerDebtAmount,
+    monto_paga_comprador: finalMontoPagaComprador,
+    saldo_cobrar: serviceOrigin === "external" ? finalSaldoCobrar : saldoCobrar,
+    deuda_comprador: finalBuyerDebtAmount,
     metodo_pago: sellerPaymentMethod,
     tipo_de_pago: deliveryPayment.tipoDePago,
     subtotal_qr: deliveryPayment.subtotalQr,
     subtotal_efectivo: deliveryPayment.subtotalEfectivo,
     estado_pedido: status,
     delivered,
+    late_pickup_fee: latePickupFee,
     is_external: true,
     service_origin: serviceOrigin,
   };
@@ -686,11 +718,12 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.fecha_pedido = normalizeExternalDate(externalSale.fecha_pedido);
   }
 
+  if (status === "En camino" && !existing.storage_fee_start_at && isBranchTransferSale(existing)) {
+    updatePayload.storage_fee_start_at = normalizeExternalDate(new Date());
+  }
+
   if (delivered && !externalSale.hora_entrega_real) {
-    updatePayload.hora_entrega_real =
-      existingDelivered && existing.hora_entrega_real
-        ? existing.hora_entrega_real
-        : normalizeExternalDate(new Date());
+    updatePayload.hora_entrega_real = deliveredAt;
   } else if (!delivered) {
     updatePayload.hora_entrega_real = undefined;
   }

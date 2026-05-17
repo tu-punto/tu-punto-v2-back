@@ -12,6 +12,8 @@ export interface IPedido {
   hora_entrega_acordada: Date;
   hora_entrega_rango_final: Date;
   hora_entrega_real: Date;
+  storage_fee_start_at?: Date;
+  late_pickup_fee?: number;
 
   observaciones: string;
   lugar_origen?: Types.ObjectId; 

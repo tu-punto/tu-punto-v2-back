@@ -35,6 +35,14 @@ const PedidoSchema = new Schema({
     type: Date,
     required: false,
   },
+  storage_fee_start_at: {
+    type: Date,
+    required: false,
+  },
+  late_pickup_fee: {
+    type: Number,
+    default: 0,
+  },
   observaciones: {
     type: String,
     default: ""
