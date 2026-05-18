@@ -31,6 +31,9 @@ export const getSellers = async (req: Request, res: Response) => {
     const q = String(req.query.q || "").trim() || undefined;
     const statusQuery = String(req.query.status || "").trim().toLowerCase();
     const pendingPaymentQuery = String(req.query.pendingPayment || "").trim().toLowerCase();
+    const assignedPaymentDayQuery = String(req.query.assignedPaymentDay || "").trim().toLowerCase();
+    const sortByQuery = String(req.query.sortBy || "").trim();
+    const sortOrderQuery = String(req.query.sortOrder || "").trim().toLowerCase();
     const usePagination = req.query.page !== undefined || req.query.pageSize !== undefined;
     const page = usePagination ? Math.max(1, Number(req.query.page || 1)) : undefined;
     const pageSize = usePagination
@@ -47,6 +50,15 @@ export const getSellers = async (req: Request, res: Response) => {
       pendingPaymentQuery === "con_deuda" || pendingPaymentQuery === "sin_deuda"
         ? pendingPaymentQuery
         : undefined;
+    const assignedPaymentDay =
+      assignedPaymentDayQuery === "sin_solicitud" ||
+      assignedPaymentDayQuery === "8" ||
+      assignedPaymentDayQuery === "18" ||
+      assignedPaymentDayQuery === "28"
+        ? assignedPaymentDayQuery
+        : undefined;
+    const sortBy = sortByQuery === "fecha_pago_asignada" ? sortByQuery : undefined;
+    const sortOrder = sortOrderQuery === "desc" ? "desc" : "asc";
 
     if (authRole === "seller" && authUserId) {
       const sellerId = await resolveSellerIdByAuthUser(authUserId);
@@ -59,6 +71,9 @@ export const getSellers = async (req: Request, res: Response) => {
         q,
         status,
         pendingPayment,
+        assignedPaymentDay,
+        sortBy,
+        sortOrder,
         page,
         pageSize,
       });
@@ -69,6 +84,9 @@ export const getSellers = async (req: Request, res: Response) => {
       q,
       status,
       pendingPayment,
+      assignedPaymentDay,
+      sortBy,
+      sortOrder,
       page,
       pageSize,
     });

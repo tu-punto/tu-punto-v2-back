@@ -106,6 +106,9 @@ type SellerListFilters = {
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
+  assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
+  sortBy?: "fecha_pago_asignada";
+  sortOrder?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 };
