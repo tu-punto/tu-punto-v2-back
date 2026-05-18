@@ -153,8 +153,9 @@ const buildPackagePricing = (
 ) => {
   const precioPaqueteUnitario = roundCurrency(smallPackagePrice);
   const precioPaquete = roundCurrency(smallPackagePrice);
-  const deudaVendedor = roundCurrency(amortizacion);
-  const deudaComprador = roundCurrency(Math.max(0, precioPaquete + branchRoutePrice - deudaVendedor));
+  const deudaVendedor = roundCurrency(Math.min(Math.max(0, amortizacion), precioPaquete));
+  const saldoPrecioPaquete = roundCurrency(Math.max(0, precioPaquete - deudaVendedor));
+  const deudaComprador = roundCurrency(saldoPrecioPaquete + branchRoutePrice);
   const precioEntreSucursal = roundCurrency(branchRoutePrice);
   const precioTotal = roundCurrency(precioPaquete + precioEntreSucursal);
 
@@ -176,25 +177,27 @@ const buildPackagePricing = (
 
 const buildAccountingAmount = (row: any) =>
   roundCurrency(
-    Number(row?.precio_paquete || 0) +
-      Number(row?.saldo_por_paquete || 0) -
-      Number(row?.amortizacion_vendedor || 0)
+    Math.max(
+      0,
+      Number(row?.precio_paquete || 0) - Number(row?.amortizacion_vendedor || 0)
+    ) + Number(row?.saldo_por_paquete || 0)
   );
 
 const buildTotalAmountToCharge = (row: any) =>
   roundCurrency(
-    Math.max(
-      0,
-      Number(row?.precio_paquete || 0) +
-        Number(row?.saldo_por_paquete || 0) +
-        Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0) -
-        Number(row?.amortizacion_vendedor || 0)
-    )
+    Math.max(0, Number(row?.precio_paquete || 0) - Number(row?.amortizacion_vendedor || 0)) +
+      Number(row?.saldo_por_paquete || 0) +
+      Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0)
   );
 
 const resolveSimplePackagePaymentPayload = (row: any) => {
   const method = normalizePaymentMethod(row?.metodo_pago);
-  const sellerDebtAmount = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+  const sellerDebtAmount = roundCurrency(
+    Math.min(
+      Math.max(0, Number(row?.amortizacion_vendedor || 0)),
+      Math.max(0, Number(row?.precio_paquete || 0))
+    )
+  );
 
   if (!method) {
     return {
@@ -423,9 +426,6 @@ const buildSimplePackageRecord = async (params: {
   if (amortizacionVendedor < 0) {
     throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser menor a 0`);
   }
-  if (amortizacionVendedor > precioPaquete) {
-    throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser mayor al precio del paquete`);
-  }
   const pricing = buildPackagePricing(
     precioPaqueteUnitario,
     amortizacionVendedor,
@@ -570,7 +570,12 @@ const createSimplePackageOrders = async (params: {
     try {
       await ShippingService.processSalesForShipping(String(createdShipping._id), [salePayload]);
 
-      const sellerAmortizacion = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+      const sellerAmortizacion = roundCurrency(
+        Math.min(
+          Math.max(0, Number(row?.amortizacion_vendedor || 0)),
+          Math.max(0, Number(row?.precio_paquete || 0))
+        )
+      );
       
       if (paymentMethod === "efectivo") {
         effectivoAmount += sellerAmortizacion;
@@ -844,9 +849,6 @@ const updateSimplePackageByID = async (params: {
   if (nextAmortizacionVendedor < 0) {
     throw new Error("El monto que cubrira el vendedor no puede ser menor a 0");
   }
-  if (nextAmortizacionVendedor > nextPrecioPaquete) {
-    throw new Error("El monto que cubrira el vendedor no puede ser mayor al precio del paquete");
-  }
   const pricing = buildPackagePricing(
     nextPrecioPaquete,
     nextAmortizacionVendedor,
@@ -879,7 +881,7 @@ const updateSimplePackageByID = async (params: {
     updatePayload.comprador = nextBuyer || undefined;
     updatePayload.telefono_comprador = nextPhone || undefined;
     updatePayload.descripcion_paquete = nextDescription;
-    updatePayload.amortizacion_vendedor = nextAmortizacionVendedor;
+    updatePayload.amortizacion_vendedor = pricing.amortizacion_vendedor;
     updatePayload.saldo_por_paquete = nextSaldoPorPaquete;
   }
 

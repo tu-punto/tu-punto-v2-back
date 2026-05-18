@@ -9,7 +9,7 @@ import { SimplePackageBranchPriceRepository } from "../repositories/simplePackag
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
-import { calculateLatePickupFee } from "../utils/latePickupFee";
+import { calculateEstimatedBranchPickupDate, calculateLatePickupFee } from "../utils/latePickupFee";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -51,6 +51,20 @@ const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 const toObjectIdOrUndefined = (value?: string) =>
   value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
 
+const isSameBusinessDay = (value: unknown) => {
+  const date = moment.tz(value as any, "America/La_Paz");
+  if (!date.isValid()) return false;
+  return date.isSame(moment().tz("America/La_Paz"), "day");
+};
+
+const getBusinessDayRange = (value: unknown) => {
+  const start = moment.tz(value as any, "America/La_Paz").startOf("day");
+  return {
+    from: start.toDate(),
+    to: start.clone().add(1, "day").toDate(),
+  };
+};
+
 const isBranchTransferSale = (row: any) => {
   const originId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
   const destinationId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal ?? row?.sucursal);
@@ -59,7 +73,7 @@ const isBranchTransferSale = (row: any) => {
 
 const resolveStorageFeeStartForExternal = (row: any) =>
   isBranchTransferSale(row)
-    ? row?.storage_fee_start_at || row?.fecha_pedido
+    ? calculateEstimatedBranchPickupDate(row?.fecha_pedido) || row?.fecha_pedido
     : row?.fecha_pedido;
 
 const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
@@ -189,6 +203,40 @@ const registerExternalMixedIncome = async (params: {
         ? new Types.ObjectId(params.branchId)
         : undefined,
   });
+};
+
+const adjustExternalSellerIncome = async (params: {
+  paymentMethod: "efectivo" | "qr";
+  amountDelta: number;
+  branchId?: string;
+  date?: unknown;
+}) => {
+  const amountDelta = roundCurrency(params.amountDelta);
+  if (!params.paymentMethod || amountDelta === 0) return;
+
+  const range = getBusinessDayRange(params.date || new Date());
+  const existingFlux = await FinanceFluxRepository.findExternalSellerIncomeForAdjustment({
+    paymentMethod: params.paymentMethod,
+    branchId: params.branchId,
+    from: range.from,
+    to: range.to,
+  });
+
+  if (existingFlux) {
+    await FinanceFluxRepository.updateById(String((existingFlux as any)._id), {
+      monto: roundCurrency(Math.max(0, Number((existingFlux as any).monto || 0) + amountDelta)),
+    });
+    return;
+  }
+
+  if (amountDelta > 0) {
+    await registerExternalMixedIncome({
+      paymentMethod: params.paymentMethod,
+      amount: amountDelta,
+      packageCount: 1,
+      branchId: params.branchId,
+    });
+  }
 };
 
 const resolveExternalDeliveryPayment = (params: {
@@ -571,22 +619,31 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     throw new Error("No se puede editar una entrega que ya fue entregada");
   }
 
-  const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
-  const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
-
-  const price = toNumber(
-    externalSale.precio_paquete ?? existing.precio_paquete ?? externalSale.precio_total ?? existing.precio_total,
-    0
-  );
   const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
     | "external"
     | "simple_package";
+  const paymentEditRequested =
+    Object.prototype.hasOwnProperty.call(externalSale, "esta_pagado") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
+  const buyerNameEditRequested = Object.prototype.hasOwnProperty.call(externalSale, "comprador");
+
+  if (serviceOrigin === "simple_package" && (paymentEditRequested || buyerNameEditRequested)) {
+    throw new Error("Por ahora no se pueden editar los cobros ni el comprador de pedidos simples");
+  }
+
+  if (serviceOrigin === "external" && (paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
+    throw new Error("Solo se puede editar el cobro o el comprador el mismo dia que se creo la entrega");
+  }
+
+  const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
+  const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
+
+  const price = toNumber(existing.precio_paquete ?? existing.precio_total, 0);
   const branchRoutePrice = roundCurrency(
     toNumber(
-      externalSale.precio_entre_sucursal ??
-        existing.precio_entre_sucursal ??
-        externalSale.cargo_delivery ??
-        existing.cargo_delivery,
+      existing.precio_entre_sucursal ?? existing.cargo_delivery,
       0
     )
   );
@@ -655,7 +712,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     !hasSellerMethodUpdate &&
     !hasSellerAmountUpdate;
   const sellerPaymentMethod = montoPagaVendedor > 0
-    ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago)
+    ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago) || (paymentEditRequested ? "efectivo" : "")
     : "";
   if (
     serviceOrigin === "external" &&
@@ -684,9 +741,13 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
         };
 
   const updatePayload: any = {
-    ...externalSale,
+    id_vendedor: existing.id_vendedor,
+    carnet_vendedor: existing.carnet_vendedor,
+    vendedor: existing.vendedor,
+    telefono_vendedor: existing.telefono_vendedor,
     comprador: buyerName || undefined,
     telefono_comprador: buyerPhone || undefined,
+    descripcion_paquete: existing.descripcion_paquete,
     precio_paquete: price,
     precio_total: totalPrice,
     esta_pagado: paid,
@@ -715,11 +776,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   }
 
   if (externalSale.fecha_pedido) {
-    updatePayload.fecha_pedido = normalizeExternalDate(externalSale.fecha_pedido);
-  }
-
-  if (status === "En camino" && !existing.storage_fee_start_at && isBranchTransferSale(existing)) {
-    updatePayload.storage_fee_start_at = normalizeExternalDate(new Date());
+    updatePayload.fecha_pedido = existing.fecha_pedido;
   }
 
   if (delivered && !externalSale.hora_entrega_real) {
@@ -728,9 +785,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.hora_entrega_real = undefined;
   }
 
-  if (externalSale.id_sucursal) {
-    updatePayload.sucursal = externalSale.id_sucursal;
-  }
+  updatePayload.sucursal = existing.sucursal;
 
   const sellerId = String(existing.id_vendedor || "");
   const sellerPendingDelta = roundCurrency(simplePackageFinancials.sellerPending);
@@ -762,7 +817,31 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.hora_entrega_real = undefined;
   }
 
-  return await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
+  const previousSellerMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
+  const previousSellerAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
+  const updated = await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
+
+  if (serviceOrigin === "external" && paymentEditRequested && updated) {
+    const branchId = String((existing.sucursal as any)?._id || existing.sucursal || "");
+    if (previousSellerMethod && previousSellerAmount > 0) {
+      await adjustExternalSellerIncome({
+        paymentMethod: previousSellerMethod,
+        amountDelta: -previousSellerAmount,
+        branchId,
+        date: existing.fecha_pedido,
+      });
+    }
+    if (sellerPaymentMethod && montoPagaVendedor > 0) {
+      await adjustExternalSellerIncome({
+        paymentMethod: sellerPaymentMethod,
+        amountDelta: montoPagaVendedor,
+        branchId,
+        date: existing.fecha_pedido,
+      });
+    }
+  }
+
+  return updated;
 };
 
 export const ExternalSaleService = {

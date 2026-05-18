@@ -1,8 +1,8 @@
-import moment from "moment-timezone";
 import { IVentaExterna } from "../entities/IVentaExterna";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { sendTemplateMessage } from "../api/whatsapp/whatsapp";
+import { getEstimatedBranchPickupDateLabel } from "../utils/latePickupFee";
 
 type SendAttempt = {
   type: "seller" | "buyer";
@@ -116,13 +116,6 @@ const getBranchLocationButtonValue = (branchName: string) => {
   return toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_BUTTON_VALUE) || BRANCH_LOCATION_LINKS[0].buttonValue;
 };
 
-const getPickupDateLabel = (value: unknown) => {
-  const createdAt = value ? moment.tz(value as any, "America/La_Paz") : moment.tz("America/La_Paz");
-  const day = createdAt.isoWeekday();
-  const daysToAdd = day === 2 ? 2 : day === 3 ? 1 : day === 4 ? 5 : day === 5 ? 4 : day === 6 ? 3 : day === 7 ? 2 : 1;
-  return createdAt.add(daysToAdd, "days").format("DD/MM/YYYY");
-};
-
 const compactGuideList = (rows: any[]) =>
   rows
     .map((row, index) => `${index + 1}. ${getGuide(row)}`)
@@ -161,7 +154,7 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
           templateParam(getOriginName(row)),
           templateParam(destinationName),
           templateParam(guide),
-          templateParam(getPickupDateLabel(row?.fecha_pedido)),
+          templateParam(getEstimatedBranchPickupDateLabel(row?.fecha_pedido)),
         ];
     const response = await sendTemplateMessage({
       phone,

@@ -17,7 +17,7 @@ import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { OrderGuideService } from "./orderGuide.service";
-import { addLatePickupFeeToPayment, calculateLatePickupFee } from "../utils/latePickupFee";
+import { addLatePickupFeeToPayment, calculateEstimatedBranchPickupDate, calculateLatePickupFee } from "../utils/latePickupFee";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -184,17 +184,8 @@ const isBranchTransferShipping = async (shipping: any): Promise<boolean> => {
 };
 
 const resolveStorageFeeStartForShipping = async (shipping: any) => {
-  if (shipping?.storage_fee_start_at) return shipping.storage_fee_start_at;
   if (!(await isBranchTransferShipping(shipping))) return shipping?.fecha_pedido;
-
-  const inTransitHistory = await ShippingStatusHistoryModel.findOne({
-    shippingId: shipping?._id,
-    toStatus: "En camino",
-  })
-    .sort({ createdAt: 1 })
-    .lean();
-
-  return inTransitHistory?.createdAt || shipping?.fecha_pedido;
+  return calculateEstimatedBranchPickupDate(shipping?.fecha_pedido) || shipping?.fecha_pedido;
 };
 
 const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {
@@ -734,10 +725,6 @@ const updateShipping = async (
 
   if (willBeDelivered && !(await canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId))) {
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
-  }
-
-  if (toStatus === "En camino" && !shipping.storage_fee_start_at && await isBranchTransferShipping(nextShippingState)) {
-    newData.storage_fee_start_at = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
 
   let latePickupFee = 0;

@@ -4,6 +4,18 @@ const TZ = "America/La_Paz";
 const GRACE_DAYS = 7;
 const DAILY_FEE = 1;
 
+export const calculateEstimatedBranchPickupDate = (value?: unknown) => {
+  const createdAt = value ? moment.tz(value as any, TZ) : moment.tz(TZ);
+  if (!createdAt.isValid()) return null;
+
+  const day = createdAt.isoWeekday();
+  const daysToAdd = day === 2 ? 2 : day === 3 ? 1 : day === 4 ? 5 : day === 5 ? 4 : day === 6 ? 3 : day === 7 ? 2 : 1;
+  return createdAt.add(daysToAdd, "days");
+};
+
+export const getEstimatedBranchPickupDateLabel = (value?: unknown) =>
+  calculateEstimatedBranchPickupDate(value)?.format("DD/MM/YYYY") || "";
+
 export const calculateLatePickupFee = (params: {
   startAt?: unknown;
   pickedUpAt?: unknown;
