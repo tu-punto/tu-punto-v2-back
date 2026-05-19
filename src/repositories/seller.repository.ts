@@ -18,6 +18,9 @@ type SellerListQueryParams = {
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
+  assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
+  sortBy?: "fecha_pago_asignada";
+  sortOrder?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 };
@@ -198,6 +201,28 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
       },
       { fecha_vigencia: null },
       { fecha_vigencia: { $exists: false } }
+    ];
+  }
+
+  if (params?.assignedPaymentDay === "sin_solicitud") {
+    match.$and = [
+      ...(Array.isArray(match.$and) ? match.$and : []),
+      {
+        $or: [
+          { fecha_pago_asignada: { $exists: false } },
+          { fecha_pago_asignada: null },
+          { fecha_pago_asignada: "" },
+        ],
+      },
+    ];
+  } else if (params?.assignedPaymentDay) {
+    match.$and = [
+      ...(Array.isArray(match.$and) ? match.$and : []),
+      {
+        $expr: {
+          $eq: [{ $dayOfMonth: "$fecha_pago_asignada" }, Number(params.assignedPaymentDay)],
+        },
+      },
     ];
   }
 
@@ -413,12 +438,22 @@ const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
       : params?.pendingPayment === "sin_deuda"
       ? { pago_pendiente: 0 }
       : null;
+  const assignedPaymentSortDirection: 1 | -1 = params?.sortOrder === "desc" ? -1 : 1;
+  const sortStage: Record<string, 1 | -1> =
+    params?.sortBy === "fecha_pago_asignada"
+      ? {
+          fecha_pago_asignada: assignedPaymentSortDirection,
+          nombre: 1,
+          apellido: 1,
+          _id: 1,
+        }
+      : { nombre: 1, apellido: 1, _id: 1 };
 
   const result = await VendedorModel.aggregate([
     ...(Object.keys(match).length ? [{ $match: match }] : []),
     ...buildSellerMetricsStages(),
     ...(pendingMatch ? [{ $match: pendingMatch }] : []),
-    { $sort: { nombre: 1, apellido: 1, _id: 1 } },
+    { $sort: sortStage },
     {
       $facet: {
         rows: [{ $skip: skip }, { $limit: pageSize }],
