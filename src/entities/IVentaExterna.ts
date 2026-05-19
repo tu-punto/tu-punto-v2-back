@@ -52,6 +52,7 @@ export interface IVentaExterna {
     shipping_qr_image_path?: string;
     qr_impreso?: boolean;
     qr_impreso_at?: Date;
+    public_tracking_received_at?: Date;
     numero_guia?: string;
     guia_sequence?: number;
 

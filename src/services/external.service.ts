@@ -493,6 +493,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     descripcion_paquete: toTrimmed(input.descripcion_paquete ?? input.descripcion ?? "Sin descripcion"),
     telefono_comprador: buyerPhone || undefined,
     fecha_pedido: normalizeExternalDate(input.fecha_pedido) as unknown as Date,
+    public_tracking_received_at: new Date(),
     sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     origen_sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),

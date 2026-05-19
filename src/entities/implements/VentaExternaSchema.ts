@@ -249,6 +249,10 @@ const VentaExternaSchema = new Schema({
         type: Date,
         required: false,
     },
+    public_tracking_received_at: {
+        type: Date,
+        required: false,
+    },
     numero_guia: {
         type: String,
         required: false,

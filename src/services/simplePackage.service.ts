@@ -326,6 +326,7 @@ const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) =
     costo_delivery: 0,
     cargo_delivery: roundCurrency(Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0)),
     estado_pedido: "En Espera",
+    public_tracking_received_at: new Date(),
     adelanto_cliente: 0,
     esta_pagado: paymentData.esta_pagado,
     pagado_al_vendedor: false,

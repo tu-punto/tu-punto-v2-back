@@ -130,6 +130,10 @@ const PedidoSchema = new Schema({
     default: "",
     index: true,
   },
+  public_tracking_received_at: {
+    type: Date,
+    required: false,
+  },
   numero_guia: {
     type: String,
     required: false,
