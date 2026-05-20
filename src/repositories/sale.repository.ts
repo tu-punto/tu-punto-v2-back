@@ -5,6 +5,7 @@ import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { IVenta } from "../entities/IVenta";
 import { IVentaDocument } from "../entities/documents/IVentaDocument";
 import { Types } from 'mongoose';
+import { applySellerCommissionCap } from "../utils/commissionCap";
 
 
 const findAll = async (): Promise<IVentaDocument[]> => {
@@ -56,7 +57,7 @@ const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
   }
 
   // Busca el vendedor para obtener sus comisiones
-  const vendedor = await VendedorModel.findById(sale.id_vendedor);
+  const vendedor = await VendedorModel.findById(sale.id_vendedor || sale.vendedor);
 
   let comision = 0;
   const precioUnitario = sale.precio_unitario || 0;
@@ -73,7 +74,7 @@ const registerSale = async (sale: IVenta): Promise<IVentaDocument> => {
     }
   }
 
-  sale.comision = comision;
+  sale.comision = applySellerCommissionCap(sale.id_vendedor || sale.vendedor, comision);
 
   const newSale = new VentaModel(sale);
   const saved = await newSale.save();
@@ -208,7 +209,7 @@ async function recalcularComisiones() {
       }
     }
 
-    venta.comision = comision;
+    venta.comision = applySellerCommissionCap(venta.id_vendedor || venta.vendedor, comision);
     await venta.save();
   }
   console.log("Comisiones recalculadas y guardadas.");

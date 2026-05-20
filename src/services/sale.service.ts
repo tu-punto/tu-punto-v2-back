@@ -6,6 +6,7 @@ import { SellerService } from "./seller.service";
 import { ProductService } from "./product.service";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { applySellerCommissionCap } from "../utils/commissionCap";
 import { variantFingerprint, variantLabel } from "../utils/variantKey";
 
 type VariantRecord = Record<string, string>;
@@ -196,6 +197,7 @@ const registerSale = async (sale: any) => {
       ...(variantes ? { variantes } : {}),
       ...(rawSale.variantKey ? { variantKey: String(rawSale.variantKey) } : {}),
     };
+    saleData.utilidad = applySellerCommissionCap(saleData.vendedor, Number(saleData.utilidad || 0));
 
     await adjustStockForSale(saleData, -cantidad);
 
@@ -467,7 +469,8 @@ const updateSaleById = async (id: string, fields: any) => {
   const nextCantidad = cantidad !== undefined ? Number(cantidad) : Number(venta.cantidad);
   const nextPrecioUnitario =
     precio_unitario !== undefined ? Number(precio_unitario) : Number(venta.precio_unitario);
-  const nextUtilidad = utilidad !== undefined ? Number(utilidad) : Number(venta.utilidad);
+  const rawNextUtilidad = utilidad !== undefined ? Number(utilidad) : Number(venta.utilidad);
+  const nextUtilidad = applySellerCommissionCap(venta.vendedor, rawNextUtilidad);
 
   if (!Number.isFinite(nextCantidad) || nextCantidad <= 0) {
     throw new Error("Cantidad invalida para actualizar la venta.");
