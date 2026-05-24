@@ -17,7 +17,7 @@ import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { OrderGuideService } from "./orderGuide.service";
-import { addLatePickupFeeToPayment, calculateEstimatedBranchPickupDate, calculateLatePickupFee } from "../utils/latePickupFee";
+import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -185,7 +185,8 @@ const isBranchTransferShipping = async (shipping: any): Promise<boolean> => {
 
 const resolveStorageFeeStartForShipping = async (shipping: any) => {
   if (!(await isBranchTransferShipping(shipping))) return shipping?.fecha_pedido;
-  return calculateEstimatedBranchPickupDate(shipping?.fecha_pedido) || shipping?.fecha_pedido;
+  if (shipping?.public_tracking_frozen === true) return null;
+  return resolveBranchPickupFeeStart(shipping);
 };
 
 const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {

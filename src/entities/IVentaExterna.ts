@@ -53,6 +53,10 @@ export interface IVentaExterna {
     qr_impreso?: boolean;
     qr_impreso_at?: Date;
     public_tracking_received_at?: Date;
+    public_tracking_schedule_base_at?: Date;
+    public_tracking_frozen?: boolean;
+    public_tracking_frozen_status?: string;
+    public_tracking_frozen_at?: Date;
     numero_guia?: string;
     guia_sequence?: number;
 

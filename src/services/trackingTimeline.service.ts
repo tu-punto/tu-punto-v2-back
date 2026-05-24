@@ -22,6 +22,9 @@ type TrackingOrderLike = {
   estado_pedido?: unknown;
   fecha_pedido?: unknown;
   public_tracking_received_at?: unknown;
+  public_tracking_schedule_base_at?: unknown;
+  public_tracking_frozen?: unknown;
+  public_tracking_frozen_status?: unknown;
   hora_entrega_real?: unknown;
   lugar_origen?: BranchLike;
   origen_sucursal?: BranchLike;
@@ -62,8 +65,27 @@ const getReceptionDate = (order: TrackingOrderLike): Date => {
   );
 };
 
+const getScheduleBaseDate = (order: TrackingOrderLike, fallback: Date): Date => {
+  return toDateOrNull(order.public_tracking_schedule_base_at) || fallback;
+};
+
 const isDelivered = (order: TrackingOrderLike) =>
   toTrimmed(order.estado_pedido).toLowerCase() === "entregado";
+
+const isFrozen = (order: TrackingOrderLike) => order.public_tracking_frozen === true;
+
+const normalizeFrozenStatus = (value: unknown): PublicTrackingStatus | null => {
+  const normalized = toTrimmed(value).toUpperCase();
+  if (
+    normalized === "RECEPTION" ||
+    normalized === "IN_TRANSIT" ||
+    normalized === "READY_FOR_PICKUP" ||
+    normalized === "DELIVERED"
+  ) {
+    return normalized as PublicTrackingStatus;
+  }
+  return null;
+};
 
 const isDeliveryOrder = (order: TrackingOrderLike): boolean => {
   const originId =
@@ -153,19 +175,23 @@ const buildSteps = (params: {
 
 const buildPublicTracking = (order: TrackingOrderLike, now = new Date()) => {
   const receptionAt = getReceptionDate(order);
+  const scheduleBaseAt = getScheduleBaseDate(order, receptionAt);
   const delivery = isDeliveryOrder(order);
   const delivered = isDelivered(order);
   const deliveredAt = delivered ? toDateOrNull(order.hora_entrega_real) || now : null;
   const transferTimes = delivery
-    ? getTransferTimes(receptionAt)
+    ? getTransferTimes(scheduleBaseAt)
     : { inTransitAt: undefined, readyAt: receptionAt };
-  const status = pickCurrentStatus({
-    delivered,
-    delivery,
-    now,
-    inTransitAt: transferTimes.inTransitAt,
-    readyAt: transferTimes.readyAt,
-  });
+  const status =
+    isFrozen(order) && delivery && !delivered
+      ? normalizeFrozenStatus(order.public_tracking_frozen_status) || "RECEPTION"
+      : pickCurrentStatus({
+          delivered,
+          delivery,
+          now,
+          inTransitAt: transferTimes.inTransitAt,
+          readyAt: transferTimes.readyAt,
+        });
 
   return {
     status,

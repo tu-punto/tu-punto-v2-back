@@ -26,6 +26,7 @@ import trackingRouter from "./routes/tracking.routes";
 import serviceAnnouncementRouter from "./routes/serviceAnnouncement.routes";
 import simplePackageRouter from "./routes/simplePackage.routes";
 import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
+import trackingFreezeRouter from "./routes/trackingFreeze.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -68,6 +69,7 @@ router.use("/boxClose", requireAuth, requireRole("admin", "operator"), boxCloseR
 router.use("/dailyEffective", requireAuth, requireRole("admin", "operator"), dailyEffectiveRouter);
 router.use("/external", requireAuth, requireRole("admin", "operator"), externalSaleRouter)
 router.use("/simple-packages", requireAuth, requireRole("admin", "operator", "seller"), simplePackageRouter)
+router.use("/tracking-freeze", requireAuth, requireRole("superadmin"), trackingFreezeRouter)
 router.use("/stock-withdrawals", requireAuth, stockWithdrawalRouter)
 
 router.use("/qr", qr);

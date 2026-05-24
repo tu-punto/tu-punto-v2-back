@@ -11,6 +11,7 @@ import { hasConfiguredSimplePackageService } from "../utils";
 import { OrderGuideService } from "./orderGuide.service";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
+import { TrackingFreezeService } from "./trackingFreeze.service";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -564,7 +565,13 @@ const createSimplePackageOrders = async (params: {
   const orderCreatedAt = normalizeDate(new Date());
 
   for (const row of pendingRows as any[]) {
-    const shippingPayload = buildSimplePackageShippingPayload(row, orderCreatedAt);
+    const shippingPayload = {
+      ...buildSimplePackageShippingPayload(row, orderCreatedAt),
+      ...(await TrackingFreezeService.getFreezeFieldsForOrder({
+        originBranchId: (row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal,
+        destinationBranchId: (row?.destino_sucursal as any)?._id ?? row?.destino_sucursal,
+      })),
+    };
     const salePayload = buildSimplePackageSalePayload(row);
     const createdShipping = await ShippingService.registerShipping(shippingPayload);
 

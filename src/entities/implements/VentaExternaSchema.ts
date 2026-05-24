@@ -253,6 +253,23 @@ const VentaExternaSchema = new Schema({
         type: Date,
         required: false,
     },
+    public_tracking_schedule_base_at: {
+        type: Date,
+        required: false,
+    },
+    public_tracking_frozen: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
+    public_tracking_frozen_status: {
+        type: String,
+        required: false,
+    },
+    public_tracking_frozen_at: {
+        type: Date,
+        required: false,
+    },
     numero_guia: {
         type: String,
         required: false,

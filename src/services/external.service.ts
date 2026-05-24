@@ -9,7 +9,8 @@ import { SimplePackageBranchPriceRepository } from "../repositories/simplePackag
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
-import { calculateEstimatedBranchPickupDate, calculateLatePickupFee } from "../utils/latePickupFee";
+import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
+import { TrackingFreezeService } from "./trackingFreeze.service";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -73,7 +74,9 @@ const isBranchTransferSale = (row: any) => {
 
 const resolveStorageFeeStartForExternal = (row: any) =>
   isBranchTransferSale(row)
-    ? calculateEstimatedBranchPickupDate(row?.fecha_pedido) || row?.fecha_pedido
+    ? row?.public_tracking_frozen === true
+      ? null
+      : resolveBranchPickupFeeStart(row)
     : row?.fecha_pedido;
 
 const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
@@ -482,6 +485,10 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     montoPagaVendedor > 0
       ? normalizeSellerPaymentMethod(input.metodo_pago ?? input.paymentMethod ?? input.seller_payment_method)
       : "";
+  const trackingFreezeFields = await TrackingFreezeService.getFreezeFieldsForOrder({
+    originBranchId: branchRoute.originBranchId,
+    destinationBranchId: branchRoute.destinationBranchId,
+  });
 
   return {
     id_vendedor: input.id_vendedor,
@@ -494,6 +501,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     telefono_comprador: buyerPhone || undefined,
     fecha_pedido: normalizeExternalDate(input.fecha_pedido) as unknown as Date,
     public_tracking_received_at: new Date(),
+    ...trackingFreezeFields,
     sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     origen_sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
@@ -630,11 +638,11 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
   const buyerNameEditRequested = Object.prototype.hasOwnProperty.call(externalSale, "comprador");
 
-  if (serviceOrigin === "simple_package" && (paymentEditRequested || buyerNameEditRequested)) {
-    throw new Error("Por ahora no se pueden editar los cobros ni el comprador de pedidos simples");
+  if (serviceOrigin === "simple_package" && buyerNameEditRequested) {
+    throw new Error("Por ahora no se puede editar el comprador de pedidos simples");
   }
 
-  if (serviceOrigin === "external" && (paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
+  if ((paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
     throw new Error("Solo se puede editar el cobro o el comprador el mismo dia que se creo la entrega");
   }
 
@@ -696,7 +704,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
         : normalizeExternalDate(new Date())
       : externalSale.hora_entrega_real;
   const latePickupFee =
-    serviceOrigin === "external" && delivered && !existingDelivered
+    (serviceOrigin === "external" || serviceOrigin === "simple_package") && delivered && !existingDelivered
       ? calculateLatePickupFee({
           startAt: resolveStorageFeeStartForExternal(existing),
           pickedUpAt: deliveredAt || new Date(),
@@ -715,16 +723,11 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const sellerPaymentMethod = montoPagaVendedor > 0
     ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago) || (paymentEditRequested ? "efectivo" : "")
     : "";
-  if (
-    serviceOrigin === "external" &&
-    montoPagaVendedor > 0 &&
-    !sellerPaymentMethod &&
-    !isLegacyMixedWithoutSellerMethod
-  ) {
+  if (montoPagaVendedor > 0 && !sellerPaymentMethod && !isLegacyMixedWithoutSellerMethod) {
     throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
   const deliveryPayment =
-    serviceOrigin === "external"
+    serviceOrigin === "external" || serviceOrigin === "simple_package"
       ? resolveExternalDeliveryPayment({
           delivered,
           buyerAmount: finalBuyerDebtAmount,
@@ -735,11 +738,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
               ? roundCurrency(toNumber(externalSale.subtotal_efectivo ?? existing.subtotal_efectivo, 0) + latePickupFee)
               : externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
         })
-      : {
-          tipoDePago: String(existing.tipo_de_pago || ""),
-          subtotalQr: roundCurrency(Number((existing as any)?.subtotal_qr || 0)),
-          subtotalEfectivo: roundCurrency(Number((existing as any)?.subtotal_efectivo || 0)),
-        };
+      : { tipoDePago: "", subtotalQr: 0, subtotalEfectivo: 0 };
 
   const updatePayload: any = {
     id_vendedor: existing.id_vendedor,
@@ -754,7 +753,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     esta_pagado: paid,
     monto_paga_vendedor: montoPagaVendedor,
     monto_paga_comprador: finalMontoPagaComprador,
-    saldo_cobrar: serviceOrigin === "external" ? finalSaldoCobrar : saldoCobrar,
+    saldo_cobrar: serviceOrigin === "external" ? finalSaldoCobrar : finalBuyerDebtAmount,
     deuda_comprador: finalBuyerDebtAmount,
     metodo_pago: sellerPaymentMethod,
     tipo_de_pago: deliveryPayment.tipoDePago,
@@ -774,6 +773,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   if (serviceOrigin === "simple_package") {
     updatePayload.costo_delivery = toNumber(externalSale.costo_delivery ?? existing.costo_delivery, 0);
+    updatePayload.seller_debt_applied = !(sellerPaymentMethod && montoPagaVendedor > 0);
   }
 
   if (externalSale.fecha_pedido) {

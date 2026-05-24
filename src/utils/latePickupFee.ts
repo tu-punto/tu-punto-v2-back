@@ -16,6 +16,14 @@ export const calculateEstimatedBranchPickupDate = (value?: unknown) => {
 export const getEstimatedBranchPickupDateLabel = (value?: unknown) =>
   calculateEstimatedBranchPickupDate(value)?.format("DD/MM/YYYY") || "";
 
+export const resolveBranchPickupFeeStart = (order: {
+  fecha_pedido?: unknown;
+  public_tracking_schedule_base_at?: unknown;
+}) => {
+  const scheduleBaseAt = order.public_tracking_schedule_base_at || order.fecha_pedido;
+  return calculateEstimatedBranchPickupDate(scheduleBaseAt) || scheduleBaseAt || order.fecha_pedido;
+};
+
 export const calculateLatePickupFee = (params: {
   startAt?: unknown;
   pickedUpAt?: unknown;
