@@ -782,8 +782,15 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   if (delivered && !externalSale.hora_entrega_real) {
     updatePayload.hora_entrega_real = deliveredAt;
+  } else if (delivered && externalSale.hora_entrega_real) {
+    updatePayload.hora_entrega_real = deliveredAt;
   } else if (!delivered) {
     updatePayload.hora_entrega_real = undefined;
+  }
+
+  if (externalSale.retirado_por_vendedor === true) {
+    updatePayload.retirado_por_vendedor = true;
+    updatePayload.seller_withdrawn_at = externalSale.seller_withdrawn_at || deliveredAt;
   }
 
   updatePayload.sucursal = existing.sucursal;

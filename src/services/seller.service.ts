@@ -825,6 +825,54 @@ const getSellerDebts = async (sellerId: string) => {
   return sellerDebts;
 };
 
+const createSellerRecoveryCharge = async (
+  sellerId: string,
+  payload: { monto?: unknown; concepto?: unknown; fecha?: unknown }
+) => {
+  const seller = await SellerRepository.findById(sellerId);
+  if (!seller) {
+    const error: any = new Error("Vendedor no encontrado");
+    error.status = 404;
+    throw error;
+  }
+
+  const monto = Number(payload?.monto ?? 0);
+  if (!Number.isFinite(monto) || monto <= 0) {
+    const error: any = new Error("El monto debe ser mayor a 0");
+    error.status = 400;
+    throw error;
+  }
+
+  const concepto = String(payload?.concepto || "").trim();
+  if (!concepto) {
+    const error: any = new Error("El concepto es obligatorio");
+    error.status = 400;
+    throw error;
+  }
+
+  const fecha = payload?.fecha ? new Date(String(payload.fecha)) : new Date();
+  if (Number.isNaN(fecha.getTime())) {
+    const error: any = new Error("La fecha no es valida");
+    error.status = 400;
+    throw error;
+  }
+
+  const charge = await saveFlux({
+    tipo: "INGRESO",
+    categoria: "RECUPERACION",
+    concepto,
+    monto: Number(monto.toFixed(2)),
+    fecha,
+    esDeuda: true,
+    id_vendedor: new Types.ObjectId(sellerId),
+    visible_en_flujo_general: false,
+    clase_cobro: "RECUPERACION",
+  });
+
+  await SellerRepository.incrementDebt(sellerId, Number(monto.toFixed(2)));
+  return charge;
+};
+
 const updateSellerSaldo = async (sellerId: any, addSaldo: number) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) throw new Error(`Seller with id ${sellerId} not found`);
@@ -975,6 +1023,7 @@ export const SellerService = {
   requestSellerPayment,
   declineSellerService,
   cancelSellerServiceDecline,
+  createSellerRecoveryCharge,
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,

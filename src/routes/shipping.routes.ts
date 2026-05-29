@@ -14,7 +14,8 @@ import {
   getShippingByQR,
   resolveShippingByQRPayload,
   transitionShippingStatusByQRController,
-  getShippingStatusHistoryController
+  getShippingStatusHistoryController,
+  markSellerWithdrawalController
 } from "../controllers/shipping.controller";
 import { requireSellerOwnership } from "../middlewares/auth.middleware";
 
@@ -28,6 +29,8 @@ shippingRouter.get("/:ids", getShippingByIds);
 shippingRouter.post("/register", registerShipping);
 
 shippingRouter.post("/register/sales", registerSaleToShipping);
+
+shippingRouter.post("/seller-withdrawal", markSellerWithdrawalController);
 
 shippingRouter.put("/:id", ShippingController.updateShipping);
 

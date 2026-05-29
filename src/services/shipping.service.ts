@@ -16,6 +16,7 @@ import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatu
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
+import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 
@@ -834,6 +835,8 @@ const updateShipping = async (
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
       hora_entrega_real: (resShip as any).hora_entrega_real,
+      retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
+      seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
     };
     const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
@@ -1401,6 +1404,75 @@ const getShippingStatusHistory = async (shippingId: string) => {
     .lean();
 };
 
+const markSellerWithdrawal = async (params: {
+  shippingIds?: string[];
+  externalSaleIds?: string[];
+  withdrawnAt?: unknown;
+  currentBranchId?: string;
+  changedBy?: string;
+}) => {
+  const withdrawnAt = moment
+    .tz(params.withdrawnAt as any || new Date(), "America/La_Paz")
+    .format("YYYY-MM-DD HH:mm:ss");
+  const shippingIds = (params.shippingIds || []).filter((id) => Types.ObjectId.isValid(id));
+  const externalSaleIds = (params.externalSaleIds || []).filter((id) => Types.ObjectId.isValid(id));
+  const results = {
+    shippings: { updated: 0, failed: [] as { id: string; message: string }[] },
+    externalSales: { updated: 0, failed: [] as { id: string; message: string }[] },
+  };
+
+  for (const shippingId of shippingIds) {
+    try {
+      await updateShipping(
+        {
+          estado_pedido: "Entregado",
+          hora_entrega_real: withdrawnAt,
+          retirado_por_vendedor: true,
+          seller_withdrawn_at: withdrawnAt,
+        },
+        shippingId,
+        {
+          currentBranchId: params.currentBranchId,
+          source: "manual",
+          changedBy: params.changedBy,
+          note: "Vendedor retiro el paquete",
+        }
+      );
+      results.shippings.updated += 1;
+    } catch (error: any) {
+      results.shippings.failed.push({
+        id: shippingId,
+        message: error?.message || "No se pudo marcar el pedido",
+      });
+    }
+  }
+
+  for (const externalSaleId of externalSaleIds) {
+    try {
+      await ExternalSaleService.updateExternalSaleByID(externalSaleId, {
+        estado_pedido: "Entregado",
+        delivered: true,
+        hora_entrega_real: withdrawnAt,
+        retirado_por_vendedor: true,
+        seller_withdrawn_at: withdrawnAt,
+      });
+      results.externalSales.updated += 1;
+    } catch (error: any) {
+      results.externalSales.failed.push({
+        id: externalSaleId,
+        message: error?.message || "No se pudo marcar la entrega externa",
+      });
+    }
+  }
+
+  return {
+    success: results.shippings.failed.length === 0 && results.externalSales.failed.length === 0,
+    updatedCount: results.shippings.updated + results.externalSales.updated,
+    failedCount: results.shippings.failed.length + results.externalSales.failed.length,
+    results,
+  };
+};
+
 export const ShippingService = {
   getAllShippings,
   getShippingsList,
@@ -1420,5 +1492,6 @@ export const ShippingService = {
   generateShippingQR,
   resolveShippingByQRPayload,
   transitionShippingStatusByQR,
-  getShippingStatusHistory
+  getShippingStatusHistory,
+  markSellerWithdrawal
 };

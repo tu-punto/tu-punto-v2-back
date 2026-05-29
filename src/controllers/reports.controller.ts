@@ -344,6 +344,18 @@ export const getVentasVendedores = async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
   }
 };
+
+export const getRiesgoClientesVentas = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.body || {});
+    const mesFin = String(req.body?.mesFin || "");
+    const data = await ReportsService.getRiesgoClientesPorVentas({ mes, meses, mesFin });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getRiesgoClientesVentas error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
 export const getVentasQr = async (req: Request, res: Response) => {
   try {
     const { meses, mes, sucursales } = req.body || {};

@@ -303,6 +303,20 @@ export const getSellerDebts = async (req: Request, res: Response) => {
   }
 };
 
+export const createSellerRecoveryCharge = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const charge = await SellerService.createSellerRecoveryCharge(id, req.body || {});
+    res.json({ ok: true, charge });
+  } catch (err: any) {
+    console.error("Error creando cobro de recuperacion:", err);
+    res.status(err?.status || 500).json({
+      ok: false,
+      msg: err?.message || "Error creando cobro de recuperacion",
+    });
+  }
+};
+
 export const getServicesSummary = async (_: Request, res: Response) => {
   try {
     const resumen = await SellerService.getServicesSummary();

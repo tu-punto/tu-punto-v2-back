@@ -78,6 +78,14 @@ const PedidoSchema = new Schema({
     type: String,
     required: true
   },
+  retirado_por_vendedor: {
+    type: Boolean,
+    default: false
+  },
+  seller_withdrawn_at: {
+    type: Date,
+    required: false
+  },
   adelanto_cliente: {
     type: Number,
     default: 0

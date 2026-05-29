@@ -11,6 +11,7 @@ export interface IFlujoFinanciero {
   fecha: Date;
   esDeuda: boolean;
   visible_en_flujo_general?: boolean;
+  clase_cobro?: "INGRESO" | "RECUPERACION";
   descuento_porcentaje?: number;
   monto_sin_descuento?: number;
   detalle_servicios?: {

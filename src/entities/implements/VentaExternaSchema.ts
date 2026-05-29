@@ -178,6 +178,14 @@ const VentaExternaSchema = new Schema({
         type: String,
         default: "En Espera",
     },
+    retirado_por_vendedor: {
+        type: Boolean,
+        default: false
+    },
+    seller_withdrawn_at: {
+        type: Date,
+        required: false
+    },
     hora_entrega_real: {
         type: Date,
         required: false

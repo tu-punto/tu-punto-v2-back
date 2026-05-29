@@ -2027,6 +2027,106 @@ export const ReportsService = {
     return { meses: mesesSeleccionados, resumen, detalle: detalleFiltrado };
   },
 
+  async getRiesgoClientesPorVentas({ mes, meses, mesFin }: ExportVentasVendedoresParams) {
+    const selected = resolveMesesSeleccionados({ mes, meses, mesFin }, 4);
+    const mesActual = selected[selected.length - 1];
+    if (!mesActual) throw new Error("mes es requerido (YYYY-MM)");
+
+    const base = moment.tz(`${mesActual}-01 00:00:00`, TZ);
+    const mesesAnalisis = Array.from({ length: 7 }, (_, index) =>
+      base.clone().subtract(6 - index, "month").format("YYYY-MM")
+    );
+    const { start, end } = rangeMeses(mesesAnalisis);
+    const detalle = await ReportsRepository.fetchVentasDetalleEnRango({ start, end });
+
+    type SellerSales = {
+      id_vendedor: string;
+      vendedor: string;
+      porMes: Map<string, number>;
+    };
+    const acc = new Map<string, SellerSales>();
+
+    for (const row of detalle as any[]) {
+      const idVendedor = String(row.id_vendedor || "");
+      if (!idVendedor || !row.fecha) continue;
+
+      const mesRow = moment.tz(row.fecha, TZ).format("YYYY-MM");
+      if (!mesesAnalisis.includes(mesRow)) continue;
+
+      const current = acc.get(idVendedor) || {
+        id_vendedor: idVendedor,
+        vendedor: row.vendedor || idVendedor,
+        porMes: new Map<string, number>(),
+      };
+      current.porMes.set(mesRow, (current.porMes.get(mesRow) || 0) + safeNum(row.total_bs));
+      acc.set(idVendedor, current);
+    }
+
+    const percentChange = (current: number, baseValue: number | null) => {
+      if (baseValue === null || baseValue <= 0) return null;
+      return +(((current - baseValue) / baseValue) * 100).toFixed(2);
+    };
+    const averageFor = (seller: SellerSales, monthsBack: number) => {
+      const months = Array.from({ length: monthsBack }, (_, index) =>
+        base.clone().subtract(index + 1, "month").format("YYYY-MM")
+      );
+      const values = months
+        .map((month) => seller.porMes.get(month))
+        .filter((value): value is number => typeof value === "number");
+
+      if (values.length < monthsBack) return null;
+      return +(values.reduce((sum, value) => sum + value, 0) / monthsBack).toFixed(2);
+    };
+
+    const rows = Array.from(acc.values())
+      .map((seller) => {
+        const mesAnterior = base.clone().subtract(1, "month").format("YYYY-MM");
+        const ventasMesActual = +(seller.porMes.get(mesActual) || 0).toFixed(2);
+        const ventasMesAnterior =
+          typeof seller.porMes.get(mesAnterior) === "number"
+            ? +(seller.porMes.get(mesAnterior) || 0).toFixed(2)
+            : null;
+        const promedio3m = averageFor(seller, 3);
+        const promedio6m = averageFor(seller, 6);
+        const variacionMesAnteriorPct = percentChange(ventasMesActual, ventasMesAnterior);
+        const variacionPromedio3mPct = percentChange(ventasMesActual, promedio3m);
+        const variacionPromedio6mPct = percentChange(ventasMesActual, promedio6m);
+        const comparacionesValidas = [
+          variacionMesAnteriorPct,
+          variacionPromedio3mPct,
+          variacionPromedio6mPct,
+        ].filter((value): value is number => typeof value === "number");
+        const peorCaidaPct = comparacionesValidas.length ? Math.min(...comparacionesValidas) : null;
+
+        return {
+          id_vendedor: seller.id_vendedor,
+          vendedor: seller.vendedor,
+          mes_actual: mesActual,
+          ventas_mes_actual_bs: ventasMesActual,
+          ventas_mes_anterior_bs: ventasMesAnterior,
+          variacion_mes_anterior_pct: variacionMesAnteriorPct,
+          promedio_3m_bs: promedio3m,
+          variacion_promedio_3m_pct: variacionPromedio3mPct,
+          promedio_6m_bs: promedio6m,
+          variacion_promedio_6m_pct: variacionPromedio6mPct,
+          peor_caida_pct: peorCaidaPct,
+          alerta: typeof peorCaidaPct === "number" && peorCaidaPct < 0 ? "SI" : "NO",
+        };
+      })
+      .filter((row) => row.alerta === "SI" || row.ventas_mes_actual_bs > 0)
+      .sort((a, b) => safeNum(a.peor_caida_pct) - safeNum(b.peor_caida_pct));
+
+    return {
+      mes: mesActual,
+      mesesAnalisis,
+      resumen: {
+        clientes: rows.length,
+        alertas: rows.filter((row) => row.alerta === "SI").length,
+      },
+      rows,
+    };
+  },
+
   async exportClientesStatusXlsx(_: ExportClientesStatusParams) {
     const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
     const today = moment.tz(TZ).startOf("day");

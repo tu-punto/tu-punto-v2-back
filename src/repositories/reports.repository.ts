@@ -257,6 +257,8 @@ export const ReportsRepository = {
   const match: any = {
     tipo: "INGRESO",
     fecha: { $gte: start, $lt: end },
+    clase_cobro: { $ne: "RECUPERACION" },
+    visible_en_flujo_general: { $ne: false },
   };
 
   return await FlujoFinancieroModel.find(match, {

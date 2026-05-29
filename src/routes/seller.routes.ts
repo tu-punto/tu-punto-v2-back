@@ -19,6 +19,7 @@ sellerRouter.post("/:id/admin-decline-service", requireRole("admin", "operator")
 sellerRouter.post("/:id/cancel-decline-service", requireRole("admin", "operator"), SellerController.cancelSellerServiceDecline);
 sellerRouter.post("/:id/decline-service", requireRole("seller"), requireSellerOwnership("id"), SellerController.declineSellerService);
 sellerRouter.post("/:id/pay", requireRole("admin"), SellerController.paySellerDebt);
+sellerRouter.post("/:id/recovery-charge", requireRole("admin"), SellerController.createSellerRecoveryCharge);
 sellerRouter.get('/:id/debts', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.getSellerDebts);
 sellerRouter.get('/:id/payment-proofs', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.getSellerPaymentProofs); 
 
