@@ -77,6 +77,19 @@ const validateRanges = (ranges: IPackageEscalationRange[]) => {
   });
 };
 
+const mergeGlobalBoundsWithRoutePrices = (
+  globalRanges: any[] | undefined,
+  routeRanges: any[] | undefined
+) => {
+  const normalizedGlobal = normalizeRanges(globalRanges || [], "simple_package");
+  const normalizedRoute = normalizeRanges(routeRanges || globalRanges || [], "simple_package");
+  return normalizedGlobal.map((range, index) => ({
+    ...range,
+    small_price: normalizedRoute[index]?.small_price ?? range.small_price,
+    large_price: normalizedRoute[index]?.large_price ?? range.large_price,
+  }));
+};
+
 const normalizeDeliverySpaces = (rows: any[] | undefined): IPackageDeliverySpace[] => {
   const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_DELIVERY_SPACES;
   const normalized = source
@@ -123,10 +136,17 @@ const resolvePackageSizeBySpaces = async (params: {
 };
 
 const getRangesForRoute = async (routeId: string | undefined, serviceOrigin: PackageEscalationServiceOrigin) => {
+  const globalConfig =
+    serviceOrigin === "simple_package"
+      ? await PackageEscalationConfigRepository.findGlobalByOrigin(serviceOrigin)
+      : null;
   const config = routeId
     ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, serviceOrigin)
     : null;
-  return normalizeRanges((config as any)?.ranges || [], serviceOrigin);
+  if (serviceOrigin === "simple_package" && globalConfig) {
+    return mergeGlobalBoundsWithRoutePrices((globalConfig as any)?.ranges, (config as any)?.ranges);
+  }
+  return normalizeRanges((config as any)?.ranges || (globalConfig as any)?.ranges || [], serviceOrigin);
 };
 
 const getUnitPriceForCount = (
@@ -155,11 +175,17 @@ const getConfigForRoute = async (routeId: string) => {
   const existingRows = await PackageEscalationConfigRepository.listConfigs(routeId);
   const byOrigin = new Map(existingRows.map((row: any) => [String(row.service_origin), row]));
   const globalDelivery = await PackageEscalationConfigRepository.findGlobalByOrigin("delivery");
+  const globalSimple = await PackageEscalationConfigRepository.findGlobalByOrigin("simple_package");
 
   return {
     routeId,
     external: normalizeRanges((byOrigin.get("external") as any)?.ranges || [], "external"),
-    simple_package: normalizeRanges((byOrigin.get("simple_package") as any)?.ranges || [], "simple_package"),
+    simple_package: globalSimple
+      ? mergeGlobalBoundsWithRoutePrices(
+          (globalSimple as any)?.ranges,
+          (byOrigin.get("simple_package") as any)?.ranges
+        )
+      : normalizeRanges((byOrigin.get("simple_package") as any)?.ranges || [], "simple_package"),
     delivery: normalizeRanges((byOrigin.get("delivery") as any)?.ranges || [], "delivery"),
     delivery_spaces: normalizeDeliverySpaces(
       (globalDelivery as any)?.delivery_spaces || (byOrigin.get("delivery") as any)?.delivery_spaces || []
@@ -177,6 +203,23 @@ const upsertConfig = async (params: {
   const serviceOrigin = normalizeServiceOrigin(params.serviceOrigin);
   const ranges = normalizeRanges(params.ranges, serviceOrigin);
   validateRanges(ranges);
+  if (serviceOrigin === "simple_package") {
+    await PackageEscalationConfigRepository.upsertGlobalByOrigin({
+      serviceOrigin,
+      ranges,
+    });
+    if (!routeId) {
+      return await PackageEscalationConfigRepository.findGlobalByOrigin(serviceOrigin);
+    }
+    if (!Types.ObjectId.isValid(routeId)) {
+      throw new Error("Debe seleccionar una ruta valida");
+    }
+    return await PackageEscalationConfigRepository.upsertByRouteAndOrigin({
+      routeId,
+      serviceOrigin,
+      ranges,
+    });
+  }
   if (serviceOrigin === "delivery" && !routeId) {
     return await PackageEscalationConfigRepository.upsertGlobalByOrigin({
       serviceOrigin,
@@ -215,17 +258,17 @@ const getSimpleUnitPrice = async (params: {
 }) => {
   const fallbackSmallPrice = roundCurrency(Number(params.fallbackSmallPrice || 0));
   const fallbackLargePrice = roundCurrency(Number(params.fallbackLargePrice || fallbackSmallPrice));
-  if (fallbackSmallPrice > 0 || fallbackLargePrice > 0) {
+  const routeConfig = params.routeId
+    ? await PackageEscalationConfigRepository.findByRouteAndOrigin(params.routeId, "simple_package")
+    : null;
+  const globalConfig = await PackageEscalationConfigRepository.findGlobalByOrigin("simple_package");
+  if (!routeConfig && !globalConfig && (fallbackSmallPrice > 0 || fallbackLargePrice > 0)) {
     return String(params.packageSize || "").toLowerCase() === "grande"
       ? fallbackLargePrice
       : fallbackSmallPrice;
   }
 
-  const routeConfig = params.routeId
-    ? await PackageEscalationConfigRepository.findByRouteAndOrigin(params.routeId, "simple_package")
-    : null;
-
-  const ranges = normalizeRanges((routeConfig as any)?.ranges || [], "simple_package");
+  const ranges = await getRangesForRoute(params.routeId, "simple_package");
   const monthCount = await SimplePackageRepository.countSimplePackagesForSellerInCurrentMonth(params.sellerId);
   return getUnitPriceForCount(ranges, monthCount + params.packageIndexInBatch + 1, params.packageSize);
 };

@@ -441,9 +441,13 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
   const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
+  const effectiveDeliverySpaces =
+    branchRoute.originBranchId === branchRoute.destinationBranchId
+      ? 1
+      : requestedDeliverySpaces;
   const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
     routeId: branchRoute.routeId,
-    deliverySpaces: requestedDeliverySpaces,
+    deliverySpaces: effectiveDeliverySpaces,
     fallbackSize: normalizePackageSize(input.package_size ?? input.tamano),
   }) as PackageSize;
   const deliveryPricing =
@@ -453,8 +457,8 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
           routeId: branchRoute.routeId,
           packageCount: batchPackageCount,
           packageSize,
-          deliverySpaces: requestedDeliverySpaces,
-          escalationSpaces: Math.max(1, toNumber(input.batch_delivery_spaces ?? requestedDeliverySpaces, requestedDeliverySpaces)),
+          deliverySpaces: effectiveDeliverySpaces,
+          escalationSpaces: Math.max(1, toNumber(input.batch_delivery_spaces ?? effectiveDeliverySpaces, effectiveDeliverySpaces)),
           fallbackRoutePrice: branchRoute.precioEntreSucursal,
         });
   const branchRoutePrice = deliveryPricing.total;
@@ -507,7 +511,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
     package_size: packageSize,
-    delivery_spaces: requestedDeliverySpaces,
+    delivery_spaces: effectiveDeliverySpaces,
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
     deuda_comprador: totalBuyerDebt,

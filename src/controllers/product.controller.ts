@@ -108,12 +108,12 @@ const getSellerBranchOptions = async (sellerId: string) => {
     sellerName:
       `${String((seller as any)?.nombre || "").trim()} ${String((seller as any)?.apellido || "").trim()}`.trim() ||
       "Vendedor",
-    branches: (Array.isArray((seller as any)?.pago_sucursales) ? (seller as any).pago_sucursales : []).map(
-      (branch: any) => ({
+    branches: (Array.isArray((seller as any)?.pago_sucursales) ? (seller as any).pago_sucursales : [])
+      .filter((branch: any) => branch?.activo !== false)
+      .map((branch: any) => ({
         sucursalId: String(branch?.id_sucursal || "").trim(),
         sucursalName: String(branch?.sucursalName || "Sucursal").trim() || "Sucursal"
-      })
-    )
+      }))
   };
 };
 

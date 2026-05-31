@@ -111,7 +111,7 @@ const createRequest = async (params: {
 
   const sellerBranch = (seller.pago_sucursales || []).find((branch: any) => {
     const id = branch?.id_sucursal?._id || branch?.id_sucursal;
-    return String(id) === String(branchId);
+    return branch?.activo !== false && String(id) === String(branchId);
   });
   if (!sellerBranch) throw new Error("La sucursal no esta habilitada para este vendedor");
 

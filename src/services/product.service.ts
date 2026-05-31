@@ -116,8 +116,8 @@ const registerProduct = async (product: IProducto): Promise<any> => {
 
       console.log("✅ Vendedor encontrado:", rawVendedor);
 
-      const vendedor = rawVendedor as unknown as { pago_sucursales: { id_sucursal: string | Types.ObjectId }[] };
-      const sucursalesHabilitadas = vendedor.pago_sucursales || [];
+      const vendedor = rawVendedor as unknown as { pago_sucursales: { id_sucursal: string | Types.ObjectId; activo?: boolean }[] };
+      const sucursalesHabilitadas = (vendedor.pago_sucursales || []).filter((sucursal) => sucursal?.activo !== false);
 
       if (!nuevoProducto.esTemporal && sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
         const combinacionesReferencia = nuevoProducto.sucursales[0]?.combinaciones || [];
@@ -345,7 +345,10 @@ const addVariantToProduct = async (
   if (!vendedor) throw new Error("Vendedor no encontrado");
 
   // 🔧 casting correcto
-  const sucursalesHabilitadas = (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId }[]) || [];
+  const sucursalesHabilitadas =
+    (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId; activo?: boolean }[])?.filter(
+      (sucursal) => sucursal?.activo !== false
+    ) || [];
 
   const normalizedCombinaciones = combinaciones.map((c) => ({
     ...c,

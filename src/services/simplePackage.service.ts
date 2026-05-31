@@ -390,9 +390,13 @@ const buildSimplePackageRecord = async (params: {
 
   const branchRoutePricing = await resolveBranchRoutePricing(originBranchId, destinationBranchId);
   const requestedDeliverySpaces = Math.max(1, toNumber(row?.delivery_spaces ?? 1, 1));
+  const effectiveDeliverySpaces =
+    String(originBranchId || "") === String(destinationBranchId || "")
+      ? 1
+      : requestedDeliverySpaces;
   const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
     routeId: branchRoutePricing.routeId,
-    deliverySpaces: requestedDeliverySpaces,
+    deliverySpaces: effectiveDeliverySpaces,
     fallbackSize: normalizePackageSize(row?.package_size ?? row?.tamano),
   }) as PackageSize;
   const deliveryPricing =
@@ -402,8 +406,8 @@ const buildSimplePackageRecord = async (params: {
           routeId: branchRoutePricing.routeId,
           packageCount: index + 1,
           packageSize,
-          deliverySpaces: requestedDeliverySpaces,
-          escalationSpaces: deliveryEscalationSpaces || requestedDeliverySpaces,
+          deliverySpaces: effectiveDeliverySpaces,
+          escalationSpaces: deliveryEscalationSpaces || effectiveDeliverySpaces,
           fallbackRoutePrice: branchRoutePricing.precio_entre_sucursal,
         });
   const branchRoutePrice =
@@ -434,7 +438,7 @@ const buildSimplePackageRecord = async (params: {
     saldoPorPaquete,
     packageSize,
     branchRoutePrice,
-    requestedDeliverySpaces
+    effectiveDeliverySpaces
   );
 
   const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
@@ -813,9 +817,13 @@ const updateSimplePackageByID = async (params: {
     String(manualBranchRoutePriceRaw).trim() !== "";
   const resolvedBranchRoutePricing = await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
   const nextDeliverySpaces = Math.max(1, toNumber(params.payload?.delivery_spaces ?? (existing as any).delivery_spaces ?? 1, 1));
+  const effectiveNextDeliverySpaces =
+    String(nextOriginBranchId) === String(nextDestinationBranchId)
+      ? 1
+      : nextDeliverySpaces;
   const nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
     routeId: resolvedBranchRoutePricing.routeId,
-    deliverySpaces: nextDeliverySpaces,
+    deliverySpaces: effectiveNextDeliverySpaces,
     fallbackSize: normalizePackageSize(params.payload?.package_size ?? existing.package_size),
   }) as PackageSize;
   const nextDeliveryPricing =
@@ -825,7 +833,7 @@ const updateSimplePackageByID = async (params: {
           routeId: resolvedBranchRoutePricing.routeId,
           packageCount: Number((existing as any)?.numero_paquete || 1),
           packageSize: nextPackageSize,
-          deliverySpaces: nextDeliverySpaces,
+          deliverySpaces: effectiveNextDeliverySpaces,
           fallbackRoutePrice: resolvedBranchRoutePricing.precio_entre_sucursal,
         });
   const nextBranchRoutePrice =
@@ -863,7 +871,7 @@ const updateSimplePackageByID = async (params: {
     nextSaldoPorPaquete,
     nextPackageSize,
     nextBranchRoutePrice,
-    nextDeliverySpaces
+    effectiveNextDeliverySpaces
   );
 
   const updatePayload: Partial<IVentaExterna> = {

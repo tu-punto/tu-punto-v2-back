@@ -295,6 +295,10 @@ function safeNum(n: any) {
   return 0;
 }
 
+function roundCurrency(value: number) {
+  return +Number(value || 0).toFixed(2);
+}
+
 function safeProduct(values: number[]) {
   let total = 1;
   for (const value of values) {
@@ -3221,6 +3225,138 @@ if (resumen.length) {
 
   return { filePath, filename };
 },
+
+  async getIngresosMensualesSucursalServicio({ mes, meses, sucursalIds }: Params) {
+    const mesesSeleccionados = normalizeMeses(mes, meses);
+    const sucursalFilter = new Set((sucursalIds || []).map(String));
+    const [sellers, branches] = await Promise.all([
+      ReportsRepository.fetchVendedoresConPagoSucursales(),
+      ReportsRepository.fetchSucursalesBasicas(),
+    ]);
+    const branchNames = new Map((branches as any[]).map((branch) => [String(branch?._id || ""), String(branch?.nombre || "Sucursal")]));
+    const services = [
+      { key: "alquiler", label: "Alquiler" },
+      { key: "exhibicion", label: "Exhibicion" },
+      { key: "delivery", label: "Delivery" },
+    ] as const;
+    const rows: Array<{
+      mes: string;
+      id_sucursal: string;
+      sucursal: string;
+      servicio: string;
+      monto_bs: number;
+      clientes: number;
+    }> = [];
+
+    for (const selectedMonth of mesesSeleccionados) {
+      const { start, end } = monthRange(selectedMonth);
+      const monthRows = new Map<string, { id_sucursal: string; sucursal: string; servicio: string; monto_bs: number; clientes: Set<string> }>();
+
+      for (const seller of sellers as any[]) {
+        for (const branchPayment of seller?.pago_sucursales || []) {
+          const branchId = String(branchPayment?.id_sucursal?._id || branchPayment?.id_sucursal || "");
+          if (!branchId || (sucursalFilter.size && !sucursalFilter.has(branchId))) continue;
+
+          const joinedAt = branchPayment?.fecha_ingreso ? new Date(branchPayment.fecha_ingreso) : null;
+          const leftAt = branchPayment?.fecha_salida ? new Date(branchPayment.fecha_salida) : null;
+          const overlapsMonth =
+            (!joinedAt || joinedAt < end) &&
+            (!leftAt || leftAt >= start) &&
+            (branchPayment?.activo !== false || Boolean(leftAt));
+          if (!overlapsMonth) continue;
+
+          for (const service of services) {
+            const amount = roundCurrency(safeNum(branchPayment?.[service.key]));
+            if (amount <= 0) continue;
+            const mapKey = `${branchId}|||${service.key}`;
+            const current = monthRows.get(mapKey) || {
+              id_sucursal: branchId,
+              sucursal: branchNames.get(branchId) || String(branchPayment?.sucursalName || "Sucursal"),
+              servicio: service.label,
+              monto_bs: 0,
+              clientes: new Set<string>(),
+            };
+            current.monto_bs = roundCurrency(current.monto_bs + amount);
+            current.clientes.add(String(seller?._id || ""));
+            monthRows.set(mapKey, current);
+          }
+        }
+      }
+
+      for (const row of monthRows.values()) {
+        rows.push({
+          mes: selectedMonth,
+          id_sucursal: row.id_sucursal,
+          sucursal: row.sucursal,
+          servicio: row.servicio,
+          monto_bs: row.monto_bs,
+          clientes: row.clientes.size,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal) || a.servicio.localeCompare(b.servicio));
+    const resumenMap = new Map<string, { mes: string; id_sucursal: string; sucursal: string; total_bs: number }>();
+    for (const row of rows) {
+      const key = `${row.mes}|||${row.id_sucursal}`;
+      const current = resumenMap.get(key) || { mes: row.mes, id_sucursal: row.id_sucursal, sucursal: row.sucursal, total_bs: 0 };
+      current.total_bs = roundCurrency(current.total_bs + row.monto_bs);
+      resumenMap.set(key, current);
+    }
+    const resumenPorSucursal = Array.from(resumenMap.values()).sort(
+      (a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal)
+    );
+
+    return {
+      meses: mesesSeleccionados,
+      totalGeneral: {
+        monto_bs: roundCurrency(rows.reduce((sum, row) => sum + row.monto_bs, 0)),
+        sucursales: new Set(rows.map((row) => row.id_sucursal)).size,
+      },
+      resumenPorSucursal,
+      rows,
+    };
+  },
+
+  async exportIngresosMensualesSucursalServicioXlsx(params: Params) {
+    const data = await this.getIngresosMensualesSucursalServicio(params);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const wsResumen = wb.addWorksheet("Resumen_Por_Sucursal");
+    wsResumen.columns = [
+      { header: "Mes", key: "mes", width: 14 },
+      { header: "Id Sucursal", key: "id_sucursal", width: 26 },
+      { header: "Sucursal", key: "sucursal", width: 28 },
+      { header: "Total (Bs)", key: "total_bs", width: 16 },
+    ];
+    data.resumenPorSucursal.forEach((row) => wsResumen.addRow(row));
+    wsResumen.getRow(1).font = { bold: true };
+
+    const wsDetalle = wb.addWorksheet("Detalle_Por_Servicio");
+    wsDetalle.columns = [
+      { header: "Mes", key: "mes", width: 14 },
+      { header: "Id Sucursal", key: "id_sucursal", width: 26 },
+      { header: "Sucursal", key: "sucursal", width: 28 },
+      { header: "Servicio", key: "servicio", width: 18 },
+      { header: "Clientes", key: "clientes", width: 12 },
+      { header: "Monto (Bs)", key: "monto_bs", width: 16 },
+    ];
+    data.rows.forEach((row) => wsDetalle.addRow(row));
+    wsDetalle.getRow(1).font = { bold: true };
+
+    const nombreMeses =
+      data.meses.length <= 1
+        ? data.meses[0] || "sin_mes"
+        : `${data.meses[0]}_a_${data.meses[data.meses.length - 1]}`;
+    const filename = `ingresos_mensuales_sucursal_servicio_${nombreMeses}.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const filePath = path.join(outDir, filename);
+    await wb.xlsx.writeFile(filePath);
+    return { filePath, filename };
+  },
 
   async exportComisionesMesesXlsx(params: ExportComisionesParams) {
     const data = await this.getComisionesPorMeses(params);
