@@ -34,8 +34,8 @@ export interface IVendedor {
 
     comision_porcentual: number;
     comision_fija: number;
-    amortizacion: number;
-    precio_paquete: number;
+    amortizacion?: number | null;
+    precio_paquete?: number | null;
     fecha: Date;
     fecha_vigencia: Date;
     almacen_caja: number;

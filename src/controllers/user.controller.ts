@@ -49,8 +49,8 @@ type SellerProductInfoAccessShape = {
   }[];
   comision_porcentual?: number;
   comision_fija?: number;
-  amortizacion?: number;
-  precio_paquete?: number;
+  amortizacion?: number | null;
+  precio_paquete?: number | null;
   fecha_vigencia?: unknown;
 };
 
@@ -240,8 +240,8 @@ export const getUserInfoController = async (req: Request, res: Response) => {
           : [],
       });
       userObj.seller_can_access_inventory = userObj.seller_has_commission_service === true;
-      userObj.seller_amortizacion = Number(sellerAccessData?.amortizacion ?? 0);
-      userObj.seller_precio_paquete = Number(sellerAccessData?.precio_paquete ?? 0);
+      userObj.seller_amortizacion = sellerAccessData?.amortizacion ?? null;
+      userObj.seller_precio_paquete = sellerAccessData?.precio_paquete ?? null;
     }
   }
     //console.log("Enviando al frontend:", userObj);

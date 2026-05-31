@@ -252,10 +252,27 @@ const normalizeSellerServiceValues = (seller: any) => {
   const hasSimplePackageService = hasConfiguredSimplePackageService({
     pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
   });
-  const amortizacion = hasSimplePackageService ? Number(seller?.amortizacion ?? 0) : 0;
-  const precioPaquete = hasSimplePackageService ? Number(seller?.precio_paquete ?? 0) : 0;
+  const normalizeOptionalAmount = (value: unknown, label: string) => {
+    if (value === null || value === undefined || value === "") return null;
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error(`${label} debe ser un monto valido mayor o igual a 0`);
+    }
+    return amount;
+  };
+  const amortizacion = hasSimplePackageService
+    ? normalizeOptionalAmount(seller?.amortizacion, "La amortizacion")
+    : null;
+  const precioPaquete = hasSimplePackageService
+    ? normalizeOptionalAmount(seller?.precio_paquete, "El precio por paquete")
+    : null;
 
-  if (hasSimplePackageService && amortizacion > precioPaquete) {
+  if (
+    hasSimplePackageService &&
+    amortizacion !== null &&
+    precioPaquete !== null &&
+    amortizacion > precioPaquete
+  ) {
     throw new Error("La amortizacion no puede ser mayor al precio por paquete");
   }
 

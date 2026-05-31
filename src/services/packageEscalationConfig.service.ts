@@ -253,16 +253,13 @@ const getSimpleUnitPrice = async (params: {
   sellerId: string;
   packageIndexInBatch: number;
   packageSize?: string;
-  fallbackSmallPrice?: number;
-  fallbackLargePrice?: number;
+  fallbackSmallPrice?: number | null;
+  fallbackLargePrice?: number | null;
 }) => {
-  const fallbackSmallPrice = roundCurrency(Number(params.fallbackSmallPrice || 0));
-  const fallbackLargePrice = roundCurrency(Number(params.fallbackLargePrice || fallbackSmallPrice));
-  const routeConfig = params.routeId
-    ? await PackageEscalationConfigRepository.findByRouteAndOrigin(params.routeId, "simple_package")
-    : null;
-  const globalConfig = await PackageEscalationConfigRepository.findGlobalByOrigin("simple_package");
-  if (!routeConfig && !globalConfig && (fallbackSmallPrice > 0 || fallbackLargePrice > 0)) {
+  const hasFallbackSmallPrice = params.fallbackSmallPrice !== null && params.fallbackSmallPrice !== undefined;
+  const fallbackSmallPrice = roundCurrency(Number(params.fallbackSmallPrice ?? 0));
+  const fallbackLargePrice = roundCurrency(Number(params.fallbackLargePrice ?? fallbackSmallPrice));
+  if (hasFallbackSmallPrice) {
     return String(params.packageSize || "").toLowerCase() === "grande"
       ? fallbackLargePrice
       : fallbackSmallPrice;

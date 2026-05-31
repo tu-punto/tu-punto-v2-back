@@ -424,8 +424,8 @@ const buildSimplePackageRecord = async (params: {
     sellerId,
     packageIndexInBatch: index,
     packageSize,
-    fallbackSmallPrice: Number(seller?.precio_paquete || 0),
-    fallbackLargePrice: Number(seller?.precio_paquete || 0),
+    fallbackSmallPrice: seller?.precio_paquete,
+    fallbackLargePrice: seller?.precio_paquete,
   });
   const precioPaqueteUnitario = precioPaquete;
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
