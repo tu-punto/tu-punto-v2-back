@@ -312,6 +312,18 @@ export const getServicesSummary = async (_: Request, res: Response) => {
   }
 };
 
+export const getRenewalMonthlyPaymentSummary = async (_: Request, res: Response) => {
+  try {
+    const summary = await SellerService.getRenewalMonthlyPaymentSummary();
+    res.json(summary);
+  } catch (err) {
+    console.error("Error obteniendo el total mensual pendiente de renovacion:", err);
+    res.status(500).json({
+      msg: "Error obteniendo el total mensual pendiente de renovacion",
+    });
+  }
+};
+
 export const getClientsStatusList = async (_: Request, res: Response) => {
   try {
     const rows = await SellerService.getClientsStatusList();
