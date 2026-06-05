@@ -190,6 +190,17 @@ const resolveStorageFeeStartForShipping = async (shipping: any) => {
   return resolveBranchPickupFeeStart(shipping);
 };
 
+const resolveLatePickupFeeForShippingDelivery = async (shipping: any, pickedUpAt: unknown) => {
+  if (shipping?.public_tracking_frozen === true) {
+    return roundCurrency(Number(shipping?.late_pickup_fee || 0));
+  }
+
+  return calculateLatePickupFee({
+    startAt: await resolveStorageFeeStartForShipping(shipping),
+    pickedUpAt: pickedUpAt || new Date(),
+  });
+};
+
 const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {
   if (Number(shipping?.subtotal_qr || 0) > 0) return "qr";
   if (Number(shipping?.subtotal_efectivo || 0) > 0) return "efectivo";
@@ -731,10 +742,10 @@ const updateShipping = async (
 
   let latePickupFee = 0;
   if (willBeDelivered && !wasDelivered && isSimplePackageOrder) {
-    latePickupFee = calculateLatePickupFee({
-      startAt: await resolveStorageFeeStartForShipping(nextShippingState),
-      pickedUpAt: newData.hora_entrega_real || new Date(),
-    });
+    latePickupFee = await resolveLatePickupFeeForShippingDelivery(
+      nextShippingState,
+      newData.hora_entrega_real || new Date()
+    );
 
     if (latePickupFee > 0) {
       const adjustedPayment = addLatePickupFeeToPayment({

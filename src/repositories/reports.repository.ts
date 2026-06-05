@@ -270,7 +270,10 @@ export const ReportsRepository = {
     esDeuda: 1,
     id_vendedor: 1,
     id_trabajador: 1,
+    id_sucursal: 1,
+    detalle_servicios: 1,
   })
+    .populate([{ path: "detalle_servicios.id_sucursal", select: "nombre" }, { path: "id_sucursal", select: "nombre" }])
     .lean()
     .exec();
 },
@@ -367,6 +370,7 @@ export const ReportsRepository = {
       $or: [
         { fecha_pedido: rangeMatch },
         { hora_entrega_real: rangeMatch },
+        { seller_withdrawn_at: rangeMatch },
       ],
     };
 
@@ -408,6 +412,7 @@ export const ReportsRepository = {
           $or: [
             { fecha_pedido: rangeMatch },
             { hora_entrega_real: rangeMatch },
+            { seller_withdrawn_at: rangeMatch },
           ],
         },
       ],
@@ -448,6 +453,7 @@ export const ReportsRepository = {
         numero_guia: order.numero_guia,
         fecha_pedido: order.fecha_pedido,
         hora_entrega_real: order.hora_entrega_real,
+        seller_withdrawn_at: order.seller_withdrawn_at,
         sucursal: order.lugar_origen || order.sucursal,
         origen_sucursal: order.lugar_origen || order.sucursal,
         destino_sucursal: order.sucursal || order.lugar_origen,

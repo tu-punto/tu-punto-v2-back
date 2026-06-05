@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { TrackingFreezeConfigModel } from "../entities/implements/TrackingFreezeConfigSchema";
 import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
+import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { TrackingTimelineService, PublicTrackingStatus } from "./trackingTimeline.service";
 
 const CONFIG_KEY = "external_simple_delivery";
@@ -86,6 +87,13 @@ const getFreezeFieldsForOrder = async (params: {
 const buildFrozenBulkUpdates = (rows: any[], now: Date) =>
   rows.map((row) => {
     const status = TrackingTimelineService.buildPublicTracking(row, now).status;
+    const frozenLatePickupFee = Math.max(
+      Number(row?.late_pickup_fee || 0),
+      calculateLatePickupFee({
+        startAt: resolveBranchPickupFeeStart(row),
+        pickedUpAt: now,
+      })
+    );
     return {
       updateOne: {
         filter: { _id: row._id },
@@ -94,6 +102,7 @@ const buildFrozenBulkUpdates = (rows: any[], now: Date) =>
             public_tracking_frozen: true,
             public_tracking_frozen_status: status,
             public_tracking_frozen_at: now,
+            late_pickup_fee: frozenLatePickupFee,
           },
         },
       },

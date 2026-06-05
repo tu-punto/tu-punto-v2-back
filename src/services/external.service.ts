@@ -79,6 +79,17 @@ const resolveStorageFeeStartForExternal = (row: any) =>
       : resolveBranchPickupFeeStart(row)
     : row?.fecha_pedido;
 
+const resolveLatePickupFeeForExternalDelivery = (row: any, pickedUpAt: unknown) => {
+  if (row?.public_tracking_frozen === true) {
+    return roundCurrency(Number(row?.late_pickup_fee || 0));
+  }
+
+  return calculateLatePickupFee({
+    startAt: resolveStorageFeeStartForExternal(row),
+    pickedUpAt: pickedUpAt || new Date(),
+  });
+};
+
 const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
   "1": "Transferencia o QR",
   "2": "Efectivo",
@@ -707,16 +718,16 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
         ? existing.hora_entrega_real
         : normalizeExternalDate(new Date())
       : externalSale.hora_entrega_real;
-  const latePickupFee =
+  const latePickupFeeToApply =
     (serviceOrigin === "external" || serviceOrigin === "simple_package") && delivered && !existingDelivered
-      ? calculateLatePickupFee({
-          startAt: resolveStorageFeeStartForExternal(existing),
-          pickedUpAt: deliveredAt || new Date(),
-        })
+      ? resolveLatePickupFeeForExternalDelivery(existing, deliveredAt || new Date())
       : 0;
-  const finalBuyerDebtAmount = roundCurrency(buyerDebtAmount + latePickupFee);
-  const finalMontoPagaComprador = roundCurrency(montoPagaComprador + latePickupFee);
-  const finalSaldoCobrar = roundCurrency(saldoCobrar + latePickupFee);
+  const persistedLatePickupFee = delivered || !existingDelivered
+    ? roundCurrency(latePickupFeeToApply || Number(existing.late_pickup_fee || 0))
+    : 0;
+  const finalBuyerDebtAmount = roundCurrency(buyerDebtAmount + latePickupFeeToApply);
+  const finalMontoPagaComprador = roundCurrency(montoPagaComprador + latePickupFeeToApply);
+  const finalSaldoCobrar = roundCurrency(saldoCobrar + latePickupFeeToApply);
   const existingSellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const isLegacyMixedWithoutSellerMethod =
     existing.esta_pagado === "mixto" &&
@@ -738,8 +749,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
           paymentType: externalSale.tipo_de_pago ?? existing.tipo_de_pago,
           subtotalQr: externalSale.subtotal_qr ?? existing.subtotal_qr,
           subtotalEfectivo:
-            latePickupFee > 0
-              ? roundCurrency(toNumber(externalSale.subtotal_efectivo ?? existing.subtotal_efectivo, 0) + latePickupFee)
+            latePickupFeeToApply > 0
+              ? roundCurrency(toNumber(externalSale.subtotal_efectivo ?? existing.subtotal_efectivo, 0) + latePickupFeeToApply)
               : externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
         })
       : { tipoDePago: "", subtotalQr: 0, subtotalEfectivo: 0 };
@@ -765,7 +776,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     subtotal_efectivo: deliveryPayment.subtotalEfectivo,
     estado_pedido: status,
     delivered,
-    late_pickup_fee: latePickupFee,
+    late_pickup_fee: persistedLatePickupFee,
     is_external: true,
     service_origin: serviceOrigin,
   };

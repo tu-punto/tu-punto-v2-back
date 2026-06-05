@@ -3229,8 +3229,10 @@ if (resumen.length) {
   async getIngresosMensualesSucursalServicio({ mes, meses, sucursalIds }: Params) {
     const mesesSeleccionados = normalizeMeses(mes, meses);
     const sucursalFilter = new Set((sucursalIds || []).map(String));
-    const [sellers, branches] = await Promise.all([
-      ReportsRepository.fetchVendedoresConPagoSucursales(),
+    const { start: rangeStart, end: rangeEnd } =
+      mesesSeleccionados.length > 1 ? rangeMeses(mesesSeleccionados) : monthRange(mesesSeleccionados[0]);
+    const [incomeDocs, branches] = await Promise.all([
+      ReportsRepository.fetchIngresosFlujoEnRango({ start: rangeStart, end: rangeEnd }),
       ReportsRepository.fetchSucursalesBasicas(),
     ]);
     const branchNames = new Map((branches as any[]).map((branch) => [String(branch?._id || ""), String(branch?.nombre || "Sucursal")]));
@@ -3239,6 +3241,12 @@ if (resumen.length) {
       { key: "exhibicion", label: "Exhibicion" },
       { key: "delivery", label: "Delivery" },
     ] as const;
+    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => {
+      const tipo = String(doc?.tipo || "").toUpperCase();
+      const categoria = String(doc?.categoria || "").toUpperCase();
+      const claseCobro = String(doc?.clase_cobro || "INGRESO").toUpperCase();
+      return tipo === "INGRESO" && categoria === "SERVICIO" && claseCobro !== "RECUPERACION" && doc?.esDeuda !== true;
+    });
     const rows: Array<{
       mes: string;
       id_sucursal: string;
@@ -3252,32 +3260,27 @@ if (resumen.length) {
       const { start, end } = monthRange(selectedMonth);
       const monthRows = new Map<string, { id_sucursal: string; sucursal: string; servicio: string; monto_bs: number; clientes: Set<string> }>();
 
-      for (const seller of sellers as any[]) {
-        for (const branchPayment of seller?.pago_sucursales || []) {
-          const branchId = String(branchPayment?.id_sucursal?._id || branchPayment?.id_sucursal || "");
+      for (const income of serviceIncomeDocs) {
+        const incomeDate = income?.fecha ? new Date(income.fecha) : null;
+        if (!incomeDate || Number.isNaN(incomeDate.getTime()) || incomeDate < start || incomeDate >= end) continue;
+
+        for (const branchDetail of income?.detalle_servicios || []) {
+          const branchId = String(branchDetail?.id_sucursal?._id || branchDetail?.id_sucursal || "");
           if (!branchId || (sucursalFilter.size && !sucursalFilter.has(branchId))) continue;
 
-          const joinedAt = branchPayment?.fecha_ingreso ? new Date(branchPayment.fecha_ingreso) : null;
-          const leftAt = branchPayment?.fecha_salida ? new Date(branchPayment.fecha_salida) : null;
-          const overlapsMonth =
-            (!joinedAt || joinedAt < end) &&
-            (!leftAt || leftAt >= start) &&
-            (branchPayment?.activo !== false || Boolean(leftAt));
-          if (!overlapsMonth) continue;
-
           for (const service of services) {
-            const amount = roundCurrency(safeNum(branchPayment?.[service.key]));
+            const amount = roundCurrency(safeNum(branchDetail?.[service.key]));
             if (amount <= 0) continue;
             const mapKey = `${branchId}|||${service.key}`;
             const current = monthRows.get(mapKey) || {
               id_sucursal: branchId,
-              sucursal: branchNames.get(branchId) || String(branchPayment?.sucursalName || "Sucursal"),
+              sucursal: branchNames.get(branchId) || String(branchDetail?.sucursalName || "Sucursal"),
               servicio: service.label,
               monto_bs: 0,
               clientes: new Set<string>(),
             };
             current.monto_bs = roundCurrency(current.monto_bs + amount);
-            current.clientes.add(String(seller?._id || ""));
+            current.clientes.add(String(income?.id_vendedor?._id || income?.id_vendedor || income?._id || ""));
             monthRows.set(mapKey, current);
           }
         }
@@ -3766,7 +3769,7 @@ async getReporteEntregasSimplesExternas(params: { mes?: string; meses?: string[]
   for (const row of rawRows as any[]) {
     const serviceType = resolveServiceType(row);
     const registeredInMonth = inRange(row?.fecha_pedido);
-    const deliveredInMonth = isDelivered(row) && inRange(row?.hora_entrega_real || row?.fecha_pedido);
+    const deliveredInMonth = isDelivered(row) && inRange(row?.hora_entrega_real || row?.seller_withdrawn_at || row?.fecha_pedido);
     if (!registeredInMonth && !deliveredInMonth) continue;
 
     const origin = row?.origen_sucursal || row?.sucursal;
@@ -3817,7 +3820,9 @@ async getReporteEntregasSimplesExternas(params: { mes?: string; meses?: string[]
       tipo: serviceType === "simple" ? "Simple" : "Externa",
       numero_guia: String(row?.numero_guia || ""),
       fecha_registro: row?.fecha_pedido ? moment.tz(row.fecha_pedido, TZ).format("YYYY-MM-DD HH:mm") : "",
-      fecha_entrega: row?.hora_entrega_real ? moment.tz(row.hora_entrega_real, TZ).format("YYYY-MM-DD HH:mm") : "",
+      fecha_entrega: row?.hora_entrega_real || row?.seller_withdrawn_at
+        ? moment.tz(row.hora_entrega_real || row.seller_withdrawn_at, TZ).format("YYYY-MM-DD HH:mm")
+        : "",
       sucursal_origen: branchName,
       sucursal_destino: getName(destination),
       ruta: routeType,
