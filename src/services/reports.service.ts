@@ -3239,19 +3239,23 @@ if (resumen.length) {
     const services = [
       { key: "alquiler", label: "Alquiler" },
       { key: "exhibicion", label: "Exhibicion" },
+      { key: "entrega_simple", label: "Entrega simple" },
       { key: "delivery", label: "Delivery" },
     ] as const;
     const resolveFallbackService = (income: any) => {
       const text = `${income?.concepto || ""} ${income?.categoria || ""}`.toLowerCase();
       if (text.includes("alquiler") || text.includes("almacen")) return { key: "alquiler", label: "Alquiler" };
       if (text.includes("exhib")) return { key: "exhibicion", label: "Exhibicion" };
+      if (text.includes("entrega simple") || text.includes("paquete simple")) {
+        return { key: "entrega_simple", label: "Entrega simple" };
+      }
       if (text.includes("delivery")) return { key: "delivery", label: "Delivery" };
       return { key: "servicio", label: String(income?.concepto || income?.categoria || "Servicio") };
     };
     const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => {
       const tipo = String(doc?.tipo || "").toUpperCase();
       const claseCobro = String(doc?.clase_cobro || "INGRESO").toUpperCase();
-      return tipo === "INGRESO" && claseCobro !== "RECUPERACION" && doc?.esDeuda !== true;
+      return tipo === "INGRESO" && claseCobro !== "RECUPERACION";
     });
     const rows: Array<{
       mes: string;

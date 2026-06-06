@@ -154,11 +154,10 @@ const buildPackagePricing = (
 ) => {
   const precioPaqueteUnitario = roundCurrency(smallPackagePrice);
   const precioPaquete = roundCurrency(smallPackagePrice);
-  const deudaVendedor = roundCurrency(Math.min(Math.max(0, amortizacion), precioPaquete));
-  const saldoPrecioPaquete = roundCurrency(Math.max(0, precioPaquete - deudaVendedor));
-  const deudaComprador = roundCurrency(saldoPrecioPaquete + branchRoutePrice);
   const precioEntreSucursal = roundCurrency(branchRoutePrice);
   const precioTotal = roundCurrency(precioPaquete + precioEntreSucursal);
+  const deudaVendedor = roundCurrency(Math.min(Math.max(0, amortizacion), precioTotal));
+  const deudaComprador = roundCurrency(Math.max(0, precioTotal - deudaVendedor));
 
   return {
     precio_paquete_unitario: precioPaqueteUnitario,
@@ -186,9 +185,11 @@ const buildAccountingAmount = (row: any) =>
 
 const buildTotalAmountToCharge = (row: any) =>
   roundCurrency(
-    Math.max(0, Number(row?.precio_paquete || 0) - Number(row?.amortizacion_vendedor || 0)) +
-      Number(row?.saldo_por_paquete || 0) +
-      Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0)
+    Math.max(
+      0,
+      Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0)) -
+        Number(row?.amortizacion_vendedor || 0)
+    ) + Number(row?.saldo_por_paquete || 0)
   );
 
 const resolveSimplePackagePaymentPayload = (row: any) => {
@@ -196,7 +197,10 @@ const resolveSimplePackagePaymentPayload = (row: any) => {
   const sellerDebtAmount = roundCurrency(
     Math.min(
       Math.max(0, Number(row?.amortizacion_vendedor || 0)),
-      Math.max(0, Number(row?.precio_paquete || 0))
+      Math.max(
+        0,
+        Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0))
+      )
     )
   );
 
@@ -585,7 +589,10 @@ const createSimplePackageOrders = async (params: {
       const sellerAmortizacion = roundCurrency(
         Math.min(
           Math.max(0, Number(row?.amortizacion_vendedor || 0)),
-          Math.max(0, Number(row?.precio_paquete || 0))
+          Math.max(
+            0,
+            Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0))
+          )
         )
       );
       
