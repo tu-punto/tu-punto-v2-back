@@ -57,7 +57,17 @@ export const getSellers = async (req: Request, res: Response) => {
       assignedPaymentDayQuery === "28"
         ? assignedPaymentDayQuery
         : undefined;
-    const sortBy = sortByQuery === "fecha_pago_asignada" ? sortByQuery : undefined;
+    const allowedSortBy = new Set([
+      "nombre",
+      "estado",
+      "pago_pendiente",
+      "fecha_vigencia",
+      "fecha_pago_asignada",
+      "pago_mensual",
+      "comision_porcentual",
+      "emite_factura",
+    ]);
+    const sortBy = allowedSortBy.has(sortByQuery) ? sortByQuery as any : undefined;
     const sortOrder = sortOrderQuery === "desc" ? "desc" : "asc";
 
     if (authRole === "seller" && authUserId) {

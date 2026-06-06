@@ -107,7 +107,15 @@ type SellerListFilters = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
-  sortBy?: "fecha_pago_asignada";
+  sortBy?:
+    | "nombre"
+    | "estado"
+    | "pago_pendiente"
+    | "fecha_vigencia"
+    | "fecha_pago_asignada"
+    | "pago_mensual"
+    | "comision_porcentual"
+    | "emite_factura";
   sortOrder?: "asc" | "desc";
   page?: number;
   pageSize?: number;

@@ -282,8 +282,9 @@ const getDeliveryPricing = async (params: {
   const config = routeId
     ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, "delivery")
     : null;
-  const hasConfig = Boolean(config);
-  const ranges = normalizeRanges((config as any)?.ranges || [], "delivery");
+  const globalConfig = await PackageEscalationConfigRepository.findGlobalByOrigin("delivery");
+  const hasConfig = Boolean(config || globalConfig);
+  const ranges = normalizeRanges((config as any)?.ranges || (globalConfig as any)?.ranges || [], "delivery");
   const spaces = Math.max(1, Number(params.deliverySpaces || 1));
   const escalationSpaces = Math.max(1, Number(params.escalationSpaces || spaces));
 

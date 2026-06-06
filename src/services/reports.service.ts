@@ -3241,11 +3241,17 @@ if (resumen.length) {
       { key: "exhibicion", label: "Exhibicion" },
       { key: "delivery", label: "Delivery" },
     ] as const;
+    const resolveFallbackService = (income: any) => {
+      const text = `${income?.concepto || ""} ${income?.categoria || ""}`.toLowerCase();
+      if (text.includes("alquiler") || text.includes("almacen")) return { key: "alquiler", label: "Alquiler" };
+      if (text.includes("exhib")) return { key: "exhibicion", label: "Exhibicion" };
+      if (text.includes("delivery")) return { key: "delivery", label: "Delivery" };
+      return { key: "servicio", label: String(income?.concepto || income?.categoria || "Servicio") };
+    };
     const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => {
       const tipo = String(doc?.tipo || "").toUpperCase();
-      const categoria = String(doc?.categoria || "").toUpperCase();
       const claseCobro = String(doc?.clase_cobro || "INGRESO").toUpperCase();
-      return tipo === "INGRESO" && categoria === "SERVICIO" && claseCobro !== "RECUPERACION" && doc?.esDeuda !== true;
+      return tipo === "INGRESO" && claseCobro !== "RECUPERACION" && doc?.esDeuda !== true;
     });
     const rows: Array<{
       mes: string;
@@ -3264,11 +3270,30 @@ if (resumen.length) {
         const incomeDate = income?.fecha ? new Date(income.fecha) : null;
         if (!incomeDate || Number.isNaN(incomeDate.getTime()) || incomeDate < start || incomeDate >= end) continue;
 
-        for (const branchDetail of income?.detalle_servicios || []) {
+        const detailRows = Array.isArray(income?.detalle_servicios) && income.detalle_servicios.length
+          ? income.detalle_servicios
+          : (() => {
+              const branchId = String((income?.id_sucursal as any)?._id || income?.id_sucursal || "");
+              if (!branchId) return [];
+              const service = resolveFallbackService(income);
+              return [{
+                id_sucursal: income.id_sucursal,
+                sucursalName: (income?.id_sucursal as any)?.nombre || "",
+                [service.key]: safeNum(income?.monto),
+                __serviceLabel: service.label,
+                __serviceKey: service.key,
+              }];
+            })();
+
+        for (const branchDetail of detailRows) {
           const branchId = String(branchDetail?.id_sucursal?._id || branchDetail?.id_sucursal || "");
           if (!branchId || (sucursalFilter.size && !sucursalFilter.has(branchId))) continue;
 
-          for (const service of services) {
+          const servicesForDetail = branchDetail.__serviceKey
+            ? [{ key: branchDetail.__serviceKey, label: branchDetail.__serviceLabel }]
+            : services;
+
+          for (const service of servicesForDetail) {
             const amount = roundCurrency(safeNum(branchDetail?.[service.key]));
             if (amount <= 0) continue;
             const mapKey = `${branchId}|||${service.key}`;
