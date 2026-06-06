@@ -611,6 +611,11 @@ const createSimplePackageOrders = async (params: {
         esta_pagado: "no",
         metodo_pago: paymentMethod,
         fecha_pedido: orderCreatedAt as unknown as Date,
+        numero_guia: (createdShipping as any).numero_guia || row?.numero_guia || "",
+        guia_sequence: (createdShipping as any).guia_sequence || row?.guia_sequence,
+        shipping_qr_code: (createdShipping as any).shipping_qr_code || row?.shipping_qr_code || "",
+        shipping_qr_payload: (createdShipping as any).shipping_qr_payload || row?.shipping_qr_payload || "",
+        shipping_qr_image_path: (createdShipping as any).shipping_qr_image_path || row?.shipping_qr_image_path || "",
       });
 
       shippingResults.push({

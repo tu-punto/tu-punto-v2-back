@@ -849,6 +849,11 @@ const updateShipping = async (
       retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
       seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
+      numero_guia: (resShip as any).numero_guia || "",
+      guia_sequence: (resShip as any).guia_sequence,
+      shipping_qr_code: (resShip as any).shipping_qr_code || "",
+      shipping_qr_payload: (resShip as any).shipping_qr_payload || "",
+      shipping_qr_image_path: (resShip as any).shipping_qr_image_path || "",
     };
     const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
     const existingSource = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
