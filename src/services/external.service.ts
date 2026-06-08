@@ -582,19 +582,14 @@ const registerExternalSalesByPackages = async (payload: any) => {
   const paquetes = Array.isArray(payload?.paquetes) ? payload.paquetes : [];
   if (!paquetes.length) throw new Error("Debe enviar al menos un paquete");
   const originBranchId = toTrimmed(payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal);
-  const deliverySpacesByDestination = new Map<string, number>();
-  paquetes.forEach((pkg: any) => {
+  const totalDeliverySpaces = paquetes.reduce((sum: number, pkg: any) => {
     const destinationBranchId = toTrimmed(pkg?.destino_sucursal_id ?? pkg?.destino_sucursal ?? originBranchId);
-    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return;
+    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return sum;
     const spaces = Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1));
-    deliverySpacesByDestination.set(
-      destinationBranchId,
-      roundCurrency((deliverySpacesByDestination.get(destinationBranchId) || 0) + spaces)
-    );
-  });
+    return roundCurrency(sum + spaces);
+  }, 0);
 
   const toCreate: IVentaExterna[] = await Promise.all(paquetes.map(async (pkg: any, index: number) => {
-    const destinationBranchId = toTrimmed(pkg?.destino_sucursal_id ?? pkg?.destino_sucursal ?? originBranchId);
     const merged = {
       ...payload,
       ...pkg,
@@ -604,7 +599,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
       vendedor: payload?.vendedor,
       telefono_vendedor: payload?.telefono_vendedor,
       origen_sucursal_id: originBranchId,
-      batch_delivery_spaces: deliverySpacesByDestination.get(destinationBranchId) || Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1)),
+      batch_delivery_spaces: totalDeliverySpaces || Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1)),
       batch_package_count: paquetes.length,
     };
 
