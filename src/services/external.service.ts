@@ -452,10 +452,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
   const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
-  const effectiveDeliverySpaces =
-    branchRoute.originBranchId === branchRoute.destinationBranchId
-      ? 1
-      : requestedDeliverySpaces;
+  const effectiveDeliverySpaces = requestedDeliverySpaces;
   const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
     routeId: branchRoute.routeId,
     deliverySpaces: effectiveDeliverySpaces,
@@ -463,7 +460,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   }) as PackageSize;
   const deliveryPricing =
     branchRoute.originBranchId === branchRoute.destinationBranchId
-      ? { total: 0, spaces: 1 }
+      ? { total: 0, spaces: effectiveDeliverySpaces }
       : await PackageEscalationConfigService.getDeliveryPricing({
           routeId: branchRoute.routeId,
           packageCount: batchPackageCount,

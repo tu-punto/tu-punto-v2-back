@@ -394,10 +394,7 @@ const buildSimplePackageRecord = async (params: {
 
   const branchRoutePricing = await resolveBranchRoutePricing(originBranchId, destinationBranchId);
   const requestedDeliverySpaces = Math.max(1, toNumber(row?.delivery_spaces ?? 1, 1));
-  const effectiveDeliverySpaces =
-    String(originBranchId || "") === String(destinationBranchId || "")
-      ? 1
-      : requestedDeliverySpaces;
+  const effectiveDeliverySpaces = requestedDeliverySpaces;
   const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
     routeId: branchRoutePricing.routeId,
     deliverySpaces: effectiveDeliverySpaces,
@@ -405,7 +402,7 @@ const buildSimplePackageRecord = async (params: {
   }) as PackageSize;
   const deliveryPricing =
     String(originBranchId || "") === String(destinationBranchId || "")
-      ? { total: 0, spaces: 1 }
+      ? { total: 0, spaces: effectiveDeliverySpaces }
       : await PackageEscalationConfigService.getDeliveryPricing({
           routeId: branchRoutePricing.routeId,
           packageCount: index + 1,
@@ -823,10 +820,7 @@ const updateSimplePackageByID = async (params: {
     String(manualBranchRoutePriceRaw).trim() !== "";
   const resolvedBranchRoutePricing = await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
   const nextDeliverySpaces = Math.max(1, toNumber(params.payload?.delivery_spaces ?? (existing as any).delivery_spaces ?? 1, 1));
-  const effectiveNextDeliverySpaces =
-    String(nextOriginBranchId) === String(nextDestinationBranchId)
-      ? 1
-      : nextDeliverySpaces;
+  const effectiveNextDeliverySpaces = nextDeliverySpaces;
   const nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
     routeId: resolvedBranchRoutePricing.routeId,
     deliverySpaces: effectiveNextDeliverySpaces,
@@ -834,7 +828,7 @@ const updateSimplePackageByID = async (params: {
   }) as PackageSize;
   const nextDeliveryPricing =
     String(nextOriginBranchId) === String(nextDestinationBranchId)
-      ? { total: 0, spaces: 1 }
+      ? { total: 0, spaces: effectiveNextDeliverySpaces }
       : await PackageEscalationConfigService.getDeliveryPricing({
           routeId: resolvedBranchRoutePricing.routeId,
           packageCount: Number((existing as any)?.numero_paquete || 1),
