@@ -750,6 +750,30 @@ export const getFlatProductList = async (req: Request, res: Response) => {
   }
 };
 
+export const generateInventoryQRReport = async (req: Request, res: Response) => {
+  try {
+    const { sucursalId, sucursalLabel, rows } = req.body || {};
+    const result = await ProductService.generateInventoryQRReport({
+      sucursalId: String(sucursalId || ""),
+      sucursalLabel: String(sucursalLabel || ""),
+      rows: Array.isArray(rows) ? rows : []
+    });
+
+    res.set({
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${result.filename}"`,
+      "Content-Length": result.buffer.length
+    });
+    res.send(result.buffer);
+  } catch (error: any) {
+    console.error("Error generando reporte inventario QR:", error);
+    res.status(500).json({
+      success: false,
+      message: error?.message || "Error al generar reporte de inventario QR"
+    });
+  }
+};
+
 export const getSellerInventoryAll = async (req: Request, res: Response) => {
   try {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
@@ -1287,6 +1311,7 @@ export const ProductController = {
   generateIngressPDF,
   getTemporaryProducts,
   getFlatProductList,
+  generateInventoryQRReport,
   getSellerInventoryAll,
   getFlatProductListPage,
   getSellerInventoryList,

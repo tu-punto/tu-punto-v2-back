@@ -34,10 +34,12 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
     {
       tipo: {
         type: String,
-        enum: ["delivery", "gasto_profit", "pago_cliente"],
+        enum: ["ingreso", "gasto", "delivery", "gasto_profit", "pago_cliente"],
         required: true,
       },
       descripcion: { type: String, required: true },
+      concepto: { type: String },
+      categoria: { type: String },
       cliente: { type: String }, // Solo aplica para "pago_cliente"
       metodo: {
         type: String,
@@ -45,6 +47,11 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
         required: true,
       },
       monto: { type: Number, required: true },
+      afecta_empresa: { type: Boolean, default: true },
+      fecha: { type: Date },
+      id_vendedor: { type: Schema.Types.ObjectId, ref: "Vendedor" },
+      id_sucursal: { type: Schema.Types.ObjectId, ref: "Sucursal" },
+      finance_flux_id: { type: Schema.Types.ObjectId, ref: "FlujoFinanciero" },
     }
   ],
 

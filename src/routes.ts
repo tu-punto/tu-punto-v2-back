@@ -27,6 +27,7 @@ import serviceAnnouncementRouter from "./routes/serviceAnnouncement.routes";
 import simplePackageRouter from "./routes/simplePackage.routes";
 import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
 import trackingFreezeRouter from "./routes/trackingFreeze.routes";
+import catalogIntegrationRouter from "./routes/catalogIntegration.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -37,6 +38,7 @@ import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller"
 const router = Router();
 
 router.use("/whatsapp/webhook", whatsappWebhookRouter);
+router.use("/integration/catalog", catalogIntegrationRouter);
 router.get("/public-reports/pagado-al-dueno/xlsx", exportPagadoAlDuenoLegacyXlsx);
 router.use("/seller", requireAuth, sellerRouter);
 // router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);

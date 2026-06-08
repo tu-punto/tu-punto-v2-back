@@ -501,16 +501,12 @@ const registerSimplePackages = async (params: {
 
   const seller = await resolveSeller(sellerId);
   const startPackageNumber = await SimplePackageRepository.getNextPackageNumberForSeller(sellerId);
-  const deliverySpacesByDestination = new Map<string, number>();
-  paquetes.forEach((row) => {
+  const totalDeliverySpaces = paquetes.reduce((sum, row) => {
     const destinationBranchId = toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal);
-    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return;
+    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return sum;
     const spaces = Math.max(1, toNumber(row?.delivery_spaces ?? 1, 1));
-    deliverySpacesByDestination.set(
-      destinationBranchId,
-      roundCurrency((deliverySpacesByDestination.get(destinationBranchId) || 0) + spaces)
-    );
-  });
+    return roundCurrency(sum + spaces);
+  }, 0);
   const rows = await Promise.all(
     paquetes.map((row, index) =>
       buildSimplePackageRecord({
@@ -520,9 +516,7 @@ const registerSimplePackages = async (params: {
         seller,
         sellerId,
         originBranchId,
-        deliveryEscalationSpaces: deliverySpacesByDestination.get(
-          toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal)
-        ),
+        deliveryEscalationSpaces: totalDeliverySpaces,
         allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
       })
     )
