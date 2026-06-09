@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ShippingService } from "../services/shipping.service";
+import { CatalogOrderIntegrationService } from "../services/catalogOrderIntegration.service";
 
 export const getShipping = async (req: Request, res: Response) => {
   try {
@@ -332,6 +333,21 @@ export const markSellerWithdrawalController = async (req: Request, res: Response
       message: error?.message || "Error al marcar retiro por vendedor",
       error,
     });
+  }
+};
+
+export const rejectCatalogOrderController = async (req: Request, res: Response) => {
+  try {
+    const auth = res.locals.auth as { id?: string; role?: string } | undefined;
+    const rejectedBy = `${String(auth?.role || "user")}:${String(auth?.id || "")}`;
+    const order = await CatalogOrderIntegrationService.rejectOrder(
+      req.params.id,
+      String(req.body?.reason || ""),
+      rejectedBy
+    );
+    return res.json({ success: true, order });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error?.message || "No se pudo rechazar" });
   }
 };
 

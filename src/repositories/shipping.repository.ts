@@ -76,7 +76,12 @@ const findList = async (params: ShippingListParams) => {
 
   if (params.branchContextId && Types.ObjectId.isValid(params.branchContextId)) {
     const branchObjectId = new Types.ObjectId(params.branchContextId);
-    const branchVisibilityMatch = buildOriginBranchMatch(branchObjectId);
+    const branchVisibilityMatch = {
+      $or: [
+        buildOriginBranchMatch(branchObjectId),
+        { origen_pedido: "catalogo" }
+      ]
+    };
 
     if (filter.$and) {
       filter.$and.push(branchVisibilityMatch);

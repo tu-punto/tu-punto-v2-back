@@ -16,8 +16,9 @@ import {
   transitionShippingStatusByQRController,
   getShippingStatusHistoryController,
   markSellerWithdrawalController
+  ,rejectCatalogOrderController
 } from "../controllers/shipping.controller";
-import { requireSellerOwnership } from "../middlewares/auth.middleware";
+import { requireRole, requireSellerOwnership } from "../middlewares/auth.middleware";
 
 const shippingRouter = Router();
 //rutas
@@ -31,6 +32,7 @@ shippingRouter.post("/register", registerShipping);
 shippingRouter.post("/register/sales", registerSaleToShipping);
 
 shippingRouter.post("/seller-withdrawal", markSellerWithdrawalController);
+shippingRouter.post("/:id/reject-catalog", requireRole("admin", "operator", "superadmin"), rejectCatalogOrderController);
 
 shippingRouter.put("/:id", ShippingController.updateShipping);
 

@@ -25,6 +25,13 @@ export interface IPedido {
   cargo_delivery: number;
 
   estado_pedido: string;
+  origen_pedido?: 'interno' | 'catalogo';
+  catalog_order_id?: string;
+  catalog_status_sync?: 'pending' | 'synced' | 'failed';
+  catalog_status_sync_error?: string;
+  rechazado_en?: Date;
+  rechazado_por?: string;
+  motivo_rechazo?: string;
   esta_pagado: 'si' | 'no' | 'adelanto';
   adelanto_cliente: number;
   pagado_al_vendedor: boolean;

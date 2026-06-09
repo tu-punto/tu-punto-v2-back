@@ -853,7 +853,18 @@ const updateSimplePackageByID = async (params: {
             precio_entre_sucursal: nextBranchRoutePrice,
           }
         : { ...resolvedBranchRoutePricing, precio_entre_sucursal: nextBranchRoutePrice };
-  const nextPrecioPaquete = roundCurrency(toNumber(existing.precio_paquete, existing.precio_paquete_unitario || 0));
+  const currentPackageSize = normalizePackageSize(existing.package_size);
+  const currentPackagePrice = roundCurrency(toNumber(existing.precio_paquete, existing.precio_paquete_unitario || 0));
+  const nextPrecioPaquete =
+    nextPackageSize === currentPackageSize
+      ? currentPackagePrice
+      : await PackageEscalationConfigService.getSimpleUnitPriceForSizeChange({
+          routeId: resolvedBranchRoutePricing.routeId,
+          currentPrice: currentPackagePrice,
+          currentSize: currentPackageSize,
+          nextSize: nextPackageSize,
+          fallbackFixedPrice: seller?.precio_paquete,
+        });
   const nextAmortizacionVendedor = roundCurrency(
     toNumber(
       role === "seller"

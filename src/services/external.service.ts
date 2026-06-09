@@ -598,6 +598,8 @@ const registerExternalSalesByPackages = async (payload: any) => {
       origen_sucursal_id: originBranchId,
       batch_delivery_spaces: totalDeliverySpaces || Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1)),
       batch_package_count: paquetes.length,
+      precio_paquete: undefined,
+      precio_total: undefined,
     };
 
     if (merged.id_sucursal) {

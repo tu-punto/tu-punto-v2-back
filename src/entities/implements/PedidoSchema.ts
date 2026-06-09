@@ -78,6 +78,38 @@ const PedidoSchema = new Schema({
     type: String,
     required: true
   },
+  origen_pedido: {
+    type: String,
+    enum: ["interno", "catalogo"],
+    default: "interno",
+    index: true
+  },
+  catalog_order_id: {
+    type: String,
+    required: false,
+    index: true
+  },
+  catalog_status_sync: {
+    type: String,
+    enum: ["pending", "synced", "failed"],
+    required: false
+  },
+  catalog_status_sync_error: {
+    type: String,
+    default: ""
+  },
+  rechazado_en: {
+    type: Date,
+    required: false
+  },
+  rechazado_por: {
+    type: String,
+    required: false
+  },
+  motivo_rechazo: {
+    type: String,
+    default: ""
+  },
   retirado_por_vendedor: {
     type: Boolean,
     default: false
@@ -199,6 +231,10 @@ const PedidoSchema = new Schema({
 });
 
 PedidoSchema.index({ shipping_qr_code: 1 }, { sparse: true });
+PedidoSchema.index(
+  { catalog_order_id: 1 },
+  { unique: true, partialFilterExpression: { catalog_order_id: { $type: "string", $gt: "" } } }
+);
 PedidoSchema.index(
   { numero_guia: 1 },
   { unique: true, partialFilterExpression: { numero_guia: { $type: "string", $gt: "" } } }

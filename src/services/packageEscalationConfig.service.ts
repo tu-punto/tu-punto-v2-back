@@ -270,6 +270,33 @@ const getSimpleUnitPrice = async (params: {
   return getUnitPriceForCount(ranges, monthCount + params.packageIndexInBatch + 1, params.packageSize);
 };
 
+const getSimpleUnitPriceForSizeChange = async (params: {
+  routeId?: string;
+  currentPrice: number;
+  currentSize?: string;
+  nextSize?: string;
+  fallbackFixedPrice?: number | null;
+}) => {
+  if (params.fallbackFixedPrice !== null && params.fallbackFixedPrice !== undefined) {
+    return roundCurrency(Number(params.fallbackFixedPrice || 0));
+  }
+
+  const ranges = await getRangesForRoute(params.routeId, "simple_package");
+  const currentPrice = roundCurrency(Number(params.currentPrice || 0));
+  const currentPriceKey =
+    String(params.currentSize || "").toLowerCase() === "grande" ? "large_price" : "small_price";
+  const matchedRange = ranges.find(
+    (range) => Math.abs(roundCurrency(Number(range[currentPriceKey] || 0)) - currentPrice) <= 0.01
+  );
+
+  if (!matchedRange) return currentPrice;
+  return roundCurrency(
+    String(params.nextSize || "").toLowerCase() === "grande"
+      ? matchedRange.large_price
+      : matchedRange.small_price
+  );
+};
+
 const getDeliveryPricing = async (params: {
   routeId?: string;
   packageCount: number;
@@ -333,6 +360,7 @@ export const PackageEscalationConfigService = {
   upsertConfig,
   getExternalUnitPrice,
   getSimpleUnitPrice,
+  getSimpleUnitPriceForSizeChange,
   getDeliveryPricing,
   getSmallSpaceLimitForRoute,
   resolvePackageSizeBySpaces,
