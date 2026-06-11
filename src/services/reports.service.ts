@@ -136,13 +136,17 @@ function normalizeInventoryVariantValueLabel(label: unknown, baseName?: unknown)
 }
 
 function getIncomeText(doc: any): string {
-  return [doc?.concepto, doc?.categoria, doc?.tipo, doc?.clase_cobro, doc?.detalle].join(" ").toLowerCase();
+  return normalizeText(
+    [doc?.concepto, doc?.categoria, doc?.tipo, doc?.clase_cobro, doc?.detalle].join(" ")
+  );
 }
 
 function isAltaRenovacionIncome(doc: any): boolean {
   const text = getIncomeText(doc);
-  const isSimpleOrExternal = /(simple|externa|external|entrega simple|entrega externa)/.test(text);
-  const isAltaOrRenov = /(alta|renov|renovacion|renovación)/.test(text);
+  const isSimpleOrExternal =
+    /(^|[^a-z0-9])(simple|simples|externa|externas|external)(?=$|[^a-z0-9])/.test(text);
+  const isAltaOrRenov =
+    /(^|[^a-z0-9])(alta|altas|renovacion|renovaciones|renovar)(?=$|[^a-z0-9])/.test(text);
   const isIngreso = String(doc?.tipo || "").toUpperCase() === "INGRESO";
   const notRecovery = String(doc?.clase_cobro || "").toUpperCase() !== "RECUPERACION";
 
