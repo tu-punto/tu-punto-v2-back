@@ -29,6 +29,14 @@ export interface IPedido {
   catalog_order_id?: string;
   catalog_status_sync?: 'pending' | 'synced' | 'failed';
   catalog_status_sync_error?: string;
+  catalog_stock_status?: 'pending' | 'reserved' | 'restored';
+  catalog_stock_items?: Array<{
+    internalProductId: string;
+    internalVariantKey: string;
+    internalBranchId: string;
+    quantity: number;
+    currentStock: number;
+  }>;
   rechazado_en?: Date;
   rechazado_por?: string;
   motivo_rechazo?: string;

@@ -23,6 +23,7 @@ export interface IFlujoFinanciero {
     delivery: number;
     total: number;
   }[];
+  founder?: string;
 
   vendedor?: Types.ObjectId | IVendedor; 
   id_vendedor?: Types.ObjectId;

@@ -251,15 +251,15 @@ export const ReportsRepository = {
       { $sort: { nombre_producto: 1, _id: 1 } },
     ]).exec();
   },
-  async fetchIngresosFlujoEnRango(opts: { start: Date; end: Date }) {
-  const { start, end } = opts;
+  async fetchIngresosFlujoEnRango(opts: { start: Date; end: Date; includeHidden?: boolean }) {
+  const { start, end, includeHidden = false } = opts;
 
   const match: any = {
     tipo: "INGRESO",
     fecha: { $gte: start, $lt: end },
     clase_cobro: { $ne: "RECUPERACION" },
-    visible_en_flujo_general: { $ne: false },
   };
+  if (!includeHidden) match.visible_en_flujo_general = { $ne: false };
 
   return await FlujoFinancieroModel.find(match, {
     tipo: 1,

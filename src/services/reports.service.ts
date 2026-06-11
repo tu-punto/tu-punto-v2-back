@@ -135,6 +135,20 @@ function normalizeInventoryVariantValueLabel(label: unknown, baseName?: unknown)
   return normalizeText(stripped).replace(/(^|\/)\s*[^:/]+:\s*/g, "$1");
 }
 
+function getIncomeText(doc: any): string {
+  return [doc?.concepto, doc?.categoria, doc?.tipo, doc?.clase_cobro, doc?.detalle].join(" ").toLowerCase();
+}
+
+function isAltaRenovacionIncome(doc: any): boolean {
+  const text = getIncomeText(doc);
+  const isSimpleOrExternal = /(simple|externa|external|entrega simple|entrega externa)/.test(text);
+  const isAltaOrRenov = /(alta|renov|renovacion|renovación)/.test(text);
+  const isIngreso = String(doc?.tipo || "").toUpperCase() === "INGRESO";
+  const notRecovery = String(doc?.clase_cobro || "").toUpperCase() !== "RECUPERACION";
+
+  return isIngreso && notRecovery && !isSimpleOrExternal && isAltaOrRenov;
+}
+
 function buildInventoryAliasKeys(params: {
   idProducto?: unknown;
   variantKey?: unknown;
@@ -1781,6 +1795,7 @@ export const ReportsService = {
     const docs = await ReportsRepository.fetchIngresosFlujoEnRango({ start, end });
 
     const detalle = (docs as any[])
+      .filter((d) => isAltaRenovacionIncome(d))
       .map((d) => {
         const mesRow = d.fecha ? moment.utc(d.fecha).format("YYYY-MM") : "";
         return {
@@ -2862,7 +2877,7 @@ export const ReportsService = {
     });
 
     // ===== 1) Armar detalle con mes =====
-    const detalle = (docs as any[]).map((d) => {
+    const detalle = (docs as any[]).filter((d) => isAltaRenovacionIncome(d)).map((d) => {
     const mes = moment.utc(d.fecha).format("YYYY-MM");
       return {
         mes,
@@ -3232,31 +3247,26 @@ if (resumen.length) {
     const { start: rangeStart, end: rangeEnd } =
       mesesSeleccionados.length > 1 ? rangeMeses(mesesSeleccionados) : monthRange(mesesSeleccionados[0]);
     const [incomeDocs, branches] = await Promise.all([
-      ReportsRepository.fetchIngresosFlujoEnRango({ start: rangeStart, end: rangeEnd }),
+      ReportsRepository.fetchIngresosFlujoEnRango({ start: rangeStart, end: rangeEnd, includeHidden: true }),
       ReportsRepository.fetchSucursalesBasicas(),
     ]);
     const branchNames = new Map((branches as any[]).map((branch) => [String(branch?._id || ""), String(branch?.nombre || "Sucursal")]));
     const services = [
       { key: "alquiler", label: "Alquiler" },
       { key: "exhibicion", label: "Exhibicion" },
-      { key: "entrega_simple", label: "Entrega simple" },
       { key: "delivery", label: "Delivery" },
     ] as const;
     const resolveFallbackService = (income: any) => {
       const text = `${income?.concepto || ""} ${income?.categoria || ""}`.toLowerCase();
+      if (text.includes("simple") || text.includes("externa") || text.includes("external")) {
+        return null;
+      }
       if (text.includes("alquiler") || text.includes("almacen")) return { key: "alquiler", label: "Alquiler" };
       if (text.includes("exhib")) return { key: "exhibicion", label: "Exhibicion" };
-      if (text.includes("entrega simple") || text.includes("paquete simple")) {
-        return { key: "entrega_simple", label: "Entrega simple" };
-      }
       if (text.includes("delivery")) return { key: "delivery", label: "Delivery" };
       return { key: "servicio", label: String(income?.concepto || income?.categoria || "Servicio") };
     };
-    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => {
-      const tipo = String(doc?.tipo || "").toUpperCase();
-      const claseCobro = String(doc?.clase_cobro || "INGRESO").toUpperCase();
-      return tipo === "INGRESO" && claseCobro !== "RECUPERACION";
-    });
+    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => isAltaRenovacionIncome(doc));
     const rows: Array<{
       mes: string;
       id_sucursal: string;
@@ -3278,8 +3288,8 @@ if (resumen.length) {
           ? income.detalle_servicios
           : (() => {
               const branchId = String((income?.id_sucursal as any)?._id || income?.id_sucursal || "");
-              if (!branchId) return [];
               const service = resolveFallbackService(income);
+              if (!branchId || !service) return [];
               return [{
                 id_sucursal: income.id_sucursal,
                 sucursalName: (income?.id_sucursal as any)?.nombre || "",
@@ -3290,7 +3300,13 @@ if (resumen.length) {
             })();
 
         for (const branchDetail of detailRows) {
-          const branchId = String(branchDetail?.id_sucursal?._id || branchDetail?.id_sucursal || "");
+          const branchId = String(
+            branchDetail?.id_sucursal?._id ||
+            branchDetail?.id_sucursal ||
+            (income?.id_sucursal as any)?._id ||
+            income?.id_sucursal ||
+            ""
+          ).trim();
           if (!branchId || (sucursalFilter.size && !sucursalFilter.has(branchId))) continue;
 
           const servicesForDetail = branchDetail.__serviceKey
@@ -3335,6 +3351,24 @@ if (resumen.length) {
       current.total_bs = roundCurrency(current.total_bs + row.monto_bs);
       resumenMap.set(key, current);
     }
+    const selectedBranches = (branches as any[]).filter((branch) => {
+      const branchId = String(branch?._id || "");
+      return branchId && (!sucursalFilter.size || sucursalFilter.has(branchId));
+    });
+    for (const selectedMonth of mesesSeleccionados) {
+      for (const branch of selectedBranches) {
+        const branchId = String(branch?._id || "");
+        const key = `${selectedMonth}|||${branchId}`;
+        if (!resumenMap.has(key)) {
+          resumenMap.set(key, {
+            mes: selectedMonth,
+            id_sucursal: branchId,
+            sucursal: String(branch?.nombre || "Sucursal"),
+            total_bs: 0,
+          });
+        }
+      }
+    }
     const resumenPorSucursal = Array.from(resumenMap.values()).sort(
       (a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal)
     );
@@ -3343,7 +3377,7 @@ if (resumen.length) {
       meses: mesesSeleccionados,
       totalGeneral: {
         monto_bs: roundCurrency(rows.reduce((sum, row) => sum + row.monto_bs, 0)),
-        sucursales: new Set(rows.map((row) => row.id_sucursal)).size,
+        sucursales: new Set(resumenPorSucursal.map((row) => row.id_sucursal)).size,
       },
       resumenPorSucursal,
       rows,

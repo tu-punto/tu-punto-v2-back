@@ -98,6 +98,21 @@ const PedidoSchema = new Schema({
     type: String,
     default: ""
   },
+  catalog_stock_status: {
+    type: String,
+    enum: ["pending", "reserved", "restored"],
+    required: false,
+    index: true
+  },
+  catalog_stock_items: [
+    {
+      internalProductId: { type: String, required: true },
+      internalVariantKey: { type: String, required: true },
+      internalBranchId: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      currentStock: { type: Number, required: true }
+    }
+  ],
   rechazado_en: {
     type: Date,
     required: false

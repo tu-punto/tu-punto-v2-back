@@ -12,6 +12,9 @@ const normalizeOperationType = (tipo: unknown): "INGRESO" | "GASTO" => {
   return normalized === "gasto" || normalized === "gasto_profit" ? "GASTO" : "INGRESO";
 };
 
+const getOperationCategory = (tipo: unknown) =>
+  normalizeOperationType(tipo) === "GASTO" ? "Gasto (Cierre)" : "Ingreso (Cierre)";
+
 const normalizeOperationDate = (value: unknown, fallback?: unknown) => {
   const date = value ? new Date(value as any) : fallback ? new Date(fallback as any) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
@@ -45,7 +48,7 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
     const sellerId = String(operation?.id_vendedor || "").trim();
     const financeFlux = await FinanceFluxRepository.registerFinanceFlux({
       tipo: normalizeOperationType(operation?.tipo),
-      categoria: String(operation?.categoria || "Caja").trim(),
+      categoria: getOperationCategory(operation?.tipo),
       concepto: String(operation?.concepto || operation?.descripcion || "Operacion de caja").trim(),
       monto: amount,
       fecha: normalizeOperationDate(operation?.fecha, plainBoxClose?.closed_at || plainBoxClose?.created_at),

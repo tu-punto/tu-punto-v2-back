@@ -1,10 +1,29 @@
 import { Request, Response } from "express";
 import { FinanceFluxService } from "../services/financeFlux.service";
+import { UserModel } from "../entities/implements/UserSchema";
+import { VendedorModel } from "../entities/implements/VendedorSchema";
 
 const parseStringList = (value: unknown) => {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
   if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
   return undefined;
+};
+
+const getAuthenticatedResponsibleName = async (res: Response) => {
+  const userId = String(res.locals.auth?.id || "").trim();
+  if (!userId) return "Usuario actual";
+
+  const user = await UserModel.findById(userId).select("email").lean();
+  if (!user) return "Usuario actual";
+
+  const seller = user.email
+    ? await VendedorModel.findOne({ mail: user.email })
+        .select("nombre apellido")
+        .lean()
+    : null;
+
+  const sellerName = `${seller?.nombre || ""} ${seller?.apellido || ""}`.trim();
+  return sellerName || user.email || "Usuario actual";
 };
 
 export const getFinanceFluxes = async (_: Request, res: Response) => {
@@ -42,7 +61,10 @@ export const getDailyServiceIncome = async (req: Request, res: Response) => {
 
 export const registerFinanceFlux = async (req: Request, res: Response) => {
   try {
-    const fluxPayload = req.body;
+    const fluxPayload = {
+      ...req.body,
+      founder: await getAuthenticatedResponsibleName(res),
+    };
     const createdFlux = await FinanceFluxService.registerFinanceFlux(
       fluxPayload
     );

@@ -19,6 +19,7 @@ import { ExternalSaleRepository } from "../repositories/external.repository";
 import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
+import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -684,6 +685,12 @@ const updateShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  if (
+    (shipping as any)?.origen_pedido === "catalogo" &&
+    ["Rechazado", "Cancelado", "No entregado"].includes(String(newData?.estado_pedido || ""))
+  ) {
+    throw new Error("Los pedidos de catalogo deben rechazarse con la accion Rechazar");
+  }
 
   const isSimplePackageOrder =
     Boolean((shipping as any)?.simple_package_order) ||
@@ -831,6 +838,11 @@ const updateShipping = async (
   }
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
+  if (resShip) {
+    void CatalogOrderIntegrationService.syncOrderStatus(
+      typeof (resShip as any).toObject === "function" ? (resShip as any).toObject() : resShip
+    );
+  }
 
   const simplePackageSourceId = String(
     (resShip as any)?.simple_package_source_id ||
@@ -949,9 +961,14 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   const salesToUpdateSaldo = [];
 
   for (let sale of sales) {
-    let productId = sale.id_producto;
+    const rawProductId =
+      sale?.id_producto ??
+      sale?.producto?._id ??
+      sale?.producto?.id ??
+      sale?.producto;
+    let productId = String(rawProductId || "").trim();
 
-    if (!productId || productId.length !== 24) {
+    if (!Types.ObjectId.isValid(productId)) {
       const temporaryCategoryId = await resolveTemporaryCategoryId();
       const nuevoProducto = await ProductoModel.create({
         nombre_producto: sale.nombre_variante || sale.producto,
@@ -971,7 +988,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
         }]
       });
 
-      productId = nuevoProducto._id;
+      productId = String(nuevoProducto._id);
     }
 
     const venta = await registerSaleToShipping(shippingId, {
