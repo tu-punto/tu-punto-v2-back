@@ -475,7 +475,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     packageCount: batchPackageCount,
     packageSize,
   });
-  const packagePrice = roundCurrency(toNumber(input.precio_paquete ?? input.precio_total, configuredPackagePrice));
+  const packagePrice = configuredPackagePrice;
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
