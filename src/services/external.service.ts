@@ -658,13 +658,60 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
   const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
 
-  const price = toNumber(existing.precio_paquete ?? existing.precio_total, 0);
-  const branchRoutePrice = roundCurrency(
-    toNumber(
-      existing.precio_entre_sucursal ?? existing.cargo_delivery,
-      0
-    )
+  const existingOriginBranchId = toTrimmed((existing.origen_sucursal as any)?._id ?? existing.origen_sucursal ?? existing.sucursal);
+  const existingDestinationBranchId = toTrimmed((existing.destino_sucursal as any)?._id ?? existing.destino_sucursal ?? existing.sucursal);
+  const nextOriginBranchId = toTrimmed(
+    externalSale.origen_sucursal_id ?? externalSale.origen_sucursal ?? externalSale.sucursal ?? existingOriginBranchId
   );
+  const nextDestinationBranchId = toTrimmed(
+    externalSale.destino_sucursal_id ?? externalSale.destino_sucursal ?? existingDestinationBranchId ?? nextOriginBranchId
+  );
+  const shouldRecalculateRoutePricing =
+    serviceOrigin === "external" &&
+    (
+      Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal_id") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal_id") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "delivery_spaces") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "package_size") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "tamano") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "precio_paquete")
+    );
+  let nextPackageSize = normalizePackageSize(externalSale.package_size ?? externalSale.tamano ?? existing.package_size);
+  let deliverySpaces = Math.max(1, toNumber(externalSale.delivery_spaces ?? existing.delivery_spaces ?? 1, 1));
+  let price = toNumber(existing.precio_paquete ?? existing.precio_total, 0);
+  let branchRoutePrice = roundCurrency(toNumber(existing.precio_entre_sucursal ?? existing.cargo_delivery, 0));
+  let nextBranchRoute = null as Awaited<ReturnType<typeof resolveExternalBranchRoutePricing>> | null;
+
+  if (shouldRecalculateRoutePricing) {
+    nextBranchRoute = await resolveExternalBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+    deliverySpaces = Math.max(1, toNumber(externalSale.delivery_spaces ?? existing.delivery_spaces ?? 1, 1));
+    nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
+      routeId: nextBranchRoute.routeId,
+      deliverySpaces,
+      fallbackSize: nextPackageSize,
+    }) as PackageSize;
+    const deliveryPricing =
+      nextBranchRoute.originBranchId === nextBranchRoute.destinationBranchId
+        ? { total: 0, spaces: deliverySpaces }
+        : await PackageEscalationConfigService.getDeliveryPricing({
+            routeId: nextBranchRoute.routeId,
+            packageCount: Math.max(1, toNumber(externalSale.batch_package_count ?? externalSale.numero_paquetes ?? existing.numero_paquete, 1)),
+            packageSize: nextPackageSize,
+            deliverySpaces,
+            escalationSpaces: Math.max(1, toNumber(externalSale.batch_delivery_spaces ?? deliverySpaces, deliverySpaces)),
+            fallbackRoutePrice: nextBranchRoute.precioEntreSucursal,
+          });
+
+    branchRoutePrice = deliveryPricing.total;
+    price = await PackageEscalationConfigService.getExternalUnitPrice({
+      routeId: nextBranchRoute.routeId,
+      packageCount: Math.max(1, toNumber(externalSale.batch_package_count ?? externalSale.numero_paquetes ?? existing.numero_paquete, 1)),
+      packageSize: nextPackageSize,
+    });
+  }
+
   const simplePackageFinancials = getSimplePackageFinancials({
     ...existing,
     ...externalSale,
@@ -693,7 +740,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const hasSellerAmountUpdate =
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador");
-  const shouldRecalculateExternalBuyerDebt = hasPaymentStatusUpdate || hasSellerAmountUpdate;
+  const shouldRecalculateExternalBuyerDebt =
+    hasPaymentStatusUpdate || hasSellerAmountUpdate || shouldRecalculateRoutePricing;
   const buyerDebtAmount =
     serviceOrigin === "simple_package"
       ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
@@ -757,6 +805,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     comprador: buyerName || undefined,
     telefono_comprador: buyerPhone || undefined,
     descripcion_paquete: existing.descripcion_paquete,
+    package_size: nextPackageSize,
+    delivery_spaces: deliverySpaces,
     precio_paquete: price,
     precio_total: totalPrice,
     esta_pagado: paid,
@@ -778,6 +828,13 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
     updatePayload.precio_entre_sucursal = branchRoutePrice;
     updatePayload.cargo_delivery = branchRoutePrice;
+  }
+
+  if (nextBranchRoute) {
+    updatePayload.sucursal = toObjectIdOrUndefined(nextBranchRoute.originBranchId);
+    updatePayload.origen_sucursal = toObjectIdOrUndefined(nextBranchRoute.originBranchId);
+    updatePayload.destino_sucursal = toObjectIdOrUndefined(nextBranchRoute.destinationBranchId);
+    updatePayload.lugar_entrega = nextBranchRoute.destinationBranchName || existing.lugar_entrega;
   }
 
   if (serviceOrigin === "simple_package") {
@@ -802,7 +859,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.seller_withdrawn_at = externalSale.seller_withdrawn_at || deliveredAt;
   }
 
-  updatePayload.sucursal = existing.sucursal;
+  if (!nextBranchRoute) {
+    updatePayload.sucursal = existing.sucursal;
+  }
 
   const sellerId = String(existing.id_vendedor || "");
   const sellerPendingDelta = roundCurrency(simplePackageFinancials.sellerPending);

@@ -90,6 +90,26 @@ const countSimplePackagesForSellerInCurrentMonth = async (sellerId: string) => {
   });
 };
 
+const countSimplePackagesForSellerInMonthUntil = async (sellerId: string, date: unknown, id: string) => {
+  if (!Types.ObjectId.isValid(sellerId) || !Types.ObjectId.isValid(id)) return 1;
+
+  const base = moment.tz(date as any, "America/La_Paz");
+  const monthStart = base.clone().startOf("month").toDate();
+  const nextMonthStart = base.clone().add(1, "month").startOf("month").toDate();
+
+  const count = await VentaExternaModel.countDocuments({
+    ...SIMPLE_PACKAGE_FILTER,
+    id_vendedor: new Types.ObjectId(sellerId),
+    fecha_pedido: {
+      $gte: monthStart,
+      $lt: nextMonthStart,
+    },
+    _id: { $lte: new Types.ObjectId(id) },
+  });
+
+  return Math.max(1, count);
+};
+
 const registerSimplePackages = async (rows: IVentaExterna[]): Promise<IVentaExternaDocument[]> => {
   if (!rows.length) return [];
   const created = await VentaExternaModel.insertMany(rows);
@@ -232,6 +252,7 @@ export const SimplePackageRepository = {
   getSimplePackagesList,
   getNextPackageNumberForSeller,
   countSimplePackagesForSellerInCurrentMonth,
+  countSimplePackagesForSellerInMonthUntil,
   registerSimplePackages,
   updateSimplePackageByID,
   deleteSimplePackageByID,

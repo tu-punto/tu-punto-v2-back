@@ -270,6 +270,15 @@ const getSimpleUnitPrice = async (params: {
   return getUnitPriceForCount(ranges, monthCount + params.packageIndexInBatch + 1, params.packageSize);
 };
 
+const getSimpleUnitPriceForPosition = async (params: {
+  routeId?: string;
+  position: number;
+  packageSize?: string;
+}) => {
+  const ranges = await getRangesForRoute(params.routeId, "simple_package");
+  return getUnitPriceForCount(ranges, params.position, params.packageSize);
+};
+
 const getSimpleUnitPriceForSizeChange = async (params: {
   routeId?: string;
   currentPrice: number;
@@ -360,6 +369,7 @@ export const PackageEscalationConfigService = {
   upsertConfig,
   getExternalUnitPrice,
   getSimpleUnitPrice,
+  getSimpleUnitPriceForPosition,
   getSimpleUnitPriceForSizeChange,
   getDeliveryPricing,
   getSmallSpaceLimitForRoute,

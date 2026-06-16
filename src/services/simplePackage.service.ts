@@ -858,8 +858,24 @@ const updateSimplePackageByID = async (params: {
         : { ...resolvedBranchRoutePricing, precio_entre_sucursal: nextBranchRoutePrice };
   const currentPackageSize = normalizePackageSize(existing.package_size);
   const currentPackagePrice = roundCurrency(toNumber(existing.precio_paquete, existing.precio_paquete_unitario || 0));
+  const useSameBranchRoutePackagePricing =
+    String(nextOriginBranchId || "") === String(nextDestinationBranchId || "") &&
+    Boolean(resolvedBranchRoutePricing.routeId);
+  const packagePositionInMonth = useSameBranchRoutePackagePricing
+    ? await SimplePackageRepository.countSimplePackagesForSellerInMonthUntil(
+        existingSellerId,
+        existing.fecha_pedido,
+        params.id
+      )
+    : 1;
   const nextPrecioPaquete =
-    nextPackageSize === currentPackageSize
+    useSameBranchRoutePackagePricing
+      ? await PackageEscalationConfigService.getSimpleUnitPriceForPosition({
+          routeId: resolvedBranchRoutePricing.routeId,
+          position: packagePositionInMonth,
+          packageSize: nextPackageSize,
+        })
+      : nextPackageSize === currentPackageSize
       ? currentPackagePrice
       : await PackageEscalationConfigService.getSimpleUnitPriceForSizeChange({
           routeId: resolvedBranchRoutePricing.routeId,
