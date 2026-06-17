@@ -377,10 +377,21 @@ const buildSimplePackageRecord = async (params: {
   seller: any;
   sellerId: string;
   originBranchId?: string;
+  packageCountInBatch?: number;
   deliveryEscalationSpaces?: number;
   allowManualBranchPrice?: boolean;
 }) => {
-  const { row, index, packageNumber, seller, sellerId, originBranchId, deliveryEscalationSpaces, allowManualBranchPrice } = params;
+  const {
+    row,
+    index,
+    packageNumber,
+    seller,
+    sellerId,
+    originBranchId,
+    packageCountInBatch,
+    deliveryEscalationSpaces,
+    allowManualBranchPrice,
+  } = params;
   ensureBuyerIdentity(row);
   ensureDescription(row);
   ensureSellerSimpleBranch(seller, originBranchId, "La sucursal de origen");
@@ -427,6 +438,7 @@ const buildSimplePackageRecord = async (params: {
     routeId: branchRoutePricing.routeId,
     sellerId,
     packageIndexInBatch: index,
+    packageCountInBatch,
     packageSize,
     fallbackSmallPrice: useSameBranchRoutePackagePricing ? undefined : seller?.precio_paquete,
     fallbackLargePrice: useSameBranchRoutePackagePricing ? undefined : seller?.precio_paquete,
@@ -516,6 +528,7 @@ const registerSimplePackages = async (params: {
         seller,
         sellerId,
         originBranchId,
+        packageCountInBatch: paquetes.length,
         deliveryEscalationSpaces: totalDeliverySpaces,
         allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
       })

@@ -252,6 +252,7 @@ const getSimpleUnitPrice = async (params: {
   routeId?: string;
   sellerId: string;
   packageIndexInBatch: number;
+  packageCountInBatch?: number;
   packageSize?: string;
   fallbackSmallPrice?: number | null;
   fallbackLargePrice?: number | null;
@@ -267,7 +268,8 @@ const getSimpleUnitPrice = async (params: {
 
   const ranges = await getRangesForRoute(params.routeId, "simple_package");
   const monthCount = await SimplePackageRepository.countSimplePackagesForSellerInCurrentMonth(params.sellerId);
-  return getUnitPriceForCount(ranges, monthCount + params.packageIndexInBatch + 1, params.packageSize);
+  const batchCount = Math.max(1, Number(params.packageCountInBatch || params.packageIndexInBatch + 1));
+  return getUnitPriceForCount(ranges, monthCount + batchCount, params.packageSize);
 };
 
 const getSimpleUnitPriceForPosition = async (params: {
