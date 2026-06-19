@@ -451,6 +451,10 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
+  const packagePricePosition = Math.max(
+    1,
+    toNumber(input.package_position_in_batch ?? input.numero_paquete, batchPackageCount)
+  );
   const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
   const effectiveDeliverySpaces = requestedDeliverySpaces;
   const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
@@ -472,7 +476,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const branchRoutePrice = deliveryPricing.total;
   const configuredPackagePrice = await PackageEscalationConfigService.getExternalUnitPrice({
     routeId: branchRoute.routeId,
-    packageCount: batchPackageCount,
+    packageCount: packagePricePosition,
     packageSize,
   });
   const packagePrice = configuredPackagePrice;
@@ -591,6 +595,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
       ...payload,
       ...pkg,
       numero_paquete: pkg?.numero_paquete ?? index + 1,
+      package_position_in_batch: index + 1,
       fecha_pedido: payload?.fecha_pedido,
       carnet_vendedor: payload?.carnet_vendedor,
       vendedor: payload?.vendedor,
@@ -687,6 +692,10 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   if (shouldRecalculateRoutePricing) {
     nextBranchRoute = await resolveExternalBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
     deliverySpaces = Math.max(1, toNumber(externalSale.delivery_spaces ?? existing.delivery_spaces ?? 1, 1));
+    const packagePricePosition = Math.max(
+      1,
+      toNumber(externalSale.package_position_in_batch ?? externalSale.numero_paquete ?? existing.numero_paquete, 1)
+    );
     nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
       routeId: nextBranchRoute.routeId,
       deliverySpaces,
@@ -707,7 +716,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     branchRoutePrice = deliveryPricing.total;
     price = await PackageEscalationConfigService.getExternalUnitPrice({
       routeId: nextBranchRoute.routeId,
-      packageCount: Math.max(1, toNumber(externalSale.batch_package_count ?? externalSale.numero_paquetes ?? existing.numero_paquete, 1)),
+      packageCount: packagePricePosition,
       packageSize: nextPackageSize,
     });
   }
