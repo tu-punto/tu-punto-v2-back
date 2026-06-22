@@ -34,12 +34,14 @@ import reportsRouter from "./routes/reports.routes";
 import { requireAuth, requireRole } from "./middlewares/auth.middleware";
 import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller";
+import { getRenewalMonthlyPaymentSummary } from "./controllers/seller.controller";
 
 const router = Router();
 
 router.use("/whatsapp/webhook", whatsappWebhookRouter);
 router.use("/integration/catalog", catalogIntegrationRouter);
 router.get("/public-reports/pagado-al-dueno/xlsx", exportPagadoAlDuenoLegacyXlsx);
+router.get("/public/seller-renewal-summary", getRenewalMonthlyPaymentSummary);
 router.use("/seller", requireAuth, sellerRouter);
 // router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
 router.use("/product", productRouter);

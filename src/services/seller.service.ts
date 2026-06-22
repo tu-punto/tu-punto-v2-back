@@ -652,7 +652,7 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
 
 const autoRenewSellers = async () => {
   const sellers = await SellerRepository.findAll();
-  const today = dayjs().startOf("day");
+  const renewalCutoff = moment.tz(PAYMENT_TZ).startOf("day").add(1, "day");
   const results = {
     renewed: 0,
     skipped: 0,
@@ -661,9 +661,11 @@ const autoRenewSellers = async () => {
 
   for (const seller of sellers as any[]) {
     const sellerId = String((seller as any)?._id || "");
-    const vigencia = seller?.fecha_vigencia ? dayjs(seller.fecha_vigencia).startOf("day") : null;
+    const vigencia = seller?.fecha_vigencia
+      ? moment.tz(seller.fecha_vigencia, PAYMENT_TZ).startOf("day")
+      : null;
 
-    if (!sellerId || !vigencia?.isValid() || vigencia.isAfter(today)) {
+    if (!sellerId || !vigencia?.isValid() || vigencia.isAfter(renewalCutoff)) {
       results.skipped += 1;
       continue;
     }
@@ -678,7 +680,7 @@ const autoRenewSellers = async () => {
         seller.fecha_vigencia,
         (seller as any).declinacion_servicio_fecha
       );
-      if (status !== "debe_renovar") {
+      if (status === "ya_no_es_cliente" || status === "declinando_servicio") {
         results.skipped += 1;
         continue;
       }
@@ -980,6 +982,26 @@ const getServicesSummary = async () => {
   return resumen;
 };
 
+const getRenewalMonthlyPaymentSummary = async () => {
+  const sellers = await SellerRepository.findAll();
+  const sellersToRenew = sellers.filter(
+    (seller: any) =>
+      getSellerLifecycleStatus(
+        seller?.fecha_vigencia,
+        seller?.declinacion_servicio_fecha
+      ) === "debe_renovar"
+  );
+
+  return {
+    sellers_to_renew: sellersToRenew.length,
+    monthly_payment_total: Number(
+      sellersToRenew
+        .reduce((total, seller) => total + calcPagoMensual(seller), 0)
+        .toFixed(2)
+    ),
+  };
+};
+
 const getClientsStatusList = async () => {
   const sellers = await SellerRepository.findAllForClientStatus();
   const today = dayjs().startOf("day");
@@ -1052,6 +1074,7 @@ export const SellerService = {
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,
+  getRenewalMonthlyPaymentSummary,
   getClientsStatusList,
   getSellerPaymentProofs,
 };
