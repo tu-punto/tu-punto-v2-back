@@ -31,6 +31,11 @@ const FlujoFinancieroSchema = new Schema({
     type: Boolean,
     default: true
   },
+  clase_cobro: {
+    type: String,
+    enum: ['INGRESO', 'RECUPERACION'],
+    default: 'INGRESO'
+  },
   descuento_porcentaje: {
     type: Number,
     default: 0

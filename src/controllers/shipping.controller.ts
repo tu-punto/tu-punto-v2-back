@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ShippingService } from "../services/shipping.service";
+import { CatalogOrderIntegrationService } from "../services/catalogOrderIntegration.service";
 
 export const getShipping = async (req: Request, res: Response) => {
   try {
@@ -301,6 +302,52 @@ export const getShippingStatusHistoryController = async (req: Request, res: Resp
       message: "Error al obtener historial de estados",
       error
     });
+  }
+};
+
+export const markSellerWithdrawalController = async (req: Request, res: Response) => {
+  const { shippingIds, externalSaleIds, withdrawnAt } = req.body || {};
+
+  if (!Array.isArray(shippingIds) && !Array.isArray(externalSaleIds)) {
+    return res.status(400).json({
+      success: false,
+      message: "Debe enviar shippingIds o externalSaleIds",
+    });
+  }
+
+  try {
+    const auth = res.locals.auth as { id?: string; role?: string; sucursalId?: string } | undefined;
+    const result = await ShippingService.markSellerWithdrawal({
+      shippingIds: Array.isArray(shippingIds) ? shippingIds : [],
+      externalSaleIds: Array.isArray(externalSaleIds) ? externalSaleIds : [],
+      withdrawnAt,
+      currentBranchId: auth?.sucursalId,
+      changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error?.message || "Error al marcar retiro por vendedor",
+      error,
+    });
+  }
+};
+
+export const rejectCatalogOrderController = async (req: Request, res: Response) => {
+  try {
+    const auth = res.locals.auth as { id?: string; role?: string } | undefined;
+    const rejectedBy = `${String(auth?.role || "user")}:${String(auth?.id || "")}`;
+    const order = await CatalogOrderIntegrationService.rejectOrder(
+      req.params.id,
+      String(req.body?.reason || ""),
+      rejectedBy
+    );
+    return res.json({ success: true, order });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error?.message || "No se pudo rechazar" });
   }
 };
 

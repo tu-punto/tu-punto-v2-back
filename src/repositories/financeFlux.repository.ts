@@ -11,6 +11,8 @@ const financeFluxPopulate = [
 ];
 
 const SIMPLE_PACKAGE_INCOME_CONCEPT_REGEX = /^Paquetes?\s+simples?\s+en\s+(efectivo|qr)(\s*\(\d+\))?$/i;
+const externalSellerIncomeConceptRegex = (method: string) =>
+  new RegExp(`^Entregas?\\s+externas?\\s+pagadas?\\s+por\\s+vendedor\\s+en\\s+${method}(\\s*\\(\\d+\\))?$`, "i");
 
 const applyGeneralFinanceFluxVisibilityFilter = (match: any = {}) => {
   match.visible_en_flujo_general = { $ne: false };
@@ -156,6 +158,28 @@ const updateById = async (
   }).exec();
 };
 
+const findExternalSellerIncomeForAdjustment = async (params: {
+  paymentMethod: "efectivo" | "qr";
+  branchId?: string;
+  from: Date;
+  to: Date;
+}): Promise<IFlujoFinancieroDocument | null> => {
+  const match: any = {
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    esDeuda: { $ne: true },
+    visible_en_flujo_general: false,
+    concepto: { $regex: externalSellerIncomeConceptRegex(params.paymentMethod) },
+    fecha: { $gte: params.from, $lt: params.to },
+  };
+
+  if (params.branchId && Types.ObjectId.isValid(params.branchId)) {
+    match.id_sucursal = new Types.ObjectId(params.branchId);
+  }
+
+  return await FlujoFinancieroModel.findOne(match).sort({ createdAt: -1 }).exec();
+};
+
 const findSellerById = async (
   sellerId: Types.ObjectId
 ): Promise<IFlujoFinancieroDocument | null> => {
@@ -190,6 +214,7 @@ export const FinanceFluxRepository = {
   findSellerInfoById,
   findById,
   updateById,
+  findExternalSellerIncomeForAdjustment,
   markFinanceFluxAsPaid,
   findAllDebts,
 };

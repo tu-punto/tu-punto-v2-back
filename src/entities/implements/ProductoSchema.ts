@@ -14,6 +14,13 @@ const CombinacionSchema = new Schema({
   },
   precio: { type: Number, required: true },
   stock: { type: Number, required: true },
+  catalog_reservations: [
+    {
+      orderId: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }
+  ],
 
   imagenes: [
     {

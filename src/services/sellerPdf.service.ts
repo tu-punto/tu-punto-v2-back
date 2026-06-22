@@ -216,17 +216,18 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     styles: { fontSize: 10 },
   });
 
-  // Tabla de mensualidades
+  // Tabla de deudas
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(14);
   doc.text(
-    "MENSUALIDADES DESCONTADAS",
+    "DEUDAS DESCONTADAS",
     10,
     (doc as any).lastAutoTable.finalY + 10
   );
 
-  const mensualidadesTableData = filteredDeudas.map((deuda) => [
+  const mensualidadesTableData = filteredDeudas.map((deuda: any) => [
     new Date(deuda.fecha).toLocaleDateString("es-BO"),
+    deuda.clase_cobro === "RECUPERACION" ? "Recuperacion" : "Servicio",
     deuda.concepto,
     deuda.monto.toFixed(2),
   ]);
@@ -237,7 +238,8 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   );
 
   mensualidadesTableData.push([
-    "TOTAL MENSUALIDADES",
+    "TOTAL DEUDAS",
+    "",
     "",
     totalMensualidades > 0
       ? `Bs. -${totalMensualidades}`
@@ -246,7 +248,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 20,
-    head: [["FECHA", "CONCEPTO", "MONTO"]],
+    head: [["FECHA", "TIPO", "CONCEPTO", "MONTO"]],
     body: mensualidadesTableData,
     styles: { fontSize: 10 },
   });

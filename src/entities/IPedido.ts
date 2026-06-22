@@ -12,6 +12,8 @@ export interface IPedido {
   hora_entrega_acordada: Date;
   hora_entrega_rango_final: Date;
   hora_entrega_real: Date;
+  storage_fee_start_at?: Date;
+  late_pickup_fee?: number;
 
   observaciones: string;
   lugar_origen?: Types.ObjectId; 
@@ -23,6 +25,21 @@ export interface IPedido {
   cargo_delivery: number;
 
   estado_pedido: string;
+  origen_pedido?: 'interno' | 'catalogo';
+  catalog_order_id?: string;
+  catalog_status_sync?: 'pending' | 'synced' | 'failed';
+  catalog_status_sync_error?: string;
+  catalog_stock_status?: 'pending' | 'reserved' | 'restored';
+  catalog_stock_items?: Array<{
+    internalProductId: string;
+    internalVariantKey: string;
+    internalBranchId: string;
+    quantity: number;
+    currentStock: number;
+  }>;
+  rechazado_en?: Date;
+  rechazado_por?: string;
+  motivo_rechazo?: string;
   esta_pagado: 'si' | 'no' | 'adelanto';
   adelanto_cliente: number;
   pagado_al_vendedor: boolean;
@@ -37,6 +54,11 @@ export interface IPedido {
   shipping_qr_payload?: string;
   shipping_qr_image_path?: string;
   buyer_tracking_code?: string;
+  public_tracking_received_at?: Date;
+  public_tracking_schedule_base_at?: Date;
+  public_tracking_frozen?: boolean;
+  public_tracking_frozen_status?: string;
+  public_tracking_frozen_at?: Date;
   numero_guia?: string;
   guia_sequence?: number;
   simple_package_order?: boolean;

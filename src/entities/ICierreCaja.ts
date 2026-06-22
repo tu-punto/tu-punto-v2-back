@@ -26,11 +26,18 @@ export interface ICierreCaja {
     cantidad: number;
   }[];
   operaciones_adicionales: {
-    tipo: "delivery" | "gasto_profit" | "pago_cliente";
+    tipo: "ingreso" | "gasto" | "delivery" | "gasto_profit" | "pago_cliente";
     descripcion: string;
+    concepto?: string;
+    categoria?: string;
     cliente?: string;
     metodo: "efectivo" | "qr";
     monto: number;
+    afecta_empresa?: boolean;
+    fecha?: Date;
+    id_vendedor?: Types.ObjectId;
+    id_sucursal?: Types.ObjectId;
+    finance_flux_id?: Types.ObjectId;
   }[];
 
   id_sucursal: Types.ObjectId;

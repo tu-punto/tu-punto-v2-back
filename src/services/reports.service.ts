@@ -135,6 +135,24 @@ function normalizeInventoryVariantValueLabel(label: unknown, baseName?: unknown)
   return normalizeText(stripped).replace(/(^|\/)\s*[^:/]+:\s*/g, "$1");
 }
 
+function getIncomeText(doc: any): string {
+  return normalizeText(
+    [doc?.concepto, doc?.categoria, doc?.tipo, doc?.clase_cobro, doc?.detalle].join(" ")
+  );
+}
+
+function isAltaRenovacionIncome(doc: any): boolean {
+  const text = getIncomeText(doc);
+  const isSimpleOrExternal =
+    /(^|[^a-z0-9])(simple|simples|externa|externas|external)(?=$|[^a-z0-9])/.test(text);
+  const isAltaOrRenov =
+    /(^|[^a-z0-9])(alta|altas|renovacion|renovaciones|renovar)(?=$|[^a-z0-9])/.test(text);
+  const isIngreso = String(doc?.tipo || "").toUpperCase() === "INGRESO";
+  const notRecovery = String(doc?.clase_cobro || "").toUpperCase() !== "RECUPERACION";
+
+  return isIngreso && notRecovery && !isSimpleOrExternal && isAltaOrRenov;
+}
+
 function buildInventoryAliasKeys(params: {
   idProducto?: unknown;
   variantKey?: unknown;
@@ -293,6 +311,10 @@ function safeNum(n: any) {
     return Number.isFinite(v) ? v : 0;
   }
   return 0;
+}
+
+function roundCurrency(value: number) {
+  return +Number(value || 0).toFixed(2);
 }
 
 function safeProduct(values: number[]) {
@@ -1777,6 +1799,7 @@ export const ReportsService = {
     const docs = await ReportsRepository.fetchIngresosFlujoEnRango({ start, end });
 
     const detalle = (docs as any[])
+      .filter((d) => isAltaRenovacionIncome(d))
       .map((d) => {
         const mesRow = d.fecha ? moment.utc(d.fecha).format("YYYY-MM") : "";
         return {
@@ -2025,6 +2048,106 @@ export const ReportsService = {
       .sort((a, b) => String(a.fecha || "").localeCompare(String(b.fecha || "")) || String(a.id_venta || "").localeCompare(String(b.id_venta || "")));
 
     return { meses: mesesSeleccionados, resumen, detalle: detalleFiltrado };
+  },
+
+  async getRiesgoClientesPorVentas({ mes, meses, mesFin }: ExportVentasVendedoresParams) {
+    const selected = resolveMesesSeleccionados({ mes, meses, mesFin }, 4);
+    const mesActual = selected[selected.length - 1];
+    if (!mesActual) throw new Error("mes es requerido (YYYY-MM)");
+
+    const base = moment.tz(`${mesActual}-01 00:00:00`, TZ);
+    const mesesAnalisis = Array.from({ length: 7 }, (_, index) =>
+      base.clone().subtract(6 - index, "month").format("YYYY-MM")
+    );
+    const { start, end } = rangeMeses(mesesAnalisis);
+    const detalle = await ReportsRepository.fetchVentasDetalleEnRango({ start, end });
+
+    type SellerSales = {
+      id_vendedor: string;
+      vendedor: string;
+      porMes: Map<string, number>;
+    };
+    const acc = new Map<string, SellerSales>();
+
+    for (const row of detalle as any[]) {
+      const idVendedor = String(row.id_vendedor || "");
+      if (!idVendedor || !row.fecha) continue;
+
+      const mesRow = moment.tz(row.fecha, TZ).format("YYYY-MM");
+      if (!mesesAnalisis.includes(mesRow)) continue;
+
+      const current = acc.get(idVendedor) || {
+        id_vendedor: idVendedor,
+        vendedor: row.vendedor || idVendedor,
+        porMes: new Map<string, number>(),
+      };
+      current.porMes.set(mesRow, (current.porMes.get(mesRow) || 0) + safeNum(row.total_bs));
+      acc.set(idVendedor, current);
+    }
+
+    const percentChange = (current: number, baseValue: number | null) => {
+      if (baseValue === null || baseValue <= 0) return null;
+      return +(((current - baseValue) / baseValue) * 100).toFixed(2);
+    };
+    const averageFor = (seller: SellerSales, monthsBack: number) => {
+      const months = Array.from({ length: monthsBack }, (_, index) =>
+        base.clone().subtract(index + 1, "month").format("YYYY-MM")
+      );
+      const values = months
+        .map((month) => seller.porMes.get(month))
+        .filter((value): value is number => typeof value === "number");
+
+      if (values.length < monthsBack) return null;
+      return +(values.reduce((sum, value) => sum + value, 0) / monthsBack).toFixed(2);
+    };
+
+    const rows = Array.from(acc.values())
+      .map((seller) => {
+        const mesAnterior = base.clone().subtract(1, "month").format("YYYY-MM");
+        const ventasMesActual = +(seller.porMes.get(mesActual) || 0).toFixed(2);
+        const ventasMesAnterior =
+          typeof seller.porMes.get(mesAnterior) === "number"
+            ? +(seller.porMes.get(mesAnterior) || 0).toFixed(2)
+            : null;
+        const promedio3m = averageFor(seller, 3);
+        const promedio6m = averageFor(seller, 6);
+        const variacionMesAnteriorPct = percentChange(ventasMesActual, ventasMesAnterior);
+        const variacionPromedio3mPct = percentChange(ventasMesActual, promedio3m);
+        const variacionPromedio6mPct = percentChange(ventasMesActual, promedio6m);
+        const comparacionesValidas = [
+          variacionMesAnteriorPct,
+          variacionPromedio3mPct,
+          variacionPromedio6mPct,
+        ].filter((value): value is number => typeof value === "number");
+        const peorCaidaPct = comparacionesValidas.length ? Math.min(...comparacionesValidas) : null;
+
+        return {
+          id_vendedor: seller.id_vendedor,
+          vendedor: seller.vendedor,
+          mes_actual: mesActual,
+          ventas_mes_actual_bs: ventasMesActual,
+          ventas_mes_anterior_bs: ventasMesAnterior,
+          variacion_mes_anterior_pct: variacionMesAnteriorPct,
+          promedio_3m_bs: promedio3m,
+          variacion_promedio_3m_pct: variacionPromedio3mPct,
+          promedio_6m_bs: promedio6m,
+          variacion_promedio_6m_pct: variacionPromedio6mPct,
+          peor_caida_pct: peorCaidaPct,
+          alerta: typeof peorCaidaPct === "number" && peorCaidaPct < 0 ? "SI" : "NO",
+        };
+      })
+      .filter((row) => row.alerta === "SI" || row.ventas_mes_actual_bs > 0)
+      .sort((a, b) => safeNum(a.peor_caida_pct) - safeNum(b.peor_caida_pct));
+
+    return {
+      mes: mesActual,
+      mesesAnalisis,
+      resumen: {
+        clientes: rows.length,
+        alertas: rows.filter((row) => row.alerta === "SI").length,
+      },
+      rows,
+    };
   },
 
   async exportClientesStatusXlsx(_: ExportClientesStatusParams) {
@@ -2758,7 +2881,7 @@ export const ReportsService = {
     });
 
     // ===== 1) Armar detalle con mes =====
-    const detalle = (docs as any[]).map((d) => {
+    const detalle = (docs as any[]).filter((d) => isAltaRenovacionIncome(d)).map((d) => {
     const mes = moment.utc(d.fecha).format("YYYY-MM");
       return {
         mes,
@@ -3121,6 +3244,189 @@ if (resumen.length) {
 
   return { filePath, filename };
 },
+
+  async getIngresosMensualesSucursalServicio({ mes, meses, sucursalIds }: Params) {
+    const mesesSeleccionados = normalizeMeses(mes, meses);
+    const sucursalFilter = new Set((sucursalIds || []).map(String));
+    const { start: rangeStart, end: rangeEnd } =
+      mesesSeleccionados.length > 1 ? rangeMeses(mesesSeleccionados) : monthRange(mesesSeleccionados[0]);
+    const [incomeDocs, branches] = await Promise.all([
+      ReportsRepository.fetchIngresosFlujoEnRango({ start: rangeStart, end: rangeEnd, includeHidden: true }),
+      ReportsRepository.fetchSucursalesBasicas(),
+    ]);
+    const branchNames = new Map((branches as any[]).map((branch) => [String(branch?._id || ""), String(branch?.nombre || "Sucursal")]));
+    const services = [
+      { key: "alquiler", label: "Alquiler" },
+      { key: "exhibicion", label: "Exhibicion" },
+      { key: "delivery", label: "Delivery" },
+    ] as const;
+    const resolveFallbackService = (income: any) => {
+      const text = `${income?.concepto || ""} ${income?.categoria || ""}`.toLowerCase();
+      if (text.includes("simple") || text.includes("externa") || text.includes("external")) {
+        return null;
+      }
+      if (text.includes("alquiler") || text.includes("almacen")) return { key: "alquiler", label: "Alquiler" };
+      if (text.includes("exhib")) return { key: "exhibicion", label: "Exhibicion" };
+      if (text.includes("delivery")) return { key: "delivery", label: "Delivery" };
+      return { key: "servicio", label: String(income?.concepto || income?.categoria || "Servicio") };
+    };
+    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => isAltaRenovacionIncome(doc));
+    const rows: Array<{
+      mes: string;
+      id_sucursal: string;
+      sucursal: string;
+      servicio: string;
+      monto_bs: number;
+      clientes: number;
+    }> = [];
+
+    for (const selectedMonth of mesesSeleccionados) {
+      const { start, end } = monthRange(selectedMonth);
+      const monthRows = new Map<string, { id_sucursal: string; sucursal: string; servicio: string; monto_bs: number; clientes: Set<string> }>();
+
+      for (const income of serviceIncomeDocs) {
+        const incomeDate = income?.fecha ? new Date(income.fecha) : null;
+        if (!incomeDate || Number.isNaN(incomeDate.getTime()) || incomeDate < start || incomeDate >= end) continue;
+
+        const detailRows = Array.isArray(income?.detalle_servicios) && income.detalle_servicios.length
+          ? income.detalle_servicios
+          : (() => {
+              const branchId = String((income?.id_sucursal as any)?._id || income?.id_sucursal || "");
+              const service = resolveFallbackService(income);
+              if (!branchId || !service) return [];
+              return [{
+                id_sucursal: income.id_sucursal,
+                sucursalName: (income?.id_sucursal as any)?.nombre || "",
+                [service.key]: safeNum(income?.monto),
+                __serviceLabel: service.label,
+                __serviceKey: service.key,
+              }];
+            })();
+
+        for (const branchDetail of detailRows) {
+          const branchId = String(
+            branchDetail?.id_sucursal?._id ||
+            branchDetail?.id_sucursal ||
+            (income?.id_sucursal as any)?._id ||
+            income?.id_sucursal ||
+            ""
+          ).trim();
+          if (!branchId || (sucursalFilter.size && !sucursalFilter.has(branchId))) continue;
+
+          const servicesForDetail = branchDetail.__serviceKey
+            ? [{ key: branchDetail.__serviceKey, label: branchDetail.__serviceLabel }]
+            : services;
+
+          for (const service of servicesForDetail) {
+            const amount = roundCurrency(safeNum(branchDetail?.[service.key]));
+            if (amount <= 0) continue;
+            const mapKey = `${branchId}|||${service.key}`;
+            const current = monthRows.get(mapKey) || {
+              id_sucursal: branchId,
+              sucursal: branchNames.get(branchId) || String(branchDetail?.sucursalName || "Sucursal"),
+              servicio: service.label,
+              monto_bs: 0,
+              clientes: new Set<string>(),
+            };
+            current.monto_bs = roundCurrency(current.monto_bs + amount);
+            current.clientes.add(String(income?.id_vendedor?._id || income?.id_vendedor || income?._id || ""));
+            monthRows.set(mapKey, current);
+          }
+        }
+      }
+
+      for (const row of monthRows.values()) {
+        rows.push({
+          mes: selectedMonth,
+          id_sucursal: row.id_sucursal,
+          sucursal: row.sucursal,
+          servicio: row.servicio,
+          monto_bs: row.monto_bs,
+          clientes: row.clientes.size,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal) || a.servicio.localeCompare(b.servicio));
+    const resumenMap = new Map<string, { mes: string; id_sucursal: string; sucursal: string; total_bs: number }>();
+    for (const row of rows) {
+      const key = `${row.mes}|||${row.id_sucursal}`;
+      const current = resumenMap.get(key) || { mes: row.mes, id_sucursal: row.id_sucursal, sucursal: row.sucursal, total_bs: 0 };
+      current.total_bs = roundCurrency(current.total_bs + row.monto_bs);
+      resumenMap.set(key, current);
+    }
+    const selectedBranches = (branches as any[]).filter((branch) => {
+      const branchId = String(branch?._id || "");
+      return branchId && (!sucursalFilter.size || sucursalFilter.has(branchId));
+    });
+    for (const selectedMonth of mesesSeleccionados) {
+      for (const branch of selectedBranches) {
+        const branchId = String(branch?._id || "");
+        const key = `${selectedMonth}|||${branchId}`;
+        if (!resumenMap.has(key)) {
+          resumenMap.set(key, {
+            mes: selectedMonth,
+            id_sucursal: branchId,
+            sucursal: String(branch?.nombre || "Sucursal"),
+            total_bs: 0,
+          });
+        }
+      }
+    }
+    const resumenPorSucursal = Array.from(resumenMap.values()).sort(
+      (a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal)
+    );
+
+    return {
+      meses: mesesSeleccionados,
+      totalGeneral: {
+        monto_bs: roundCurrency(rows.reduce((sum, row) => sum + row.monto_bs, 0)),
+        sucursales: new Set(resumenPorSucursal.map((row) => row.id_sucursal)).size,
+      },
+      resumenPorSucursal,
+      rows,
+    };
+  },
+
+  async exportIngresosMensualesSucursalServicioXlsx(params: Params) {
+    const data = await this.getIngresosMensualesSucursalServicio(params);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const wsResumen = wb.addWorksheet("Resumen_Por_Sucursal");
+    wsResumen.columns = [
+      { header: "Mes", key: "mes", width: 14 },
+      { header: "Id Sucursal", key: "id_sucursal", width: 26 },
+      { header: "Sucursal", key: "sucursal", width: 28 },
+      { header: "Total (Bs)", key: "total_bs", width: 16 },
+    ];
+    data.resumenPorSucursal.forEach((row) => wsResumen.addRow(row));
+    wsResumen.getRow(1).font = { bold: true };
+
+    const wsDetalle = wb.addWorksheet("Detalle_Por_Servicio");
+    wsDetalle.columns = [
+      { header: "Mes", key: "mes", width: 14 },
+      { header: "Id Sucursal", key: "id_sucursal", width: 26 },
+      { header: "Sucursal", key: "sucursal", width: 28 },
+      { header: "Servicio", key: "servicio", width: 18 },
+      { header: "Clientes", key: "clientes", width: 12 },
+      { header: "Monto (Bs)", key: "monto_bs", width: 16 },
+    ];
+    data.rows.forEach((row) => wsDetalle.addRow(row));
+    wsDetalle.getRow(1).font = { bold: true };
+
+    const nombreMeses =
+      data.meses.length <= 1
+        ? data.meses[0] || "sin_mes"
+        : `${data.meses[0]}_a_${data.meses[data.meses.length - 1]}`;
+    const filename = `ingresos_mensuales_sucursal_servicio_${nombreMeses}.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const filePath = path.join(outDir, filename);
+    await wb.xlsx.writeFile(filePath);
+    return { filePath, filename };
+  },
 
   async exportComisionesMesesXlsx(params: ExportComisionesParams) {
     const data = await this.getComisionesPorMeses(params);
@@ -3530,7 +3836,7 @@ async getReporteEntregasSimplesExternas(params: { mes?: string; meses?: string[]
   for (const row of rawRows as any[]) {
     const serviceType = resolveServiceType(row);
     const registeredInMonth = inRange(row?.fecha_pedido);
-    const deliveredInMonth = isDelivered(row) && inRange(row?.hora_entrega_real || row?.fecha_pedido);
+    const deliveredInMonth = isDelivered(row) && inRange(row?.hora_entrega_real || row?.seller_withdrawn_at || row?.fecha_pedido);
     if (!registeredInMonth && !deliveredInMonth) continue;
 
     const origin = row?.origen_sucursal || row?.sucursal;
@@ -3581,7 +3887,9 @@ async getReporteEntregasSimplesExternas(params: { mes?: string; meses?: string[]
       tipo: serviceType === "simple" ? "Simple" : "Externa",
       numero_guia: String(row?.numero_guia || ""),
       fecha_registro: row?.fecha_pedido ? moment.tz(row.fecha_pedido, TZ).format("YYYY-MM-DD HH:mm") : "",
-      fecha_entrega: row?.hora_entrega_real ? moment.tz(row.hora_entrega_real, TZ).format("YYYY-MM-DD HH:mm") : "",
+      fecha_entrega: row?.hora_entrega_real || row?.seller_withdrawn_at
+        ? moment.tz(row.hora_entrega_real || row.seller_withdrawn_at, TZ).format("YYYY-MM-DD HH:mm")
+        : "",
       sucursal_origen: branchName,
       sucursal_destino: getName(destination),
       ruta: routeType,

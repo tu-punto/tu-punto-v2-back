@@ -1,6 +1,11 @@
 import { Request, Response } from "express";
 import { SimplePackageService } from "../services/simplePackage.service";
 import { OrderGuideWhatsappService } from "../services/orderGuideWhatsapp.service";
+export {
+  getPackageEscalationConfig,
+  getSimplePackageEscalationStatus,
+  upsertPackageEscalationConfig,
+} from "./packageEscalationConfig.controller";
 
 const resolveActor = (res: Response) => ({
   role: String(res.locals.auth?.role || "").toLowerCase(),
@@ -194,6 +199,7 @@ export const createSimplePackageOrders = async (req: Request, res: Response) => 
       role: actor.role,
       currentBranchId: actor.role === "seller" ? undefined : actor.sucursalId,
       paymentMethod: paymentMethod === "efectivo" || paymentMethod === "qr" ? (paymentMethod as "efectivo" | "qr") : "",
+      skipGuideNotification: req.body?.skipGuideNotification === true,
     });
 
     return res.json({

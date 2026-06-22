@@ -10,6 +10,18 @@ const EXTERNAL_SERVICE_FILTER = {
     ]
 };
 
+const buildExternalOriginBranchMatch = (branchObjectId: Types.ObjectId) => ({
+    $or: [
+        { origen_sucursal: branchObjectId },
+        {
+            $and: [
+                { $or: [{ origen_sucursal: { $exists: false } }, { origen_sucursal: null }] },
+                { sucursal: branchObjectId }
+            ]
+        }
+    ]
+});
+
 const getAllExternalSales = async (): Promise<IVentaExternaDocument[]> => {
     return await VentaExternaModel.find(EXTERNAL_SERVICE_FILTER)
         .populate('sucursal')
@@ -39,15 +51,23 @@ const getExternalSalesList = async (params: {
         if (params.to) match.fecha_pedido.$lte = params.to;
     }
     if (params.sucursalId && Types.ObjectId.isValid(params.sucursalId)) {
-        match.sucursal = new Types.ObjectId(params.sucursalId);
+        match.$and = [
+            ...(match.$and || []),
+            buildExternalOriginBranchMatch(new Types.ObjectId(params.sucursalId))
+        ];
     }
     if (params.client) {
         const searchRegex = { $regex: params.client, $options: "i" };
-        match.$or = [
-            { comprador: searchRegex },
-            { telefono_comprador: searchRegex },
-            { carnet_comprador: searchRegex },
-            { numero_guia: searchRegex }
+        match.$and = [
+            ...(match.$and || []),
+            {
+                $or: [
+                    { comprador: searchRegex },
+                    { telefono_comprador: searchRegex },
+                    { carnet_comprador: searchRegex },
+                    { numero_guia: searchRegex }
+                ]
+            }
         ];
     }
 

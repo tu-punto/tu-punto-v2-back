@@ -107,7 +107,15 @@ type SellerListFilters = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
-  sortBy?: "fecha_pago_asignada";
+  sortBy?:
+    | "nombre"
+    | "estado"
+    | "pago_pendiente"
+    | "fecha_vigencia"
+    | "fecha_pago_asignada"
+    | "pago_mensual"
+    | "comision_porcentual"
+    | "emite_factura";
   sortOrder?: "asc" | "desc";
   page?: number;
   pageSize?: number;
@@ -252,10 +260,27 @@ const normalizeSellerServiceValues = (seller: any) => {
   const hasSimplePackageService = hasConfiguredSimplePackageService({
     pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
   });
-  const amortizacion = hasSimplePackageService ? Number(seller?.amortizacion ?? 0) : 0;
-  const precioPaquete = hasSimplePackageService ? Number(seller?.precio_paquete ?? 0) : 0;
+  const normalizeOptionalAmount = (value: unknown, label: string) => {
+    if (value === null || value === undefined || value === "") return null;
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error(`${label} debe ser un monto valido mayor o igual a 0`);
+    }
+    return amount;
+  };
+  const amortizacion = hasSimplePackageService
+    ? normalizeOptionalAmount(seller?.amortizacion, "La amortizacion")
+    : null;
+  const precioPaquete = hasSimplePackageService
+    ? normalizeOptionalAmount(seller?.precio_paquete, "El precio por paquete")
+    : null;
 
-  if (hasSimplePackageService && amortizacion > precioPaquete) {
+  if (
+    hasSimplePackageService &&
+    amortizacion !== null &&
+    precioPaquete !== null &&
+    amortizacion > precioPaquete
+  ) {
     throw new Error("La amortizacion no puede ser mayor al precio por paquete");
   }
 
@@ -827,6 +852,54 @@ const getSellerDebts = async (sellerId: string) => {
   return sellerDebts;
 };
 
+const createSellerRecoveryCharge = async (
+  sellerId: string,
+  payload: { monto?: unknown; concepto?: unknown; fecha?: unknown }
+) => {
+  const seller = await SellerRepository.findById(sellerId);
+  if (!seller) {
+    const error: any = new Error("Vendedor no encontrado");
+    error.status = 404;
+    throw error;
+  }
+
+  const monto = Number(payload?.monto ?? 0);
+  if (!Number.isFinite(monto) || monto <= 0) {
+    const error: any = new Error("El monto debe ser mayor a 0");
+    error.status = 400;
+    throw error;
+  }
+
+  const concepto = String(payload?.concepto || "").trim();
+  if (!concepto) {
+    const error: any = new Error("El concepto es obligatorio");
+    error.status = 400;
+    throw error;
+  }
+
+  const fecha = payload?.fecha ? new Date(String(payload.fecha)) : new Date();
+  if (Number.isNaN(fecha.getTime())) {
+    const error: any = new Error("La fecha no es valida");
+    error.status = 400;
+    throw error;
+  }
+
+  const charge = await saveFlux({
+    tipo: "INGRESO",
+    categoria: "RECUPERACION",
+    concepto,
+    monto: Number(monto.toFixed(2)),
+    fecha,
+    esDeuda: true,
+    id_vendedor: new Types.ObjectId(sellerId),
+    visible_en_flujo_general: false,
+    clase_cobro: "RECUPERACION",
+  });
+
+  await SellerRepository.incrementDebt(sellerId, Number(monto.toFixed(2)));
+  return charge;
+};
+
 const updateSellerSaldo = async (sellerId: any, addSaldo: number) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) throw new Error(`Seller with id ${sellerId} not found`);
@@ -997,6 +1070,7 @@ export const SellerService = {
   requestSellerPayment,
   declineSellerService,
   cancelSellerServiceDecline,
+  createSellerRecoveryCharge,
   getSellerDebts,
   updateSellerSaldo,
   getServicesSummary,

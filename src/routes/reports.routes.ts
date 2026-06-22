@@ -11,6 +11,8 @@ import {
   getComisionesMeses,
   exportIngresosFlujo3MesesXlsx,
   getIngresosMeses,
+  getIngresosMensualesSucursalServicio,
+  exportIngresosMensualesSucursalServicioXlsx,
   exportClientesActivosXlsx,
   getClientesActivos,
   exportVentasVendedores4mXlsx,
@@ -25,6 +27,7 @@ import {
   exportReporteEntregasSimplesExternasXlsx,
   exportVentasTemporalesPorVendedorXlsx,
   getVentasTemporalesPorVendedor,
+  getRiesgoClientesVentas,
 } from "../controllers/reports.controller";
 
 const reportsRouter = Router();
@@ -41,9 +44,12 @@ reportsRouter.post("/comisiones", getComisionesMeses);
 reportsRouter.get("/comisiones-3m/xlsx", exportComisiones3MesesXlsx);
 reportsRouter.post("/ingresos", getIngresosMeses);
 reportsRouter.get("/ingresos-3m/xlsx", exportIngresosFlujo3MesesXlsx);
+reportsRouter.post("/ingresos-mensuales-sucursal-servicio", getIngresosMensualesSucursalServicio);
+reportsRouter.get("/ingresos-mensuales-sucursal-servicio/xlsx", exportIngresosMensualesSucursalServicioXlsx);
 reportsRouter.post("/clientes-activos", getClientesActivos);
 reportsRouter.get("/clientes-activos/xlsx", exportClientesActivosXlsx);
 reportsRouter.post("/ventas-vendedores", getVentasVendedores);
+reportsRouter.post("/riesgo-clientes-ventas", getRiesgoClientesVentas);
 reportsRouter.get("/ventas-vendedores-4m/xlsx", exportVentasVendedores4mXlsx);
 reportsRouter.post("/ventas-qr", getVentasQr);
 reportsRouter.get("/ventas-qr/xlsx", exportVentasQrXlsx);

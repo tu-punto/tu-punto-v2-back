@@ -286,7 +286,7 @@ export const getComisionesMeses = async (req: Request, res: Response) => {
       return res.status(500).json({ message: "Error al generar reporte de ingresos 3M" });
     }
   };
-  export const getIngresosMeses = async (req: Request, res: Response) => {
+export const getIngresosMeses = async (req: Request, res: Response) => {
     try {
       const { mes, meses } = parseMesesInput(req.body || {});
       const mesFin = String(req.body?.mesFin || "");
@@ -298,6 +298,29 @@ export const getComisionesMeses = async (req: Request, res: Response) => {
       return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
     }
   };
+export const getIngresosMensualesSucursalServicio = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.body || {});
+    const sucursalIds = Array.isArray(req.body?.sucursales) ? req.body.sucursales : undefined;
+    const data = await ReportsService.getIngresosMensualesSucursalServicio({ mes, meses, sucursalIds });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getIngresosMensualesSucursalServicio error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+export const exportIngresosMensualesSucursalServicioXlsx = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.query);
+    const sucursalesParam = typeof req.query.sucursales === "string" ? String(req.query.sucursales) : "";
+    const sucursalIds = sucursalesParam ? sucursalesParam.split(",").map((id) => id.trim()).filter(Boolean) : undefined;
+    const { filePath, filename } = await ReportsService.exportIngresosMensualesSucursalServicioXlsx({ mes, meses, sucursalIds });
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportIngresosMensualesSucursalServicioXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
   export const exportClientesActivosXlsx = async (req: Request, res: Response) => {
   try {
     const { mes, meses } = parseMesesInput(req.query);
@@ -341,6 +364,18 @@ export const getVentasVendedores = async (req: Request, res: Response) => {
     return res.json({ ok: true, ...data });
   } catch (err: any) {
     console.error("getVentasVendedores error:", err);
+    return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
+  }
+};
+
+export const getRiesgoClientesVentas = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.body || {});
+    const mesFin = String(req.body?.mesFin || "");
+    const data = await ReportsService.getRiesgoClientesPorVentas({ mes, meses, mesFin });
+    return res.json({ ok: true, ...data });
+  } catch (err: any) {
+    console.error("getRiesgoClientesVentas error:", err);
     return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
   }
 };

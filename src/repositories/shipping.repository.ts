@@ -42,6 +42,18 @@ type ShippingListParams = {
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const buildOriginBranchMatch = (branchObjectId: Types.ObjectId) => ({
+  $or: [
+    { lugar_origen: branchObjectId },
+    {
+      $and: [
+        { $or: [{ lugar_origen: { $exists: false } }, { lugar_origen: null }] },
+        { sucursal: branchObjectId }
+      ]
+    }
+  ]
+});
+
 const findList = async (params: ShippingListParams) => {
   const safePage = Math.max(1, Number(params.page) || 1);
   const safeLimit = Math.min(200, Math.max(1, Number(params.limit) || 50));
@@ -59,13 +71,16 @@ const findList = async (params: ShippingListParams) => {
   }
 
   if (params.originId && Types.ObjectId.isValid(params.originId)) {
-    filter.lugar_origen = new Types.ObjectId(params.originId);
+    filter.$and = [...(filter.$and || []), buildOriginBranchMatch(new Types.ObjectId(params.originId))];
   }
 
   if (params.branchContextId && Types.ObjectId.isValid(params.branchContextId)) {
     const branchObjectId = new Types.ObjectId(params.branchContextId);
     const branchVisibilityMatch = {
-      $or: [{ lugar_origen: branchObjectId }, { sucursal: branchObjectId }]
+      $or: [
+        buildOriginBranchMatch(branchObjectId),
+        { origen_pedido: "catalogo" }
+      ]
     };
 
     if (filter.$and) {

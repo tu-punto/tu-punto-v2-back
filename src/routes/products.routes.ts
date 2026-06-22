@@ -63,6 +63,12 @@ productRouter.post("/registerVariant", ProductController.registerProduct);
 productRouter.post("/addFeatures", ProductController.addFeatureToProduct);
 productRouter.post("/add-variant", ProductController.addVariantToProduct);
 productRouter.post("/generate-ingress-pdf", ProductController.generateIngressPDF);
+productRouter.post(
+  "/inventory-qr-report",
+  requireAuth,
+  requireRole("admin", "operator", "superadmin"),
+  ProductController.generateInventoryQRReport
+);
 
   productRouter.post("/:id/regenerate-qr", ProductController.regenerateProductQR); // Regenerar QR
   productRouter.post("/variant-qr/generate", ProductController.generateVariantQR);

@@ -1,6 +1,6 @@
 import moment from "moment-timezone";
 import { Types } from "mongoose";
-import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod } from "../entities/IVentaExterna";
+import { ExternalPaidStatus, IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
@@ -8,6 +8,9 @@ import { OrderGuideService } from "./orderGuide.service";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
+import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
+import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
+import { TrackingFreezeService } from "./trackingFreeze.service";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -49,6 +52,44 @@ const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 const toObjectIdOrUndefined = (value?: string) =>
   value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
 
+const isSameBusinessDay = (value: unknown) => {
+  const date = moment.tz(value as any, "America/La_Paz");
+  if (!date.isValid()) return false;
+  return date.isSame(moment().tz("America/La_Paz"), "day");
+};
+
+const getBusinessDayRange = (value: unknown) => {
+  const start = moment.tz(value as any, "America/La_Paz").startOf("day");
+  return {
+    from: start.toDate(),
+    to: start.clone().add(1, "day").toDate(),
+  };
+};
+
+const isBranchTransferSale = (row: any) => {
+  const originId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
+  const destinationId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal ?? row?.sucursal);
+  return Boolean(originId && destinationId && originId !== destinationId);
+};
+
+const resolveStorageFeeStartForExternal = (row: any) =>
+  isBranchTransferSale(row)
+    ? row?.public_tracking_frozen === true
+      ? null
+      : resolveBranchPickupFeeStart(row)
+    : row?.fecha_pedido;
+
+const resolveLatePickupFeeForExternalDelivery = (row: any, pickedUpAt: unknown) => {
+  if (row?.public_tracking_frozen === true) {
+    return roundCurrency(Number(row?.late_pickup_fee || 0));
+  }
+
+  return calculateLatePickupFee({
+    startAt: resolveStorageFeeStartForExternal(row),
+    pickedUpAt: pickedUpAt || new Date(),
+  });
+};
+
 const EXTERNAL_DELIVERY_PAYMENT_LABEL_BY_CODE: Record<string, string> = {
   "1": "Transferencia o QR",
   "2": "Efectivo",
@@ -79,6 +120,9 @@ const normalizeSellerPaymentMethod = (value: unknown): PackagePaymentMethod => {
   return "";
 };
 
+const normalizePackageSize = (value: unknown) =>
+  String(value || "").trim().toLowerCase() === "grande" ? "grande" : "estandar";
+
 const normalizeDeliveryPaymentType = (value: unknown): string => {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return "";
@@ -106,6 +150,7 @@ const resolveExternalBranchRoutePricing = async (originBranchId?: string, destin
       originBranchId: "",
       destinationBranchId: "",
       destinationBranchName: "",
+      routeId: "",
     };
   }
 
@@ -116,12 +161,17 @@ const resolveExternalBranchRoutePricing = async (originBranchId?: string, destin
   }
 
   if (safeOriginBranchId === safeDestinationBranchId) {
+    const route = await SimplePackageBranchPriceRepository.findPriceByRoute(
+      safeOriginBranchId,
+      safeDestinationBranchId
+    );
     const branch = await SucursalModel.findById(safeOriginBranchId).select("nombre").lean();
     return {
       precioEntreSucursal: 0,
       originBranchId: safeOriginBranchId,
       destinationBranchId: safeDestinationBranchId,
       destinationBranchName: String((branch as any)?.nombre || "").trim(),
+      routeId: String((route as any)?._id || ""),
     };
   }
 
@@ -138,6 +188,7 @@ const resolveExternalBranchRoutePricing = async (originBranchId?: string, destin
     originBranchId: safeOriginBranchId,
     destinationBranchId: safeDestinationBranchId,
     destinationBranchName: String((route as any)?.destino_sucursal?.nombre || "").trim(),
+    routeId: String((route as any)?._id || ""),
   };
 };
 
@@ -166,6 +217,40 @@ const registerExternalMixedIncome = async (params: {
         ? new Types.ObjectId(params.branchId)
         : undefined,
   });
+};
+
+const adjustExternalSellerIncome = async (params: {
+  paymentMethod: "efectivo" | "qr";
+  amountDelta: number;
+  branchId?: string;
+  date?: unknown;
+}) => {
+  const amountDelta = roundCurrency(params.amountDelta);
+  if (!params.paymentMethod || amountDelta === 0) return;
+
+  const range = getBusinessDayRange(params.date || new Date());
+  const existingFlux = await FinanceFluxRepository.findExternalSellerIncomeForAdjustment({
+    paymentMethod: params.paymentMethod,
+    branchId: params.branchId,
+    from: range.from,
+    to: range.to,
+  });
+
+  if (existingFlux) {
+    await FinanceFluxRepository.updateById(String((existingFlux as any)._id), {
+      monto: roundCurrency(Math.max(0, Number((existingFlux as any).monto || 0) + amountDelta)),
+    });
+    return;
+  }
+
+  if (amountDelta > 0) {
+    await registerExternalMixedIncome({
+      paymentMethod: params.paymentMethod,
+      amount: amountDelta,
+      packageCount: 1,
+      branchId: params.branchId,
+    });
+  }
 };
 
 const resolveExternalDeliveryPayment = (params: {
@@ -362,11 +447,39 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   validateBuyerIdentity(input);
 
   const paid = normalizePaidStatus(input.esta_pagado);
-  const packagePrice = toNumber(input.precio_paquete ?? input.precio_total, 0);
   const originBranchId = toTrimmed(input.origen_sucursal_id ?? input.origen_sucursal ?? input.sucursal ?? input.id_sucursal);
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
-  const branchRoutePrice = branchRoute.precioEntreSucursal;
+  const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
+  const packagePricePosition = Math.max(
+    1,
+    toNumber(input.package_position_in_batch ?? input.numero_paquete, batchPackageCount)
+  );
+  const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
+  const effectiveDeliverySpaces = requestedDeliverySpaces;
+  const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
+    routeId: branchRoute.routeId,
+    deliverySpaces: effectiveDeliverySpaces,
+    fallbackSize: normalizePackageSize(input.package_size ?? input.tamano),
+  }) as PackageSize;
+  const deliveryPricing =
+    branchRoute.originBranchId === branchRoute.destinationBranchId
+      ? { total: 0, spaces: effectiveDeliverySpaces }
+      : await PackageEscalationConfigService.getDeliveryPricing({
+          routeId: branchRoute.routeId,
+          packageCount: batchPackageCount,
+          packageSize,
+          deliverySpaces: effectiveDeliverySpaces,
+          escalationSpaces: Math.max(1, toNumber(input.batch_delivery_spaces ?? effectiveDeliverySpaces, effectiveDeliverySpaces)),
+          fallbackRoutePrice: branchRoute.precioEntreSucursal,
+        });
+  const branchRoutePrice = deliveryPricing.total;
+  const configuredPackagePrice = await PackageEscalationConfigService.getExternalUnitPrice({
+    routeId: branchRoute.routeId,
+    packageCount: packagePricePosition,
+    packageSize,
+  });
+  const packagePrice = configuredPackagePrice;
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
@@ -388,6 +501,10 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     montoPagaVendedor > 0
       ? normalizeSellerPaymentMethod(input.metodo_pago ?? input.paymentMethod ?? input.seller_payment_method)
       : "";
+  const trackingFreezeFields = await TrackingFreezeService.getFreezeFieldsForOrder({
+    originBranchId: branchRoute.originBranchId,
+    destinationBranchId: branchRoute.destinationBranchId,
+  });
 
   return {
     id_vendedor: input.id_vendedor,
@@ -399,11 +516,14 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     descripcion_paquete: toTrimmed(input.descripcion_paquete ?? input.descripcion ?? "Sin descripcion"),
     telefono_comprador: buyerPhone || undefined,
     fecha_pedido: normalizeExternalDate(input.fecha_pedido) as unknown as Date,
+    public_tracking_received_at: new Date(),
+    ...trackingFreezeFields,
     sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     origen_sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
-    package_size: "estandar",
+    package_size: packageSize,
+    delivery_spaces: effectiveDeliverySpaces,
     precio_paquete_unitario: packagePrice,
     amortizacion_vendedor: toNumber(input.amortizacion_vendedor ?? input.monto_paga_vendedor, 0),
     deuda_comprador: totalBuyerDebt,
@@ -462,17 +582,29 @@ const assignExternalGuideAndQR = async (record: IVentaExterna) => {
 const registerExternalSalesByPackages = async (payload: any) => {
   const paquetes = Array.isArray(payload?.paquetes) ? payload.paquetes : [];
   if (!paquetes.length) throw new Error("Debe enviar al menos un paquete");
+  const originBranchId = toTrimmed(payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal);
+  const totalDeliverySpaces = paquetes.reduce((sum: number, pkg: any) => {
+    const destinationBranchId = toTrimmed(pkg?.destino_sucursal_id ?? pkg?.destino_sucursal ?? originBranchId);
+    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return sum;
+    const spaces = Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1));
+    return roundCurrency(sum + spaces);
+  }, 0);
 
   const toCreate: IVentaExterna[] = await Promise.all(paquetes.map(async (pkg: any, index: number) => {
     const merged = {
       ...payload,
       ...pkg,
       numero_paquete: pkg?.numero_paquete ?? index + 1,
+      package_position_in_batch: index + 1,
       fecha_pedido: payload?.fecha_pedido,
       carnet_vendedor: payload?.carnet_vendedor,
       vendedor: payload?.vendedor,
       telefono_vendedor: payload?.telefono_vendedor,
-      origen_sucursal_id: payload?.origen_sucursal_id ?? payload?.originBranchId ?? payload?.sucursal ?? payload?.id_sucursal,
+      origen_sucursal_id: originBranchId,
+      batch_delivery_spaces: totalDeliverySpaces || Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1)),
+      batch_package_count: paquetes.length,
+      precio_paquete: undefined,
+      precio_total: undefined,
     };
 
     if (merged.id_sucursal) {
@@ -504,26 +636,91 @@ const deleteExternalSaleByID = async (id: string) => {
 const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
+  const existingDelivered = existing.estado_pedido === "Entregado" || existing.delivered === true;
+
+  if (existingDelivered) {
+    throw new Error("No se puede editar una entrega que ya fue entregada");
+  }
+
+  const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
+    | "external"
+    | "simple_package";
+  const paymentEditRequested =
+    Object.prototype.hasOwnProperty.call(externalSale, "esta_pagado") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
+  const buyerNameEditRequested = Object.prototype.hasOwnProperty.call(externalSale, "comprador");
+
+  if (serviceOrigin === "simple_package" && buyerNameEditRequested) {
+    throw new Error("Por ahora no se puede editar el comprador de pedidos simples");
+  }
+
+  if ((paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
+    throw new Error("Solo se puede editar el cobro o el comprador el mismo dia que se creo la entrega");
+  }
 
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
   const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
 
-  const price = toNumber(
-    externalSale.precio_paquete ?? existing.precio_paquete ?? externalSale.precio_total ?? existing.precio_total,
-    0
+  const existingOriginBranchId = toTrimmed((existing.origen_sucursal as any)?._id ?? existing.origen_sucursal ?? existing.sucursal);
+  const existingDestinationBranchId = toTrimmed((existing.destino_sucursal as any)?._id ?? existing.destino_sucursal ?? existing.sucursal);
+  const nextOriginBranchId = toTrimmed(
+    externalSale.origen_sucursal_id ?? externalSale.origen_sucursal ?? externalSale.sucursal ?? existingOriginBranchId
   );
-  const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
-    | "external"
-    | "simple_package";
-  const branchRoutePrice = roundCurrency(
-    toNumber(
-      externalSale.precio_entre_sucursal ??
-        existing.precio_entre_sucursal ??
-        externalSale.cargo_delivery ??
-        existing.cargo_delivery,
-      0
-    )
+  const nextDestinationBranchId = toTrimmed(
+    externalSale.destino_sucursal_id ?? externalSale.destino_sucursal ?? existingDestinationBranchId ?? nextOriginBranchId
   );
+  const shouldRecalculateRoutePricing =
+    serviceOrigin === "external" &&
+    (
+      Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal_id") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal_id") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "delivery_spaces") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "package_size") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "tamano") ||
+      Object.prototype.hasOwnProperty.call(externalSale, "precio_paquete")
+    );
+  let nextPackageSize = normalizePackageSize(externalSale.package_size ?? externalSale.tamano ?? existing.package_size);
+  let deliverySpaces = Math.max(1, toNumber(externalSale.delivery_spaces ?? existing.delivery_spaces ?? 1, 1));
+  let price = toNumber(existing.precio_paquete ?? existing.precio_total, 0);
+  let branchRoutePrice = roundCurrency(toNumber(existing.precio_entre_sucursal ?? existing.cargo_delivery, 0));
+  let nextBranchRoute = null as Awaited<ReturnType<typeof resolveExternalBranchRoutePricing>> | null;
+
+  if (shouldRecalculateRoutePricing) {
+    nextBranchRoute = await resolveExternalBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+    deliverySpaces = Math.max(1, toNumber(externalSale.delivery_spaces ?? existing.delivery_spaces ?? 1, 1));
+    const packagePricePosition = Math.max(
+      1,
+      toNumber(externalSale.package_position_in_batch ?? externalSale.numero_paquete ?? existing.numero_paquete, 1)
+    );
+    nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
+      routeId: nextBranchRoute.routeId,
+      deliverySpaces,
+      fallbackSize: nextPackageSize,
+    }) as PackageSize;
+    const deliveryPricing =
+      nextBranchRoute.originBranchId === nextBranchRoute.destinationBranchId
+        ? { total: 0, spaces: deliverySpaces }
+        : await PackageEscalationConfigService.getDeliveryPricing({
+            routeId: nextBranchRoute.routeId,
+            packageCount: Math.max(1, toNumber(externalSale.batch_package_count ?? externalSale.numero_paquetes ?? existing.numero_paquete, 1)),
+            packageSize: nextPackageSize,
+            deliverySpaces,
+            escalationSpaces: Math.max(1, toNumber(externalSale.batch_delivery_spaces ?? deliverySpaces, deliverySpaces)),
+            fallbackRoutePrice: nextBranchRoute.precioEntreSucursal,
+          });
+
+    branchRoutePrice = deliveryPricing.total;
+    price = await PackageEscalationConfigService.getExternalUnitPrice({
+      routeId: nextBranchRoute.routeId,
+      packageCount: packagePricePosition,
+      packageSize: nextPackageSize,
+    });
+  }
+
   const simplePackageFinancials = getSimplePackageFinancials({
     ...existing,
     ...externalSale,
@@ -540,7 +737,6 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.delivered === true || existing.delivered === true
   );
   const delivered = status === "Entregado";
-  const existingDelivered = existing.estado_pedido === "Entregado";
 
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,
@@ -553,7 +749,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const hasSellerAmountUpdate =
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador");
-  const shouldRecalculateExternalBuyerDebt = hasPaymentStatusUpdate || hasSellerAmountUpdate;
+  const shouldRecalculateExternalBuyerDebt =
+    hasPaymentStatusUpdate || hasSellerAmountUpdate || shouldRecalculateRoutePricing;
   const buyerDebtAmount =
     serviceOrigin === "simple_package"
       ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
@@ -566,6 +763,22 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
             amountToCharge,
           amountToCharge
         );
+  const deliveredAt =
+    delivered && !externalSale.hora_entrega_real
+      ? existingDelivered && existing.hora_entrega_real
+        ? existing.hora_entrega_real
+        : normalizeExternalDate(new Date())
+      : externalSale.hora_entrega_real;
+  const latePickupFeeToApply =
+    (serviceOrigin === "external" || serviceOrigin === "simple_package") && delivered && !existingDelivered
+      ? resolveLatePickupFeeForExternalDelivery(existing, deliveredAt || new Date())
+      : 0;
+  const persistedLatePickupFee = delivered || !existingDelivered
+    ? roundCurrency(latePickupFeeToApply || Number(existing.late_pickup_fee || 0))
+    : 0;
+  const finalBuyerDebtAmount = roundCurrency(buyerDebtAmount + latePickupFeeToApply);
+  const finalMontoPagaComprador = roundCurrency(montoPagaComprador + latePickupFeeToApply);
+  const finalSaldoCobrar = roundCurrency(saldoCobrar + latePickupFeeToApply);
   const existingSellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const isLegacyMixedWithoutSellerMethod =
     existing.esta_pagado === "mixto" &&
@@ -574,48 +787,49 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     !hasSellerMethodUpdate &&
     !hasSellerAmountUpdate;
   const sellerPaymentMethod = montoPagaVendedor > 0
-    ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago)
+    ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago) || (paymentEditRequested ? "efectivo" : "")
     : "";
-  if (
-    serviceOrigin === "external" &&
-    montoPagaVendedor > 0 &&
-    !sellerPaymentMethod &&
-    !isLegacyMixedWithoutSellerMethod
-  ) {
+  if (montoPagaVendedor > 0 && !sellerPaymentMethod && !isLegacyMixedWithoutSellerMethod) {
     throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
   const deliveryPayment =
-    serviceOrigin === "external"
+    serviceOrigin === "external" || serviceOrigin === "simple_package"
       ? resolveExternalDeliveryPayment({
           delivered,
-          buyerAmount: buyerDebtAmount,
+          buyerAmount: finalBuyerDebtAmount,
           paymentType: externalSale.tipo_de_pago ?? existing.tipo_de_pago,
           subtotalQr: externalSale.subtotal_qr ?? existing.subtotal_qr,
-          subtotalEfectivo: externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
+          subtotalEfectivo:
+            latePickupFeeToApply > 0
+              ? roundCurrency(toNumber(externalSale.subtotal_efectivo ?? existing.subtotal_efectivo, 0) + latePickupFeeToApply)
+              : externalSale.subtotal_efectivo ?? existing.subtotal_efectivo,
         })
-      : {
-          tipoDePago: String(existing.tipo_de_pago || ""),
-          subtotalQr: roundCurrency(Number((existing as any)?.subtotal_qr || 0)),
-          subtotalEfectivo: roundCurrency(Number((existing as any)?.subtotal_efectivo || 0)),
-        };
+      : { tipoDePago: "", subtotalQr: 0, subtotalEfectivo: 0 };
 
   const updatePayload: any = {
-    ...externalSale,
+    id_vendedor: existing.id_vendedor,
+    carnet_vendedor: existing.carnet_vendedor,
+    vendedor: existing.vendedor,
+    telefono_vendedor: existing.telefono_vendedor,
     comprador: buyerName || undefined,
     telefono_comprador: buyerPhone || undefined,
+    descripcion_paquete: existing.descripcion_paquete,
+    package_size: nextPackageSize,
+    delivery_spaces: deliverySpaces,
     precio_paquete: price,
     precio_total: totalPrice,
     esta_pagado: paid,
     monto_paga_vendedor: montoPagaVendedor,
-    monto_paga_comprador: montoPagaComprador,
-    saldo_cobrar: serviceOrigin === "external" ? roundCurrency(saldoCobrar) : saldoCobrar,
-    deuda_comprador: buyerDebtAmount,
+    monto_paga_comprador: finalMontoPagaComprador,
+    saldo_cobrar: serviceOrigin === "external" ? finalSaldoCobrar : finalBuyerDebtAmount,
+    deuda_comprador: finalBuyerDebtAmount,
     metodo_pago: sellerPaymentMethod,
     tipo_de_pago: deliveryPayment.tipoDePago,
     subtotal_qr: deliveryPayment.subtotalQr,
     subtotal_efectivo: deliveryPayment.subtotalEfectivo,
     estado_pedido: status,
     delivered,
+    late_pickup_fee: persistedLatePickupFee,
     is_external: true,
     service_origin: serviceOrigin,
   };
@@ -625,25 +839,37 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.cargo_delivery = branchRoutePrice;
   }
 
+  if (nextBranchRoute) {
+    updatePayload.sucursal = toObjectIdOrUndefined(nextBranchRoute.originBranchId);
+    updatePayload.origen_sucursal = toObjectIdOrUndefined(nextBranchRoute.originBranchId);
+    updatePayload.destino_sucursal = toObjectIdOrUndefined(nextBranchRoute.destinationBranchId);
+    updatePayload.lugar_entrega = nextBranchRoute.destinationBranchName || existing.lugar_entrega;
+  }
+
   if (serviceOrigin === "simple_package") {
     updatePayload.costo_delivery = toNumber(externalSale.costo_delivery ?? existing.costo_delivery, 0);
+    updatePayload.seller_debt_applied = !(sellerPaymentMethod && montoPagaVendedor > 0);
   }
 
   if (externalSale.fecha_pedido) {
-    updatePayload.fecha_pedido = normalizeExternalDate(externalSale.fecha_pedido);
+    updatePayload.fecha_pedido = existing.fecha_pedido;
   }
 
   if (delivered && !externalSale.hora_entrega_real) {
-    updatePayload.hora_entrega_real =
-      existingDelivered && existing.hora_entrega_real
-        ? existing.hora_entrega_real
-        : normalizeExternalDate(new Date());
+    updatePayload.hora_entrega_real = deliveredAt;
+  } else if (delivered && externalSale.hora_entrega_real) {
+    updatePayload.hora_entrega_real = deliveredAt;
   } else if (!delivered) {
     updatePayload.hora_entrega_real = undefined;
   }
 
-  if (externalSale.id_sucursal) {
-    updatePayload.sucursal = externalSale.id_sucursal;
+  if (externalSale.retirado_por_vendedor === true) {
+    updatePayload.retirado_por_vendedor = true;
+    updatePayload.seller_withdrawn_at = externalSale.seller_withdrawn_at || deliveredAt;
+  }
+
+  if (!nextBranchRoute) {
+    updatePayload.sucursal = existing.sucursal;
   }
 
   const sellerId = String(existing.id_vendedor || "");
@@ -676,7 +902,31 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.hora_entrega_real = undefined;
   }
 
-  return await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
+  const previousSellerMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
+  const previousSellerAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
+  const updated = await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
+
+  if (serviceOrigin === "external" && paymentEditRequested && updated) {
+    const branchId = String((existing.sucursal as any)?._id || existing.sucursal || "");
+    if (previousSellerMethod && previousSellerAmount > 0) {
+      await adjustExternalSellerIncome({
+        paymentMethod: previousSellerMethod,
+        amountDelta: -previousSellerAmount,
+        branchId,
+        date: existing.fecha_pedido,
+      });
+    }
+    if (sellerPaymentMethod && montoPagaVendedor > 0) {
+      await adjustExternalSellerIncome({
+        paymentMethod: sellerPaymentMethod,
+        amountDelta: montoPagaVendedor,
+        branchId,
+        date: existing.fecha_pedido,
+      });
+    }
+  }
+
+  return updated;
 };
 
 export const ExternalSaleService = {

@@ -21,6 +21,7 @@ export interface IVentaExterna {
 
     service_origin?: ExternalServiceOrigin;
     package_size?: PackageSize;
+    delivery_spaces?: number;
     precio_paquete_unitario?: number;
     amortizacion_vendedor?: number;
     deuda_comprador?: number;
@@ -51,10 +52,17 @@ export interface IVentaExterna {
     shipping_qr_image_path?: string;
     qr_impreso?: boolean;
     qr_impreso_at?: Date;
+    public_tracking_received_at?: Date;
+    public_tracking_schedule_base_at?: Date;
+    public_tracking_frozen?: boolean;
+    public_tracking_frozen_status?: string;
+    public_tracking_frozen_at?: Date;
     numero_guia?: string;
     guia_sequence?: number;
 
     hora_entrega_real?: Date;
+    storage_fee_start_at?: Date;
+    late_pickup_fee?: number;
     lugar_entrega?: string;
 
     // Legacy compatibility fields

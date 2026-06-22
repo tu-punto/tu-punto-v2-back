@@ -41,16 +41,28 @@ const toVariantRecord = (variantes: unknown): VariantRecord | null => {
   return Object.fromEntries(normalized);
 };
 
+const normalizeIdValue = (value: unknown): string => String(value ?? "").trim();
+
 const getSaleProductId = (sale: any): string => {
-  const raw = sale?.id_producto ?? sale?.producto?._id ?? sale?.producto;
+  const raw =
+    sale?.id_producto ??
+    sale?.producto?._id ??
+    sale?.producto?.id ??
+    sale?.producto;
   if (!raw) throw new Error("No se pudo resolver id de producto para ajustar stock.");
-  return String(raw);
+  return normalizeIdValue(raw);
 };
 
 const getSaleSucursalId = (sale: any): string => {
-  const raw = sale?.sucursal ?? sale?.id_sucursal;
+  const raw =
+    sale?.sucursal ??
+    sale?.id_sucursal ??
+    sale?.sucursalId ??
+    sale?.idSucursal ??
+    sale?.pedido?.sucursal ??
+    sale?.pedido?.id_sucursal;
   if (!raw) throw new Error("No se pudo resolver sucursal para ajustar stock.");
-  return String(raw);
+  return normalizeIdValue(raw);
 };
 
 const getSaleQuantity = (sale: any): number => {
@@ -82,19 +94,38 @@ const buildVariantLabelCandidates = (
 
 const findVariantIndexForSale = (product: any, sale: any): number => {
   const sucursalId = getSaleSucursalId(sale);
-  const sucursal = product.sucursales.find((s: any) => s.id_sucursal?.toString() === sucursalId);
+  const sucursal = product.sucursales.find((s: any) => {
+    const branchId = normalizeIdValue(s?.id_sucursal?._id || s?.id_sucursal || s?.sucursal || "");
+    return branchId === sucursalId;
+  });
   if (!sucursal) {
     throw new Error(
       `Sucursal ${sucursalId} no encontrada en producto ${product.nombre_producto}`
     );
   }
 
-  const variantKey = normalizeText(sale?.variantKey);
+  if (sucursal.combinaciones.length === 1) return 0;
+
+  const variantKey = normalizeText(sale?.variantKey || sale?.variant_key || sale?.variant || "");
+  const variantId = normalizeText(sale?.id_variante || sale?.variantId || sale?.variant_id || "");
+  const variantLabelCandidate = normalizeText(sale?.nombre_variante || sale?.producto_nombre || "");
+
   if (variantKey) {
-    const indexByKey = sucursal.combinaciones.findIndex(
-      (c: any) => normalizeText(c.variantKey) === variantKey
-    );
+    const indexByKey = sucursal.combinaciones.findIndex((c: any) => {
+      return [normalizeText(c.variantKey), normalizeText(c.variant_key), normalizeText(c.variant)].some(
+        (value) => value === variantKey
+      );
+    });
     if (indexByKey >= 0) return indexByKey;
+  }
+
+  if (variantId) {
+    const indexByVariantId = sucursal.combinaciones.findIndex((c: any) => {
+      return [normalizeText(c._id), normalizeText(c.id_variante), normalizeText(c.variantId)].some(
+        (value) => value === variantId
+      );
+    });
+    if (indexByVariantId >= 0) return indexByVariantId;
   }
 
   const variantes = toVariantRecord(sale?.variantes);
@@ -121,15 +152,23 @@ const findVariantIndexForSale = (product: any, sale: any): number => {
     if (indexByLabel >= 0) return indexByLabel;
   }
 
-  const salePrice = Number(sale?.precio_unitario);
-  if (Number.isFinite(salePrice)) {
+  const salePrice = Number(sale?.precio_unitario || sale?.precio || 0);
+  if (Number.isFinite(salePrice) && salePrice > 0) {
     const indexesByPrice = sucursal.combinaciones
-      .map((c: any, idx: number) => ({ idx, precio: Number(c.precio) }))
-      .filter((item: any) => item.precio === salePrice);
+      .map((c: any, idx: number) => ({ idx, precio: Number(c.precio) || 0, comboLabel: variantLabel(c.variantes as Record<string, string>) }))
+      .filter((item: any) => Math.abs(item.precio - salePrice) < 1e-9);
+
     if (indexesByPrice.length === 1) return indexesByPrice[0].idx;
+
+    if (indexesByPrice.length > 1 && variantLabelCandidate) {
+      const directLabelMatch = indexesByPrice.find((item: any) =>
+        normalizeLabel(item.comboLabel).includes(normalizeLabel(variantLabelCandidate)) ||
+        normalizeLabel(variantLabelCandidate).includes(normalizeLabel(item.comboLabel))
+      );
+      if (directLabelMatch) return directLabelMatch.idx;
+    }
   }
 
-  if (sucursal.combinaciones.length === 1) return 0;
   return -1;
 };
 

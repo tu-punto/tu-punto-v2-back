@@ -91,11 +91,11 @@ export const VendedorSchema = new Schema({
   },
   amortizacion: {
     type: Number,
-    default: 0
+    default: null
   },
   precio_paquete: {
     type: Number,
-    default: 0
+    default: null
   },
   fecha: {
     type: Date,

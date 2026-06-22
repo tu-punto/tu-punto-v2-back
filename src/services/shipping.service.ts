@@ -16,7 +16,10 @@ import { ShippingStatusHistoryModel } from "../entities/implements/ShippingStatu
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
+import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
+import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
+import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -174,6 +177,29 @@ const canMarkDeliveredFromBranch = async (shipping: any, branchId?: string | nul
   if (!currentBranchId) return true;
   const deliveryBranchId = await resolveDeliveryBranchId(shipping);
   return !deliveryBranchId || deliveryBranchId === currentBranchId;
+};
+
+const isBranchTransferShipping = async (shipping: any): Promise<boolean> => {
+  const originId = resolveOriginBranchId(shipping);
+  const destinationId = await resolveDeliveryBranchId(shipping);
+  return Boolean(originId && destinationId && originId !== destinationId);
+};
+
+const resolveStorageFeeStartForShipping = async (shipping: any) => {
+  if (!(await isBranchTransferShipping(shipping))) return shipping?.fecha_pedido;
+  if (shipping?.public_tracking_frozen === true) return null;
+  return resolveBranchPickupFeeStart(shipping);
+};
+
+const resolveLatePickupFeeForShippingDelivery = async (shipping: any, pickedUpAt: unknown) => {
+  if (shipping?.public_tracking_frozen === true) {
+    return roundCurrency(Number(shipping?.late_pickup_fee || 0));
+  }
+
+  return calculateLatePickupFee({
+    startAt: await resolveStorageFeeStartForShipping(shipping),
+    pickedUpAt: pickedUpAt || new Date(),
+  });
 };
 
 const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "qr" => {
@@ -659,6 +685,12 @@ const updateShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  if (
+    (shipping as any)?.origen_pedido === "catalogo" &&
+    ["Rechazado", "Cancelado", "No entregado"].includes(String(newData?.estado_pedido || ""))
+  ) {
+    throw new Error("Los pedidos de catalogo deben rechazarse con la accion Rechazar");
+  }
 
   const isSimplePackageOrder =
     Boolean((shipping as any)?.simple_package_order) ||
@@ -713,6 +745,26 @@ const updateShipping = async (
 
   if (willBeDelivered && !(await canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId))) {
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
+  }
+
+  let latePickupFee = 0;
+  if (willBeDelivered && !wasDelivered && isSimplePackageOrder) {
+    latePickupFee = await resolveLatePickupFeeForShippingDelivery(
+      nextShippingState,
+      newData.hora_entrega_real || new Date()
+    );
+
+    if (latePickupFee > 0) {
+      const adjustedPayment = addLatePickupFeeToPayment({
+        fee: latePickupFee,
+        paymentType: newData.tipo_de_pago,
+        subtotalQr: newData.subtotal_qr,
+        subtotalEfectivo: newData.subtotal_efectivo,
+      });
+      newData.subtotal_qr = roundCurrency(adjustedPayment.subtotalQr);
+      newData.subtotal_efectivo = roundCurrency(adjustedPayment.subtotalEfectivo);
+      newData.late_pickup_fee = latePickupFee;
+    }
   }
 
   if (willBeDelivered && !wasDelivered) {
@@ -786,6 +838,11 @@ const updateShipping = async (
   }
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
+  if (resShip) {
+    void CatalogOrderIntegrationService.syncOrderStatus(
+      typeof (resShip as any).toObject === "function" ? (resShip as any).toObject() : resShip
+    );
+  }
 
   const simplePackageSourceId = String(
     (resShip as any)?.simple_package_source_id ||
@@ -801,9 +858,28 @@ const updateShipping = async (
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
       hora_entrega_real: (resShip as any).hora_entrega_real,
+      retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
+      seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
+      late_pickup_fee: (resShip as any).late_pickup_fee || 0,
+      numero_guia: (resShip as any).numero_guia || "",
+      guia_sequence: (resShip as any).guia_sequence,
+      shipping_qr_code: (resShip as any).shipping_qr_code || "",
+      shipping_qr_payload: (resShip as any).shipping_qr_payload || "",
+      shipping_qr_image_path: (resShip as any).shipping_qr_image_path || "",
     };
+    const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
+    const existingSource = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+    const simplePackageFinancialPatch =
+      lateFee > 0
+        ? {
+            deuda_comprador: roundCurrency(Number((existingSource as any)?.deuda_comprador || 0) + lateFee),
+            monto_paga_comprador: roundCurrency(Number((existingSource as any)?.monto_paga_comprador || 0) + lateFee),
+            saldo_cobrar: roundCurrency(Number((existingSource as any)?.saldo_cobrar || 0) + lateFee),
+          }
+        : {};
     await SimplePackageRepository.updateSimplePackageByID(simplePackageSourceId, {
       ...simplePackageUpdatePayload,
+      ...simplePackageFinancialPatch,
     });
   }
 
@@ -885,9 +961,14 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
   const salesToUpdateSaldo = [];
 
   for (let sale of sales) {
-    let productId = sale.id_producto;
+    const rawProductId =
+      sale?.id_producto ??
+      sale?.producto?._id ??
+      sale?.producto?.id ??
+      sale?.producto;
+    let productId = String(rawProductId || "").trim();
 
-    if (!productId || productId.length !== 24) {
+    if (!Types.ObjectId.isValid(productId)) {
       const temporaryCategoryId = await resolveTemporaryCategoryId();
       const nuevoProducto = await ProductoModel.create({
         nombre_producto: sale.nombre_variante || sale.producto,
@@ -907,7 +988,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
         }]
       });
 
-      productId = nuevoProducto._id;
+      productId = String(nuevoProducto._id);
     }
 
     const venta = await registerSaleToShipping(shippingId, {
@@ -1356,6 +1437,75 @@ const getShippingStatusHistory = async (shippingId: string) => {
     .lean();
 };
 
+const markSellerWithdrawal = async (params: {
+  shippingIds?: string[];
+  externalSaleIds?: string[];
+  withdrawnAt?: unknown;
+  currentBranchId?: string;
+  changedBy?: string;
+}) => {
+  const withdrawnAt = moment
+    .tz(params.withdrawnAt as any || new Date(), "America/La_Paz")
+    .format("YYYY-MM-DD HH:mm:ss");
+  const shippingIds = (params.shippingIds || []).filter((id) => Types.ObjectId.isValid(id));
+  const externalSaleIds = (params.externalSaleIds || []).filter((id) => Types.ObjectId.isValid(id));
+  const results = {
+    shippings: { updated: 0, failed: [] as { id: string; message: string }[] },
+    externalSales: { updated: 0, failed: [] as { id: string; message: string }[] },
+  };
+
+  for (const shippingId of shippingIds) {
+    try {
+      await updateShipping(
+        {
+          estado_pedido: "Entregado",
+          hora_entrega_real: withdrawnAt,
+          retirado_por_vendedor: true,
+          seller_withdrawn_at: withdrawnAt,
+        },
+        shippingId,
+        {
+          currentBranchId: params.currentBranchId,
+          source: "manual",
+          changedBy: params.changedBy,
+          note: "Vendedor retiro el paquete",
+        }
+      );
+      results.shippings.updated += 1;
+    } catch (error: any) {
+      results.shippings.failed.push({
+        id: shippingId,
+        message: error?.message || "No se pudo marcar el pedido",
+      });
+    }
+  }
+
+  for (const externalSaleId of externalSaleIds) {
+    try {
+      await ExternalSaleService.updateExternalSaleByID(externalSaleId, {
+        estado_pedido: "Entregado",
+        delivered: true,
+        hora_entrega_real: withdrawnAt,
+        retirado_por_vendedor: true,
+        seller_withdrawn_at: withdrawnAt,
+      });
+      results.externalSales.updated += 1;
+    } catch (error: any) {
+      results.externalSales.failed.push({
+        id: externalSaleId,
+        message: error?.message || "No se pudo marcar la entrega externa",
+      });
+    }
+  }
+
+  return {
+    success: results.shippings.failed.length === 0 && results.externalSales.failed.length === 0,
+    updatedCount: results.shippings.updated + results.externalSales.updated,
+    failedCount: results.shippings.failed.length + results.externalSales.failed.length,
+    results,
+  };
+};
+
 export const ShippingService = {
   getAllShippings,
   getShippingsList,
@@ -1375,5 +1525,6 @@ export const ShippingService = {
   generateShippingQR,
   resolveShippingByQRPayload,
   transitionShippingStatusByQR,
-  getShippingStatusHistory
+  getShippingStatusHistory,
+  markSellerWithdrawal
 };

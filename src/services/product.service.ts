@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs/promises";
 import { Buffer } from "buffer";
 import { Types } from 'mongoose';
+import ExcelJS from "exceljs";
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { IngresoModel } from "../entities/implements/IngresoSchema";
@@ -33,6 +34,63 @@ const normalizeVariantsForEntry = (variants: any): Record<string, string> => {
 const buildVariantEntryName = (productName: string, variants: Record<string, string>) => {
   const variantLabel = Object.values(variants).filter(Boolean).join(" / ");
   return variantLabel ? `${productName} - ${variantLabel}` : productName;
+};
+
+const normalizeText = (value: unknown) => String(value ?? "").trim();
+
+const buildInventoryVariantKey = (row: {
+  productId?: unknown;
+  _id?: unknown;
+  variantKey?: unknown;
+  variantes?: unknown;
+  variantes_obj?: unknown;
+}) => {
+  const productId = normalizeText(row.productId || row._id);
+  const variantKey = normalizeText(row.variantKey);
+  if (variantKey) return `${productId}::${variantKey}`;
+
+  const variants = normalizeVariantsForEntry(row.variantes || row.variantes_obj);
+  return `${productId}::${JSON.stringify(variants)}`;
+};
+
+const getActiveSellerIdsForBranch = async (sucursalId: string) => {
+  const sellers = await VendedorModel.find({})
+    .select("nombre apellido marca fecha_vigencia pago_sucursales")
+    .lean();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const activeSellers = sellers.filter((seller: any) => {
+    const sellerValidUntil = seller?.fecha_vigencia ? new Date(seller.fecha_vigencia) : null;
+    if (sellerValidUntil) sellerValidUntil.setHours(0, 0, 0, 0);
+    if (sellerValidUntil && sellerValidUntil < today) return false;
+
+    return (seller?.pago_sucursales || []).some((payment: any) => {
+      const paymentBranchId = normalizeText(payment?.id_sucursal?._id || payment?.id_sucursal);
+      if (paymentBranchId !== normalizeText(sucursalId)) return false;
+      if (payment?.activo === false) return false;
+
+      const rawExit = payment?.fecha_salida || seller?.fecha_vigencia;
+      if (!rawExit) return true;
+      const exit = new Date(rawExit);
+      exit.setHours(0, 0, 0, 0);
+      return exit >= today;
+    });
+  });
+
+  const sellerNameById = new Map<string, string>();
+  activeSellers.forEach((seller: any) => {
+    const id = normalizeText(seller?._id);
+    const brand = normalizeText(seller?.marca);
+    const fullName = [seller?.nombre, seller?.apellido].map((part) => normalizeText(part)).filter(Boolean).join(" ");
+    const name = [brand, fullName].filter(Boolean).join(" - ");
+    sellerNameById.set(id, name || "Vendedor");
+  });
+
+  return {
+    sellerIds: activeSellers.map((seller: any) => normalizeText(seller?._id)).filter(Boolean),
+    sellerNameById
+  };
 };
 
 const registerInitialStockEntries = async (product: IProductoDocument) => {
@@ -116,8 +174,8 @@ const registerProduct = async (product: IProducto): Promise<any> => {
 
       console.log("✅ Vendedor encontrado:", rawVendedor);
 
-      const vendedor = rawVendedor as unknown as { pago_sucursales: { id_sucursal: string | Types.ObjectId }[] };
-      const sucursalesHabilitadas = vendedor.pago_sucursales || [];
+      const vendedor = rawVendedor as unknown as { pago_sucursales: { id_sucursal: string | Types.ObjectId; activo?: boolean }[] };
+      const sucursalesHabilitadas = (vendedor.pago_sucursales || []).filter((sucursal) => sucursal?.activo !== false);
 
       if (!nuevoProducto.esTemporal && sucursalesHabilitadas.length > 0 && nuevoProducto.sucursales?.length) {
         const combinacionesReferencia = nuevoProducto.sucursales[0]?.combinaciones || [];
@@ -345,7 +403,10 @@ const addVariantToProduct = async (
   if (!vendedor) throw new Error("Vendedor no encontrado");
 
   // 🔧 casting correcto
-  const sucursalesHabilitadas = (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId }[]) || [];
+  const sucursalesHabilitadas =
+    (vendedor.pago_sucursales as { id_sucursal: string | Types.ObjectId; activo?: boolean }[])?.filter(
+      (sucursal) => sucursal?.activo !== false
+    ) || [];
 
   const normalizedCombinaciones = combinaciones.map((c) => ({
     ...c,
@@ -478,6 +539,118 @@ const getFlatProductListPage = async (params?: {
   limit?: number;
 }) => {
   return await ProductRepository.findFlatProductListPage(params);
+};
+
+const generateInventoryQRReport = async (params: {
+  sucursalId: string;
+  sucursalLabel?: string;
+  rows: any[];
+}) => {
+  if (!Types.ObjectId.isValid(params.sucursalId)) {
+    throw new Error("sucursalId invalido");
+  }
+
+  const { sellerIds, sellerNameById } = await getActiveSellerIdsForBranch(params.sucursalId);
+  const activeProducts = sellerIds.length
+    ? await ProductRepository.findFlatProductList({
+        sucursalId: params.sucursalId,
+        sellerIds
+      })
+    : [];
+
+  const scannedRows = Array.isArray(params.rows) ? params.rows : [];
+  const activeProductByKey = new Map<string, any>(
+    activeProducts.map((product: any) => [buildInventoryVariantKey(product), product])
+  );
+  const scannedKeys = new Set(scannedRows.map((row) => buildInventoryVariantKey(row)).filter(Boolean));
+
+  const toReportRow = (row: any, fallback?: any) => {
+    const variants = normalizeVariantsForEntry(row?.variantes || row?.variantes_obj || fallback?.variantes_obj);
+    const productId = normalizeText(row?.productId || row?._id || fallback?._id);
+    const sellerId = normalizeText(row?.sellerId || row?.id_vendedor || fallback?.id_vendedor);
+    const systemStock = Number(row?.systemStock ?? row?.stock ?? fallback?.stock ?? 0);
+    const countedStock = Number(row?.countedStock ?? 0);
+
+    return {
+      Producto: normalizeText(row?.productName || row?.nombre_producto || fallback?.nombre_producto || "Producto"),
+      Variante: normalizeText(row?.variantLabel || row?.variante || fallback?.variante || Object.values(variants).join(" / ")),
+      Vendedor: sellerNameById.get(sellerId) || normalizeText(row?.sellerName || row?.vendedor || fallback?.vendedor || "Vendedor"),
+      Categoria: normalizeText(row?.categoryName || row?.categoria || fallback?.categoria || "Sin categoria"),
+      Sucursal: normalizeText(params.sucursalLabel || row?.sucursalLabel || "Sucursal"),
+      "Stock sistema": systemStock,
+      "Stock contado": countedStock,
+      Diferencia: countedStock - systemStock,
+      Precio: Number(row?.precio ?? fallback?.precio ?? 0),
+      "ID producto": productId,
+      "ID vendedor": sellerId,
+      "Clave variante": normalizeText(row?.variantKey || fallback?.variantKey)
+    };
+  };
+
+  const countedReportRows = scannedRows.map((row) => {
+    const key = buildInventoryVariantKey(row);
+    return toReportRow(row, activeProductByKey.get(key));
+  });
+
+  const missingReportRows = activeProducts
+    .filter((product: any) => !scannedKeys.has(buildInventoryVariantKey(product)))
+    .map((product: any) => {
+      const sellerId = normalizeText(product?.id_vendedor);
+      return {
+        Producto: normalizeText(product?.nombre_producto || "Producto"),
+        Variante: normalizeText(product?.variante || ""),
+        Vendedor: sellerNameById.get(sellerId) || normalizeText(product?.vendedor || "Vendedor"),
+        Categoria: normalizeText(product?.categoria || "Sin categoria"),
+        Sucursal: normalizeText(params.sucursalLabel || "Sucursal"),
+        "Stock sistema": Number(product?.stock ?? 0),
+        Precio: Number(product?.precio ?? 0),
+        "ID producto": normalizeText(product?._id),
+        "ID vendedor": sellerId,
+        "Clave variante": normalizeText(product?.variantKey)
+      };
+    });
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Tu Punto";
+  workbook.created = new Date();
+
+  const addRowsSheet = (name: string, rows: Record<string, any>[]) => {
+    const worksheet = workbook.addWorksheet(name);
+    const headers = rows.length ? Object.keys(rows[0]) : [
+      "Producto",
+      "Variante",
+      "Vendedor",
+      "Categoria",
+      "Sucursal",
+      "Stock sistema",
+      "Stock contado",
+      "Diferencia",
+      "Precio",
+      "ID producto",
+      "ID vendedor",
+      "Clave variante"
+    ];
+    worksheet.columns = headers.map((header) => ({ header, key: header, width: Math.min(34, Math.max(14, header.length + 8)) }));
+    rows.forEach((row) => worksheet.addRow(row));
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.views = [{ state: "frozen", ySplit: 1 }];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: Math.max(1, rows.length + 1), column: headers.length }
+    };
+    return worksheet;
+  };
+
+  addRowsSheet("Conteo_Escaneado", countedReportRows);
+  addRowsSheet("Faltantes_Por_Escanear", missingReportRows);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const filename = `inventario_qr_${normalizeText(params.sucursalLabel || params.sucursalId).replace(/[^\w-]+/g, "_")}_${Date.now()}.xlsx`;
+
+  return {
+    buffer: Buffer.from(buffer as ArrayBuffer),
+    filename
+  };
 };
 
 const getSellerProductInfoListPage = async (params: {
@@ -691,6 +864,7 @@ export const ProductService = {
   getAllTemporaryProducts,
   getFlatProductList,
   getFlatProductListPage,
+  generateInventoryQRReport,
   getSellerProductInfoListPage,
   getSuperadminVariantInventoryPage,
   regenerateProductQR,

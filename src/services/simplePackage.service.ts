@@ -10,6 +10,8 @@ import { ShippingService } from "./shipping.service";
 import { hasConfiguredSimplePackageService } from "../utils";
 import { OrderGuideService } from "./orderGuide.service";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
+import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
+import { TrackingFreezeService } from "./trackingFreeze.service";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -117,6 +119,7 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
   }
 
   if (String(originBranchId) === String(destinationBranchId)) {
+    const route = await SimplePackageBranchPriceRepository.findPriceByRoute(originBranchId, destinationBranchId);
     const branch = await SucursalModel.findById(originBranchId).select("nombre").lean();
     const originBranchName = String((branch as any)?.nombre || "").trim();
 
@@ -124,6 +127,7 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
       precio_entre_sucursal: 0,
       originBranchName,
       destinationBranchName: originBranchName,
+      routeId: String((route as any)?._id || ""),
     };
   }
 
@@ -136,23 +140,24 @@ const resolveBranchRoutePricing = async (originBranchId?: string, destinationBra
     precio_entre_sucursal: roundCurrency(Number((route as any)?.precio || 0)),
     originBranchName: String((route as any)?.origen_sucursal?.nombre || "").trim(),
     destinationBranchName: String((route as any)?.destino_sucursal?.nombre || "").trim(),
+    routeId: String((route as any)?._id || ""),
   };
 };
 
 const buildPackagePricing = (
-  unitPrice: number,
+  smallPackagePrice: number,
   amortizacion: number,
   saldoPorPaquete: number,
   packageSize: PackageSize,
-  branchRoutePrice = 0
+  branchRoutePrice = 0,
+  deliverySpaces = 1
 ) => {
-  const priceMultiplier = packageSize === "grande" ? 2 : 1;
-  const precioPaqueteUnitario = roundCurrency(unitPrice);
-  const precioPaquete = roundCurrency(precioPaqueteUnitario * priceMultiplier);
-  const deudaVendedor = roundCurrency(amortizacion);
-  const deudaComprador = roundCurrency(Math.max(0, precioPaquete + branchRoutePrice - deudaVendedor));
+  const precioPaqueteUnitario = roundCurrency(smallPackagePrice);
+  const precioPaquete = roundCurrency(smallPackagePrice);
   const precioEntreSucursal = roundCurrency(branchRoutePrice);
   const precioTotal = roundCurrency(precioPaquete + precioEntreSucursal);
+  const deudaVendedor = roundCurrency(Math.min(Math.max(0, amortizacion), precioTotal));
+  const deudaComprador = roundCurrency(Math.max(0, precioTotal - deudaVendedor));
 
   return {
     precio_paquete_unitario: precioPaqueteUnitario,
@@ -160,6 +165,7 @@ const buildPackagePricing = (
     saldo_por_paquete: roundCurrency(saldoPorPaquete),
     precio_paquete: precioPaquete,
     precio_entre_sucursal: precioEntreSucursal,
+    delivery_spaces: Math.max(1, Number(deliverySpaces || 1)),
     precio_total: precioTotal,
     cargo_delivery: precioEntreSucursal,
     costo_delivery: 0,
@@ -171,25 +177,32 @@ const buildPackagePricing = (
 
 const buildAccountingAmount = (row: any) =>
   roundCurrency(
-    Number(row?.precio_paquete || 0) +
-      Number(row?.saldo_por_paquete || 0) -
-      Number(row?.amortizacion_vendedor || 0)
+    Math.max(
+      0,
+      Number(row?.precio_paquete || 0) - Number(row?.amortizacion_vendedor || 0)
+    ) + Number(row?.saldo_por_paquete || 0)
   );
 
 const buildTotalAmountToCharge = (row: any) =>
   roundCurrency(
     Math.max(
       0,
-      Number(row?.precio_paquete || 0) +
-        Number(row?.saldo_por_paquete || 0) +
-        Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0) -
+      Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0)) -
         Number(row?.amortizacion_vendedor || 0)
-    )
+    ) + Number(row?.saldo_por_paquete || 0)
   );
 
 const resolveSimplePackagePaymentPayload = (row: any) => {
   const method = normalizePaymentMethod(row?.metodo_pago);
-  const sellerDebtAmount = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+  const sellerDebtAmount = roundCurrency(
+    Math.min(
+      Math.max(0, Number(row?.amortizacion_vendedor || 0)),
+      Math.max(
+        0,
+        Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0))
+      )
+    )
+  );
 
   if (!method) {
     return {
@@ -293,21 +306,22 @@ const applySimplePackageIncomeQR = async (params: {
   });
 };
 
-const buildSimplePackageShippingPayload = (row: any) => {
+const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) => {
   const buyerName = toTrimmed(row?.comprador) || `Paquete ${String(row?.numero_paquete || "").trim() || "simple"}`;
   const originBranchId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
   const destinationBranchId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal);
   const destinationBranchName = toTrimmed((row?.destino_sucursal as any)?.nombre ?? row?.lugar_entrega) || "Sucursal";
   const paymentData = resolveSimplePackagePaymentPayload(row);
   const tempProductPrice = roundCurrency(Number(row?.saldo_por_paquete || 0));
+  const createdAt = normalizeDate(orderCreatedAt ?? row?.fecha_pedido);
 
   return {
     cliente: buyerName,
     telefono_cliente: toTrimmed(row?.telefono_comprador),
     carnet_cliente: "",
     tipo_de_pago: paymentData.tipo_de_pago,
-    fecha_pedido: normalizeDate(row?.fecha_pedido),
-    hora_entrega_acordada: normalizeDate(row?.fecha_pedido),
+    fecha_pedido: createdAt,
+    hora_entrega_acordada: createdAt,
     observaciones: "",
     lugar_origen: originBranchId || undefined,
     tipo_destino: "sucursal",
@@ -317,6 +331,7 @@ const buildSimplePackageShippingPayload = (row: any) => {
     costo_delivery: 0,
     cargo_delivery: roundCurrency(Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0)),
     estado_pedido: "En Espera",
+    public_tracking_received_at: new Date(),
     adelanto_cliente: 0,
     esta_pagado: paymentData.esta_pagado,
     pagado_al_vendedor: false,
@@ -362,14 +377,23 @@ const buildSimplePackageRecord = async (params: {
   seller: any;
   sellerId: string;
   originBranchId?: string;
+  deliveryEscalationSpaces?: number;
   allowManualBranchPrice?: boolean;
 }) => {
-  const { row, index, packageNumber, seller, sellerId, originBranchId, allowManualBranchPrice } = params;
+  const {
+    row,
+    index,
+    packageNumber,
+    seller,
+    sellerId,
+    originBranchId,
+    deliveryEscalationSpaces,
+    allowManualBranchPrice,
+  } = params;
   ensureBuyerIdentity(row);
   ensureDescription(row);
   ensureSellerSimpleBranch(seller, originBranchId, "La sucursal de origen");
 
-  const packageSize = normalizePackageSize(row?.package_size ?? row?.tamano);
   const saldoPorPaquete = roundCurrency(Math.max(0, toNumber(row?.saldo_por_paquete ?? 0)));
   const destinationBranchId = toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal);
   if (!destinationBranchId) {
@@ -378,6 +402,24 @@ const buildSimplePackageRecord = async (params: {
   ensureSellerSimpleBranch(seller, destinationBranchId, "La sucursal destino");
 
   const branchRoutePricing = await resolveBranchRoutePricing(originBranchId, destinationBranchId);
+  const requestedDeliverySpaces = Math.max(1, toNumber(row?.delivery_spaces ?? 1, 1));
+  const effectiveDeliverySpaces = requestedDeliverySpaces;
+  const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
+    routeId: branchRoutePricing.routeId,
+    deliverySpaces: effectiveDeliverySpaces,
+    fallbackSize: normalizePackageSize(row?.package_size ?? row?.tamano),
+  }) as PackageSize;
+  const deliveryPricing =
+    String(originBranchId || "") === String(destinationBranchId || "")
+      ? { total: 0, spaces: effectiveDeliverySpaces }
+      : await PackageEscalationConfigService.getDeliveryPricing({
+          routeId: branchRoutePricing.routeId,
+          packageCount: index + 1,
+          packageSize,
+          deliverySpaces: effectiveDeliverySpaces,
+          escalationSpaces: deliveryEscalationSpaces || effectiveDeliverySpaces,
+          fallbackRoutePrice: branchRoutePricing.precio_entre_sucursal,
+        });
   const branchRoutePrice =
     String(originBranchId || "") === String(destinationBranchId || "")
       ? 0
@@ -385,23 +427,31 @@ const buildSimplePackageRecord = async (params: {
           row?.precio_entre_sucursal !== undefined &&
           row?.precio_entre_sucursal !== null &&
           String(row?.precio_entre_sucursal).trim() !== ""
-        ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, branchRoutePricing.precio_entre_sucursal)))
-        : branchRoutePricing.precio_entre_sucursal;
-  const precioPaqueteUnitario = toNumber(seller?.precio_paquete ?? 0);
-  const precioPaquete = roundCurrency(precioPaqueteUnitario * (packageSize === "grande" ? 2 : 1));
+        ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, deliveryPricing.total)))
+        : deliveryPricing.total;
+  const useSameBranchRoutePackagePricing =
+    String(originBranchId || "") === String(destinationBranchId || "") &&
+    Boolean(branchRoutePricing.routeId);
+  const precioPaquete = await PackageEscalationConfigService.getSimpleUnitPrice({
+    routeId: branchRoutePricing.routeId,
+    sellerId,
+    packageIndexInBatch: index,
+    packageSize,
+    fallbackSmallPrice: useSameBranchRoutePackagePricing ? undefined : seller?.precio_paquete,
+    fallbackLargePrice: useSameBranchRoutePackagePricing ? undefined : seller?.precio_paquete,
+  });
+  const precioPaqueteUnitario = precioPaquete;
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
   if (amortizacionVendedor < 0) {
     throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser menor a 0`);
-  }
-  if (amortizacionVendedor > precioPaquete) {
-    throw new Error(`Paquete ${index + 1}: el monto que cubrira el vendedor no puede ser mayor al precio del paquete`);
   }
   const pricing = buildPackagePricing(
     precioPaqueteUnitario,
     amortizacionVendedor,
     saldoPorPaquete,
     packageSize,
-    branchRoutePrice
+    branchRoutePrice,
+    effectiveDeliverySpaces
   );
 
   const paymentMethod = normalizePaymentMethod(row?.metodo_pago);
@@ -460,6 +510,12 @@ const registerSimplePackages = async (params: {
 
   const seller = await resolveSeller(sellerId);
   const startPackageNumber = await SimplePackageRepository.getNextPackageNumberForSeller(sellerId);
+  const totalDeliverySpaces = paquetes.reduce((sum, row) => {
+    const destinationBranchId = toTrimmed(row?.destino_sucursal_id ?? row?.destino_sucursal);
+    if (!destinationBranchId || String(originBranchId || "") === String(destinationBranchId)) return sum;
+    const spaces = Math.max(1, toNumber(row?.delivery_spaces ?? 1, 1));
+    return roundCurrency(sum + spaces);
+  }, 0);
   const rows = await Promise.all(
     paquetes.map((row, index) =>
       buildSimplePackageRecord({
@@ -469,6 +525,7 @@ const registerSimplePackages = async (params: {
         seller,
         sellerId,
         originBranchId,
+        deliveryEscalationSpaces: totalDeliverySpaces,
         allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
       })
     )
@@ -483,18 +540,22 @@ const createSimplePackageOrders = async (params: {
   role: string;
   currentBranchId?: string;
   paymentMethod?: "efectivo" | "qr" | "";
+  skipGuideNotification?: boolean;
 }) => {
   const role = String(params.role || "").toLowerCase();
   const paymentMethod = normalizePaymentMethod(params.paymentMethod || "");
+  const skipGuideNotification = params.skipGuideNotification === true && role === "superadmin";
   const rows = await SimplePackageRepository.getSimplePackagesByIDs(params.packageIds || []);
   const pendingRows = rows.filter((row: any) => !row?.is_external);
   if (!pendingRows.length) {
     throw new Error("No hay paquetes pendientes para crear");
   }
 
-  const missingPrintedLabel = pendingRows.filter((row: any) => !row?.qr_impreso || !row?.numero_guia);
-  if (missingPrintedLabel.length) {
-    throw new Error("Debe imprimir las etiquetas antes de crear los pedidos simples");
+  if (!skipGuideNotification) {
+    const missingPrintedLabel = pendingRows.filter((row: any) => !row?.qr_impreso || !row?.numero_guia);
+    if (missingPrintedLabel.length) {
+      throw new Error("Debe imprimir las etiquetas antes de crear los pedidos simples");
+    }
   }
 
   if (
@@ -512,16 +573,31 @@ const createSimplePackageOrders = async (params: {
   let effectivoCount = 0;
   let qrAmount = 0;
   let qrCount = 0;
+  const orderCreatedAt = normalizeDate(new Date());
 
   for (const row of pendingRows as any[]) {
-    const shippingPayload = buildSimplePackageShippingPayload(row);
+    const shippingPayload = {
+      ...buildSimplePackageShippingPayload(row, orderCreatedAt),
+      ...(await TrackingFreezeService.getFreezeFieldsForOrder({
+        originBranchId: (row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal,
+        destinationBranchId: (row?.destino_sucursal as any)?._id ?? row?.destino_sucursal,
+      })),
+    };
     const salePayload = buildSimplePackageSalePayload(row);
     const createdShipping = await ShippingService.registerShipping(shippingPayload);
 
     try {
       await ShippingService.processSalesForShipping(String(createdShipping._id), [salePayload]);
 
-      const sellerAmortizacion = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+      const sellerAmortizacion = roundCurrency(
+        Math.min(
+          Math.max(0, Number(row?.amortizacion_vendedor || 0)),
+          Math.max(
+            0,
+            Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0))
+          )
+        )
+      );
       
       if (paymentMethod === "efectivo") {
         effectivoAmount += sellerAmortizacion;
@@ -544,6 +620,12 @@ const createSimplePackageOrders = async (params: {
         seller_debt_applied: !paymentMethod,
         esta_pagado: "no",
         metodo_pago: paymentMethod,
+        fecha_pedido: orderCreatedAt as unknown as Date,
+        numero_guia: (createdShipping as any).numero_guia || row?.numero_guia || "",
+        guia_sequence: (createdShipping as any).guia_sequence || row?.guia_sequence,
+        shipping_qr_code: (createdShipping as any).shipping_qr_code || row?.shipping_qr_code || "",
+        shipping_qr_payload: (createdShipping as any).shipping_qr_payload || row?.shipping_qr_payload || "",
+        shipping_qr_image_path: (createdShipping as any).shipping_qr_image_path || row?.shipping_qr_image_path || "",
       });
 
       shippingResults.push({
@@ -587,8 +669,10 @@ const createSimplePackageOrders = async (params: {
     });
   }
 
-  const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
-  void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
+  if (!skipGuideNotification) {
+    const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
+    void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
+  }
 
   return shippingResults;
 };
@@ -684,10 +768,6 @@ const upsertSimplePackageBranchPrice = async (params: {
   if (!Types.ObjectId.isValid(originBranchId) || !Types.ObjectId.isValid(destinationBranchId)) {
     throw new Error("Debe seleccionar sucursales validas");
   }
-  if (originBranchId === destinationBranchId) {
-    throw new Error("La sucursal origen y destino no pueden ser la misma");
-  }
-
   const precio = roundCurrency(toNumber(params.precio, 0));
   if (precio < 0) {
     throw new Error("El precio entre sucursales no puede ser negativo");
@@ -708,8 +788,8 @@ const updateSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).qr_impreso || (existing as any).numero_guia) {
-    throw new Error("No se puede modificar un paquete con QR impreso");
+  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
+    throw new Error("No se puede modificar un paquete que ya fue convertido o entregado");
   }
 
   const role = String(params.role || "").toLowerCase();
@@ -720,7 +800,6 @@ const updateSimplePackageByID = async (params: {
 
   const isPrivileged = role === "admin" || role === "operator" || role === "superadmin";
   const seller = await resolveSeller(existingSellerId);
-  const nextPackageSize = normalizePackageSize(params.payload?.package_size ?? existing.package_size);
   const nextOriginBranchId = toTrimmed(
     params.payload?.origen_sucursal_id ??
       params.payload?.origen_sucursal ??
@@ -751,26 +830,69 @@ const updateSimplePackageByID = async (params: {
     manualBranchRoutePriceRaw !== undefined &&
     manualBranchRoutePriceRaw !== null &&
     String(manualBranchRoutePriceRaw).trim() !== "";
+  const resolvedBranchRoutePricing = await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
+  const nextDeliverySpaces = Math.max(1, toNumber(params.payload?.delivery_spaces ?? (existing as any).delivery_spaces ?? 1, 1));
+  const effectiveNextDeliverySpaces = nextDeliverySpaces;
+  const nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
+    routeId: resolvedBranchRoutePricing.routeId,
+    deliverySpaces: effectiveNextDeliverySpaces,
+    fallbackSize: normalizePackageSize(params.payload?.package_size ?? existing.package_size),
+  }) as PackageSize;
+  const nextDeliveryPricing =
+    String(nextOriginBranchId) === String(nextDestinationBranchId)
+      ? { total: 0, spaces: effectiveNextDeliverySpaces }
+      : await PackageEscalationConfigService.getDeliveryPricing({
+          routeId: resolvedBranchRoutePricing.routeId,
+          packageCount: Number((existing as any)?.numero_paquete || 1),
+          packageSize: nextPackageSize,
+          deliverySpaces: effectiveNextDeliverySpaces,
+          fallbackRoutePrice: resolvedBranchRoutePricing.precio_entre_sucursal,
+        });
   const nextBranchRoutePrice =
     String(nextOriginBranchId) === String(nextDestinationBranchId)
       ? 0
       : roundCurrency(
           hasManualBranchRoutePrice
             ? Math.max(0, toNumber(manualBranchRoutePriceRaw, Number(existing.precio_entre_sucursal || 0)))
-            : toNumber((await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)).precio_entre_sucursal, 0)
+            : nextDeliveryPricing.total
         );
   const branchRoutePricing =
     String(nextOriginBranchId) === String(nextDestinationBranchId)
-      ? await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)
+      ? resolvedBranchRoutePricing
       : hasManualBranchRoutePrice
         ? {
-            ...(await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId)),
+            ...resolvedBranchRoutePricing,
             precio_entre_sucursal: nextBranchRoutePrice,
           }
-        : await resolveBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
-  const nextPrecioPaquete = roundCurrency(
-    toNumber(existing.precio_paquete_unitario, 0) * (nextPackageSize === "grande" ? 2 : 1)
-  );
+        : { ...resolvedBranchRoutePricing, precio_entre_sucursal: nextBranchRoutePrice };
+  const currentPackageSize = normalizePackageSize(existing.package_size);
+  const currentPackagePrice = roundCurrency(toNumber(existing.precio_paquete, existing.precio_paquete_unitario || 0));
+  const useSameBranchRoutePackagePricing =
+    String(nextOriginBranchId || "") === String(nextDestinationBranchId || "") &&
+    Boolean(resolvedBranchRoutePricing.routeId);
+  const packagePositionInMonth = useSameBranchRoutePackagePricing
+    ? await SimplePackageRepository.countSimplePackagesForSellerInMonthUntil(
+        existingSellerId,
+        existing.fecha_pedido,
+        params.id
+      )
+    : 1;
+  const nextPrecioPaquete =
+    useSameBranchRoutePackagePricing
+      ? await PackageEscalationConfigService.getSimpleUnitPriceForPosition({
+          routeId: resolvedBranchRoutePricing.routeId,
+          position: packagePositionInMonth,
+          packageSize: nextPackageSize,
+        })
+      : nextPackageSize === currentPackageSize
+      ? currentPackagePrice
+      : await PackageEscalationConfigService.getSimpleUnitPriceForSizeChange({
+          routeId: resolvedBranchRoutePricing.routeId,
+          currentPrice: currentPackagePrice,
+          currentSize: currentPackageSize,
+          nextSize: nextPackageSize,
+          fallbackFixedPrice: seller?.precio_paquete,
+        });
   const nextAmortizacionVendedor = roundCurrency(
     toNumber(
       role === "seller"
@@ -782,15 +904,13 @@ const updateSimplePackageByID = async (params: {
   if (nextAmortizacionVendedor < 0) {
     throw new Error("El monto que cubrira el vendedor no puede ser menor a 0");
   }
-  if (nextAmortizacionVendedor > nextPrecioPaquete) {
-    throw new Error("El monto que cubrira el vendedor no puede ser mayor al precio del paquete");
-  }
   const pricing = buildPackagePricing(
-    toNumber(existing.precio_paquete_unitario, 0),
+    nextPrecioPaquete,
     nextAmortizacionVendedor,
     nextSaldoPorPaquete,
     nextPackageSize,
-    nextBranchRoutePrice
+    nextBranchRoutePrice,
+    effectiveNextDeliverySpaces
   );
 
   const updatePayload: Partial<IVentaExterna> = {
@@ -816,7 +936,7 @@ const updateSimplePackageByID = async (params: {
     updatePayload.comprador = nextBuyer || undefined;
     updatePayload.telefono_comprador = nextPhone || undefined;
     updatePayload.descripcion_paquete = nextDescription;
-    updatePayload.amortizacion_vendedor = nextAmortizacionVendedor;
+    updatePayload.amortizacion_vendedor = pricing.amortizacion_vendedor;
     updatePayload.saldo_por_paquete = nextSaldoPorPaquete;
   }
 
@@ -841,8 +961,8 @@ const deleteSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).qr_impreso || (existing as any).numero_guia) {
-    throw new Error("No se puede eliminar un paquete con QR impreso");
+  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
+    throw new Error("No se puede eliminar un paquete que ya fue convertido o entregado");
   }
 
   const role = String(params.role || "").toLowerCase();

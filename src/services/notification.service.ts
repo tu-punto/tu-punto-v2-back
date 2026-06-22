@@ -3,6 +3,8 @@ import { NotificationModel } from "../entities/implements/NotificationSchema";
 import { PushSubscriptionModel } from "../entities/implements/PushSubscriptionSchema";
 import { UserModel } from "../entities/implements/UserSchema";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
+import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
+import { TrackingTimelineService } from "./trackingTimeline.service";
 
 type WebPushModule = {
   setVapidDetails(subject: string, publicKey: string, privateKey: string): void;
@@ -42,13 +44,22 @@ type BrowserPushSubscription = {
 type ShippingLike = {
   _id?: unknown;
   cliente?: unknown;
+  comprador?: unknown;
   estado_pedido?: unknown;
+  fecha_pedido?: unknown;
+  public_tracking_received_at?: unknown;
   hora_entrega_acordada?: unknown;
+  hora_entrega_real?: unknown;
   lugar_entrega?: unknown;
   buyer_tracking_code?: unknown;
   shipping_qr_code?: unknown;
+  numero_guia?: unknown;
   sucursal?: unknown;
   lugar_origen?: unknown;
+  origen_sucursal?: unknown;
+  destino_sucursal?: unknown;
+  productos_temporales?: unknown;
+  descripcion_paquete?: unknown;
 };
 
 type NotifyUsersParams = {
@@ -634,6 +645,11 @@ const resolveTrackingShipping = async (trackingCode: string) => {
   }).lean();
   if (byShippingCode) return byShippingCode;
 
+  const byGuideNumber = await PedidoModel.findOne({
+    numero_guia: trimmed,
+  }).lean();
+  if (byGuideNumber) return byGuideNumber;
+
   if (Types.ObjectId.isValid(trimmed)) {
     return PedidoModel.findById(trimmed).lean();
   }
@@ -641,21 +657,112 @@ const resolveTrackingShipping = async (trackingCode: string) => {
   return null;
 };
 
+const resolvePublicTrackingOrder = async (trackingCode: string) => {
+  const trimmed = toStringValue(trackingCode);
+  if (!trimmed) return null;
+
+  const shipping = await resolveTrackingShipping(trimmed);
+  if (shipping) {
+    return {
+      source: "shipping" as const,
+      order: shipping as ShippingLike,
+    };
+  }
+
+  const externalMatch = {
+    $and: [
+      {
+        $or: [
+          { service_origin: { $exists: false } },
+          { service_origin: "external" },
+        ],
+      },
+      {
+        $or: [
+          { numero_guia: trimmed },
+          { shipping_qr_code: trimmed },
+          { qr_code: trimmed },
+        ],
+      },
+    ],
+  };
+  const external = await VentaExternaModel.findOne(externalMatch).lean();
+  if (external) {
+    return {
+      source: "external" as const,
+      order: external as ShippingLike,
+    };
+  }
+
+  return null;
+};
+
+const getTrackingCodeForPublicOrder = async (
+  source: "shipping" | "external",
+  order: ShippingLike
+) => {
+  if (source === "shipping") return ensureBuyerTrackingCode(order);
+
+  return (
+    toStringValue(order.numero_guia) ||
+    toStringValue(order.shipping_qr_code) ||
+    toStringValue(order._id)
+  );
+};
+
+const getTrackingItems = (order: ShippingLike) => {
+  const temporaryProducts = Array.isArray(order.productos_temporales)
+    ? order.productos_temporales
+    : [];
+
+  if (temporaryProducts.length) {
+    return temporaryProducts.map((item: any) => ({
+      name: toStringValue(item?.producto) || "Paquete",
+      quantity: Number(item?.cantidad || 1),
+    }));
+  }
+
+  const externalDescription = toStringValue(order.descripcion_paquete);
+  if (externalDescription) {
+    return [
+      {
+        name: externalDescription,
+        quantity: 1,
+      },
+    ];
+  }
+
+  return [];
+};
+
 const getPublicTrackingByCode = async (trackingCode: string) => {
-  const shipping = await resolveTrackingShipping(trackingCode);
-  if (!shipping) {
+  const resolved = await resolvePublicTrackingOrder(trackingCode);
+  if (!resolved) {
     return null;
   }
 
-  const resolvedTrackingCode = await ensureBuyerTrackingCode(shipping);
+  const order = resolved.order;
+  const publicTracking = TrackingTimelineService.buildPublicTracking(order);
+  const resolvedTrackingCode = await getTrackingCodeForPublicOrder(resolved.source, order);
 
   return {
-    shippingId: String(shipping._id),
+    shippingId: String(order._id),
+    source: resolved.source,
     trackingCode: resolvedTrackingCode,
-    cliente: toStringValue(shipping.cliente),
-    estado_pedido: toStringValue(shipping.estado_pedido),
-    lugar_entrega: toStringValue(shipping.lugar_entrega),
-    hora_entrega_acordada: shipping.hora_entrega_acordada || null,
+    cliente: toStringValue(order.cliente) || toStringValue(order.comprador),
+    estado_pedido: toStringValue(order.estado_pedido),
+    lugar_entrega: toStringValue(order.lugar_entrega),
+    hora_entrega_acordada: order.hora_entrega_acordada || null,
+    numero_guia: toStringValue(order.numero_guia),
+    tracking_status: publicTracking.status,
+    tracking_status_label: publicTracking.statusLabel,
+    tracking_has_delivery: publicTracking.hasDelivery,
+    tracking_reception_at: publicTracking.receptionAt,
+    tracking_in_transit_at: publicTracking.inTransitAt,
+    tracking_ready_for_pickup_at: publicTracking.readyForPickupAt,
+    tracking_delivered_at: publicTracking.deliveredAt,
+    tracking_steps: publicTracking.steps,
+    items: getTrackingItems(order),
   };
 };
 

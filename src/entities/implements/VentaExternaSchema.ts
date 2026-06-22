@@ -54,6 +54,12 @@ const VentaExternaSchema = new Schema({
         enum: ["estandar", "grande"],
         default: "estandar"
     },
+    delivery_spaces: {
+        type: Number,
+        required: false,
+        min: 1,
+        default: 1
+    },
     precio_paquete_unitario: {
         type: Number,
         required: false,
@@ -172,9 +178,25 @@ const VentaExternaSchema = new Schema({
         type: String,
         default: "En Espera",
     },
+    retirado_por_vendedor: {
+        type: Boolean,
+        default: false
+    },
+    seller_withdrawn_at: {
+        type: Date,
+        required: false
+    },
     hora_entrega_real: {
         type: Date,
         required: false
+    },
+    storage_fee_start_at: {
+        type: Date,
+        required: false
+    },
+    late_pickup_fee: {
+        type: Number,
+        default: 0
     },
     lugar_entrega: {
         type: String,
@@ -232,6 +254,27 @@ const VentaExternaSchema = new Schema({
         default: false,
     },
     qr_impreso_at: {
+        type: Date,
+        required: false,
+    },
+    public_tracking_received_at: {
+        type: Date,
+        required: false,
+    },
+    public_tracking_schedule_base_at: {
+        type: Date,
+        required: false,
+    },
+    public_tracking_frozen: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
+    public_tracking_frozen_status: {
+        type: String,
+        required: false,
+    },
+    public_tracking_frozen_at: {
         type: Date,
         required: false,
     },

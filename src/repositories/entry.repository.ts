@@ -11,7 +11,8 @@ export const findBySellerId = async (sellerId: Types.ObjectId): Promise<IIngreso
 export const findByProductId = async (productId: Types.ObjectId): Promise<any[]> => {
   const entries = await IngresoModel.find({ producto: productId })
     .populate('producto', 'id_producto nombre_producto')
-    .populate('vendedor', 'id_vendedor marca nombre apellido');
+    .populate('vendedor', 'id_vendedor marca nombre apellido')
+    .populate('sucursal', '_id nombre');
   return entries.map(entry => {
     const formattedDate = format(new Date(entry.fecha_ingreso), 'dd/MM/yyyy HH:mm:ss');
     return {

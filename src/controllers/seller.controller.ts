@@ -57,7 +57,17 @@ export const getSellers = async (req: Request, res: Response) => {
       assignedPaymentDayQuery === "28"
         ? assignedPaymentDayQuery
         : undefined;
-    const sortBy = sortByQuery === "fecha_pago_asignada" ? sortByQuery : undefined;
+    const allowedSortBy = new Set([
+      "nombre",
+      "estado",
+      "pago_pendiente",
+      "fecha_vigencia",
+      "fecha_pago_asignada",
+      "pago_mensual",
+      "comision_porcentual",
+      "emite_factura",
+    ]);
+    const sortBy = allowedSortBy.has(sortByQuery) ? sortByQuery as any : undefined;
     const sortOrder = sortOrderQuery === "desc" ? "desc" : "asc";
 
     if (authRole === "seller" && authUserId) {
@@ -300,6 +310,20 @@ export const getSellerDebts = async (req: Request, res: Response) => {
     res.json(debts);
   } catch (err) {
     res.status(500).json({ msg: "Error obteniendo deudas del vendedor", err });
+  }
+};
+
+export const createSellerRecoveryCharge = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const charge = await SellerService.createSellerRecoveryCharge(id, req.body || {});
+    res.json({ ok: true, charge });
+  } catch (err: any) {
+    console.error("Error creando cobro de recuperacion:", err);
+    res.status(err?.status || 500).json({
+      ok: false,
+      msg: err?.message || "Error creando cobro de recuperacion",
+    });
   }
 };
 

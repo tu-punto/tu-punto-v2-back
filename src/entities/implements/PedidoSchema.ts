@@ -35,6 +35,14 @@ const PedidoSchema = new Schema({
     type: Date,
     required: false,
   },
+  storage_fee_start_at: {
+    type: Date,
+    required: false,
+  },
+  late_pickup_fee: {
+    type: Number,
+    default: 0,
+  },
   observaciones: {
     type: String,
     default: ""
@@ -69,6 +77,61 @@ const PedidoSchema = new Schema({
   estado_pedido: {
     type: String,
     required: true
+  },
+  origen_pedido: {
+    type: String,
+    enum: ["interno", "catalogo"],
+    default: "interno",
+    index: true
+  },
+  catalog_order_id: {
+    type: String,
+    required: false,
+    index: true
+  },
+  catalog_status_sync: {
+    type: String,
+    enum: ["pending", "synced", "failed"],
+    required: false
+  },
+  catalog_status_sync_error: {
+    type: String,
+    default: ""
+  },
+  catalog_stock_status: {
+    type: String,
+    enum: ["pending", "reserved", "restored"],
+    required: false,
+    index: true
+  },
+  catalog_stock_items: [
+    {
+      internalProductId: { type: String, required: true },
+      internalVariantKey: { type: String, required: true },
+      internalBranchId: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      currentStock: { type: Number, required: true }
+    }
+  ],
+  rechazado_en: {
+    type: Date,
+    required: false
+  },
+  rechazado_por: {
+    type: String,
+    required: false
+  },
+  motivo_rechazo: {
+    type: String,
+    default: ""
+  },
+  retirado_por_vendedor: {
+    type: Boolean,
+    default: false
+  },
+  seller_withdrawn_at: {
+    type: Date,
+    required: false
   },
   adelanto_cliente: {
     type: Number,
@@ -122,6 +185,27 @@ const PedidoSchema = new Schema({
     default: "",
     index: true,
   },
+  public_tracking_received_at: {
+    type: Date,
+    required: false,
+  },
+  public_tracking_schedule_base_at: {
+    type: Date,
+    required: false,
+  },
+  public_tracking_frozen: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  public_tracking_frozen_status: {
+    type: String,
+    required: false,
+  },
+  public_tracking_frozen_at: {
+    type: Date,
+    required: false,
+  },
   numero_guia: {
     type: String,
     required: false,
@@ -162,6 +246,10 @@ const PedidoSchema = new Schema({
 });
 
 PedidoSchema.index({ shipping_qr_code: 1 }, { sparse: true });
+PedidoSchema.index(
+  { catalog_order_id: 1 },
+  { unique: true, partialFilterExpression: { catalog_order_id: { $type: "string", $gt: "" } } }
+);
 PedidoSchema.index(
   { numero_guia: 1 },
   { unique: true, partialFilterExpression: { numero_guia: { $type: "string", $gt: "" } } }

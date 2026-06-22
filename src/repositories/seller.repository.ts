@@ -19,7 +19,15 @@ type SellerListQueryParams = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
-  sortBy?: "fecha_pago_asignada";
+  sortBy?:
+    | "nombre"
+    | "estado"
+    | "pago_pendiente"
+    | "fecha_vigencia"
+    | "fecha_pago_asignada"
+    | "pago_mensual"
+    | "comision_porcentual"
+    | "emite_factura";
   sortOrder?: "asc" | "desc";
   page?: number;
   pageSize?: number;
@@ -91,7 +99,7 @@ const findDebtsBySeller = async (sellerId: string) => {
     id_vendedor: new Types.ObjectId(sellerId),
     esDeuda: true,
   })
-    .select("monto concepto fecha esDeuda detalle_servicios")
+    .select("monto concepto fecha esDeuda clase_cobro visible_en_flujo_general detalle_servicios")
     .populate({ path: "detalle_servicios.id_sucursal", select: "nombre" })
     .lean()
     .exec();
@@ -417,6 +425,41 @@ const buildSellerMetricsStages = () => [
   {
     $addFields: {
       pago_pendiente: { $subtract: ["$saldo_pendiente", "$deuda"] },
+      estado_orden: {
+        $switch: {
+          branches: [
+            {
+              case: {
+                $and: [
+                  { $ne: [{ $ifNull: ["$declinacion_servicio_fecha", null] }, null] },
+                  { $gte: ["$fecha_vigencia", dayjs().startOf("day").subtract(5, "day").toDate()] },
+                ],
+              },
+              then: 2,
+            },
+            {
+              case: {
+                $and: [
+                  { $gte: ["$fecha_vigencia", dayjs().startOf("day").toDate()] },
+                  { $eq: [{ $ifNull: ["$declinacion_servicio_fecha", null] }, null] },
+                ],
+              },
+              then: 1,
+            },
+            {
+              case: {
+                $and: [
+                  { $gte: ["$fecha_vigencia", dayjs().startOf("day").subtract(20, "day").toDate()] },
+                  { $lt: ["$fecha_vigencia", dayjs().startOf("day").toDate()] },
+                  { $eq: [{ $ifNull: ["$declinacion_servicio_fecha", null] }, null] },
+                ],
+              },
+              then: 3,
+            },
+          ],
+          default: 4,
+        },
+      },
     },
   },
   {
@@ -439,15 +482,25 @@ const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
       ? { pago_pendiente: 0 }
       : null;
   const assignedPaymentSortDirection: 1 | -1 = params?.sortOrder === "desc" ? -1 : 1;
-  const sortStage: Record<string, 1 | -1> =
-    params?.sortBy === "fecha_pago_asignada"
-      ? {
-          fecha_pago_asignada: assignedPaymentSortDirection,
-          nombre: 1,
-          apellido: 1,
-          _id: 1,
-        }
-      : { nombre: 1, apellido: 1, _id: 1 };
+  const sortFieldByParam: Record<string, string> = {
+    nombre: "nombre",
+    estado: "estado_orden",
+    pago_pendiente: "pago_pendiente",
+    fecha_vigencia: "fecha_vigencia",
+    fecha_pago_asignada: "fecha_pago_asignada",
+    pago_mensual: "pago_mensual",
+    comision_porcentual: "comision_porcentual",
+    emite_factura: "emite_factura",
+  };
+  const sortField = params?.sortBy ? sortFieldByParam[params.sortBy] : "";
+  const sortStage: Record<string, 1 | -1> = sortField
+    ? {
+        [sortField]: assignedPaymentSortDirection,
+        nombre: 1,
+        apellido: 1,
+        _id: 1,
+      }
+    : { nombre: 1, apellido: 1, _id: 1 };
 
   const result = await VendedorModel.aggregate([
     ...(Object.keys(match).length ? [{ $match: match }] : []),
