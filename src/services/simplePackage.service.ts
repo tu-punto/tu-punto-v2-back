@@ -429,16 +429,16 @@ const buildSimplePackageRecord = async (params: {
           String(row?.precio_entre_sucursal).trim() !== ""
         ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, deliveryPricing.total)))
         : deliveryPricing.total;
-  const useSameBranchRoutePackagePricing =
-    String(originBranchId || "") === String(destinationBranchId || "") &&
-    Boolean(branchRoutePricing.routeId);
   const precioPaquete = await PackageEscalationConfigService.getSimpleUnitPrice({
     routeId: branchRoutePricing.routeId,
     sellerId,
     packageIndexInBatch: index,
     packageSize,
-    fallbackSmallPrice: useSameBranchRoutePackagePricing ? undefined : seller?.precio_paquete,
-    fallbackLargePrice: useSameBranchRoutePackagePricing ? undefined : seller?.precio_paquete,
+    fallbackSmallPrice: seller?.precio_paquete,
+    fallbackLargePrice:
+      seller?.precio_paquete === null || seller?.precio_paquete === undefined
+        ? seller?.precio_paquete
+        : Number(seller.precio_paquete) * 2,
   });
   const precioPaqueteUnitario = precioPaquete;
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
@@ -870,7 +870,8 @@ const updateSimplePackageByID = async (params: {
   const useSameBranchRoutePackagePricing =
     String(nextOriginBranchId || "") === String(nextDestinationBranchId || "") &&
     Boolean(resolvedBranchRoutePricing.routeId);
-  const packagePositionInMonth = useSameBranchRoutePackagePricing
+  const hasFixedPackagePrice = seller?.precio_paquete !== null && seller?.precio_paquete !== undefined;
+  const packagePositionInMonth = useSameBranchRoutePackagePricing && !hasFixedPackagePrice
     ? await SimplePackageRepository.countSimplePackagesForSellerInMonthUntil(
         existingSellerId,
         existing.fecha_pedido,
@@ -878,7 +879,9 @@ const updateSimplePackageByID = async (params: {
       )
     : 1;
   const nextPrecioPaquete =
-    useSameBranchRoutePackagePricing
+    hasFixedPackagePrice
+      ? roundCurrency(Number(seller.precio_paquete) * (nextPackageSize === "grande" ? 2 : 1))
+      : useSameBranchRoutePackagePricing
       ? await PackageEscalationConfigService.getSimpleUnitPriceForPosition({
           routeId: resolvedBranchRoutePricing.routeId,
           position: packagePositionInMonth,
