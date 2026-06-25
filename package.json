@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "migrate:variant-keys": "ts-node src/scripts/migrateVariantKeys.ts",
     "backfill:order-guides": "ts-node src/scripts/backfillOrderGuides.ts",
+    "recalculate:late-pickup-fees": "ts-node src/scripts/recalculateLatePickupFees20Days.ts",
     "cleanup:bad-renewals": "ts-node src/scripts/deleteBadEncodedRenewals.ts"
   },
   "author": "",
