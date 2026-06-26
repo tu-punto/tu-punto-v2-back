@@ -22,6 +22,13 @@ const buildExternalOriginBranchMatch = (branchObjectId: Types.ObjectId) => ({
     ]
 });
 
+const buildExternalBranchVisibilityMatch = (branchObjectId: Types.ObjectId) => ({
+    $or: [
+        buildExternalOriginBranchMatch(branchObjectId),
+        { destino_sucursal: branchObjectId }
+    ]
+});
+
 const getAllExternalSales = async (): Promise<IVentaExternaDocument[]> => {
     return await VentaExternaModel.find(EXTERNAL_SERVICE_FILTER)
         .populate('sucursal')
@@ -53,7 +60,7 @@ const getExternalSalesList = async (params: {
     if (params.sucursalId && Types.ObjectId.isValid(params.sucursalId)) {
         match.$and = [
             ...(match.$and || []),
-            buildExternalOriginBranchMatch(new Types.ObjectId(params.sucursalId))
+            buildExternalBranchVisibilityMatch(new Types.ObjectId(params.sucursalId))
         ];
     }
     if (params.client) {

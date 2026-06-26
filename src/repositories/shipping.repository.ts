@@ -54,6 +54,13 @@ const buildOriginBranchMatch = (branchObjectId: Types.ObjectId) => ({
   ]
 });
 
+const buildBranchVisibilityMatch = (branchObjectId: Types.ObjectId) => ({
+  $or: [
+    buildOriginBranchMatch(branchObjectId),
+    { sucursal: branchObjectId },
+  ],
+});
+
 const findList = async (params: ShippingListParams) => {
   const safePage = Math.max(1, Number(params.page) || 1);
   const safeLimit = Math.min(200, Math.max(1, Number(params.limit) || 50));
@@ -78,7 +85,7 @@ const findList = async (params: ShippingListParams) => {
     const branchObjectId = new Types.ObjectId(params.branchContextId);
     const branchVisibilityMatch = {
       $or: [
-        buildOriginBranchMatch(branchObjectId),
+        buildBranchVisibilityMatch(branchObjectId),
         { origen_pedido: "catalogo" }
       ]
     };
