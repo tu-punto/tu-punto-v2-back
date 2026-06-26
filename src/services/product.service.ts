@@ -412,9 +412,11 @@ const addVariantToProduct = async (
     ...c,
     variantKey: (c as any).variantKey || createVariantKey(productId, c.variantes)
   }));
+  const entriesToCreate: any[] = [];
 
   for (const sucursalPago of sucursalesHabilitadas) {
     const id_sucursal = sucursalPago.id_sucursal.toString();
+    const isTargetBranch = sucursalId.toString() === id_sucursal;
 
     let sucursalProducto = producto.sucursales.find(
       s => (s as any).id_sucursal.toString() === id_sucursal
@@ -424,12 +426,28 @@ const addVariantToProduct = async (
       // Crear sucursal nueva
         producto.sucursales.push({
           id_sucursal: new Types.ObjectId(id_sucursal),
-          combinaciones: normalizedCombinaciones.map(c => ({
-            variantes: c.variantes,
-            variantKey: c.variantKey,
-            precio: c.precio,
-            stock: 0
-          }))
+          combinaciones: normalizedCombinaciones.map(c => {
+            const stock = isTargetBranch ? Number(c.stock || 0) : 0;
+            if (isTargetBranch && stock > 0) {
+              const variants = normalizeVariantsForEntry(c.variantes);
+              entriesToCreate.push({
+                fecha_ingreso: new Date(),
+                estado: "confirmado",
+                cantidad_ingreso: stock,
+                nombre_variante: buildVariantEntryName(producto.nombre_producto, variants),
+                producto: producto._id,
+                vendedor: producto.id_vendedor,
+                sucursal: new Types.ObjectId(id_sucursal),
+                combinacion: variants,
+              });
+            }
+            return {
+              variantes: c.variantes,
+              variantKey: c.variantKey,
+              precio: c.precio,
+              stock
+            };
+          })
         });
       } else {
         // Agregar combinaciones faltantes
@@ -442,18 +460,44 @@ const addVariantToProduct = async (
         );
 
         if (!yaExiste) {
+          const stock = isTargetBranch ? Number(nueva.stock || 0) : 0;
           sucursalProducto.combinaciones.push({
             variantes: nueva.variantes,
             variantKey: nueva.variantKey,
             precio: nueva.precio,
-            stock: sucursalId.toString() === id_sucursal ? nueva.stock : 0
+            stock
           });
+          if (isTargetBranch && stock > 0) {
+            const variants = normalizeVariantsForEntry(nueva.variantes);
+            entriesToCreate.push({
+              fecha_ingreso: new Date(),
+              estado: "confirmado",
+              cantidad_ingreso: stock,
+              nombre_variante: buildVariantEntryName(producto.nombre_producto, variants),
+              producto: producto._id,
+              vendedor: producto.id_vendedor,
+              sucursal: new Types.ObjectId(id_sucursal),
+              combinacion: variants,
+            });
+          }
         }
       }
     }
   }
 
-  return await producto.save();
+  const savedProduct = await producto.save();
+
+  if (entriesToCreate.length) {
+    const createdEntries = await IngresoModel.insertMany(entriesToCreate);
+    const entryIds = createdEntries.map((entry) => entry._id);
+    savedProduct.ingreso = [...(savedProduct.ingreso || []), ...entryIds];
+    await savedProduct.save();
+    await VendedorModel.findByIdAndUpdate(savedProduct.id_vendedor, {
+      $push: { ingreso: { $each: entryIds } },
+    });
+  }
+
+  return savedProduct;
 };
 
 
