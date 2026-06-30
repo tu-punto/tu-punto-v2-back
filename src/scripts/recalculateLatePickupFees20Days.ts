@@ -172,13 +172,13 @@ const run = async () => {
     }
 
     console.log(
-      `[late-pickup-fee-20-days] mode=${APPLY ? "apply" : "dry-run"} pedidos=${pedidoChanged} externas=${externalChanged} total_delta=${totalDelta}`
+      `[late-pickup-fee-recalculate] mode=${APPLY ? "apply" : "dry-run"} pedidos=${pedidoChanged} externas=${externalChanged} total_delta=${totalDelta}`
     );
     if (!APPLY) {
-      console.log("[late-pickup-fee-20-days] run with --apply to persist these changes");
+      console.log("[late-pickup-fee-recalculate] run with --apply to persist these changes");
     }
   } catch (error) {
-    console.error("[late-pickup-fee-20-days] failed", error);
+    console.error("[late-pickup-fee-recalculate] failed", error);
     process.exitCode = 1;
   } finally {
     await mongoose.connection.close();

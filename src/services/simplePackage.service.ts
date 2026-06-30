@@ -379,6 +379,7 @@ const buildSimplePackageRecord = async (params: {
   originBranchId?: string;
   deliveryEscalationSpaces?: number;
   allowManualBranchPrice?: boolean;
+  allowManualPackagePrice?: boolean;
 }) => {
   const {
     row,
@@ -389,6 +390,7 @@ const buildSimplePackageRecord = async (params: {
     originBranchId,
     deliveryEscalationSpaces,
     allowManualBranchPrice,
+    allowManualPackagePrice,
   } = params;
   ensureBuyerIdentity(row);
   ensureDescription(row);
@@ -429,7 +431,14 @@ const buildSimplePackageRecord = async (params: {
           String(row?.precio_entre_sucursal).trim() !== ""
         ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, deliveryPricing.total)))
         : deliveryPricing.total;
-  const precioPaquete = await PackageEscalationConfigService.getSimpleUnitPrice({
+  const requestedPackagePrice =
+    allowManualPackagePrice &&
+    row?.precio_paquete !== undefined &&
+    row?.precio_paquete !== null &&
+    String(row?.precio_paquete).trim() !== ""
+      ? roundCurrency(Math.max(0, toNumber(row?.precio_paquete, 0)))
+      : null;
+  const precioPaquete = requestedPackagePrice ?? await PackageEscalationConfigService.getSimpleUnitPrice({
     routeId: branchRoutePricing.routeId,
     sellerId,
     packageIndexInBatch: index,
@@ -527,6 +536,7 @@ const registerSimplePackages = async (params: {
         originBranchId,
         deliveryEscalationSpaces: totalDeliverySpaces,
         allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
+        allowManualPackagePrice: role === "admin" || role === "operator" || role === "superadmin",
       })
     )
   );

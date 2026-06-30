@@ -1,7 +1,7 @@
 import moment from "moment-timezone";
 
 const TZ = "America/La_Paz";
-const GRACE_DAYS = 20;
+const GRACE_DAYS = 200;
 const DAILY_FEE = 1;
 
 export const calculateEstimatedBranchPickupDate = (value?: unknown) => {

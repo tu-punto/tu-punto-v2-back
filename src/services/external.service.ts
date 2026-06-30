@@ -52,6 +52,12 @@ const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 const toObjectIdOrUndefined = (value?: string) =>
   value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
 
+const getOptionalNonNegativeAmount = (value: unknown): number | null => {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const parsed = roundCurrency(toNumber(value, NaN));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
 const isSameBusinessDay = (value: unknown) => {
   const date = moment.tz(value as any, "America/La_Paz");
   if (!date.isValid()) return false;
@@ -479,7 +485,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     packageCount: packagePricePosition,
     packageSize,
   });
-  const packagePrice = configuredPackagePrice;
+  const packagePrice = getOptionalNonNegativeAmount(input.precio_paquete) ?? configuredPackagePrice;
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
@@ -603,7 +609,6 @@ const registerExternalSalesByPackages = async (payload: any) => {
       origen_sucursal_id: originBranchId,
       batch_delivery_spaces: totalDeliverySpaces || Math.max(1, toNumber(pkg?.delivery_spaces ?? 1, 1)),
       batch_package_count: paquetes.length,
-      precio_paquete: undefined,
       precio_total: undefined,
     };
 
@@ -714,11 +719,12 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
           });
 
     branchRoutePrice = deliveryPricing.total;
-    price = await PackageEscalationConfigService.getExternalUnitPrice({
+    const configuredPrice = await PackageEscalationConfigService.getExternalUnitPrice({
       routeId: nextBranchRoute.routeId,
       packageCount: packagePricePosition,
       packageSize: nextPackageSize,
     });
+    price = getOptionalNonNegativeAmount(externalSale.precio_paquete) ?? configuredPrice;
   }
 
   const simplePackageFinancials = getSimplePackageFinancials({
