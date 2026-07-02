@@ -10,4 +10,8 @@ export interface IUser {
   sucursal: Types.ObjectId;
   vendedor: Types.ObjectId;
   trabajador: Types.ObjectId;
+  must_change_password?: boolean;
+  password_changed_at?: Date;
+  failed_login_attempts?: number;
+  login_locked_until?: Date | null;
 }

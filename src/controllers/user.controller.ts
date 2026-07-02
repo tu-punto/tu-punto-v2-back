@@ -2,9 +2,10 @@ import { CookieOptions, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { CategoryService } from "../services/category.service";
-import { comparePassword, hashPassword } from "../helpers/auth";
+import { assertPasswordStrength, comparePassword, hashPassword } from "../helpers/auth";
 import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
+import { getJwtSecret } from "../config/secrets";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
 import { Types } from "mongoose";
 import {
@@ -28,8 +29,11 @@ import {
 
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
+const JWT_SECRET = getJwtSecret();
 const isSecure = process.env.NODE_ENV === "production";
+const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.MAX_FAILED_LOGIN_ATTEMPTS || 5);
+const LOGIN_LOCK_MINUTES = Number(process.env.LOGIN_LOCK_MINUTES || 15);
+const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS || 24);
 
 const clearAuthCookie = (res: Response) =>
   res.clearCookie("token", {
@@ -57,6 +61,8 @@ type SellerProductInfoAccessShape = {
 const serializeUserForClient = (user: any) => {
   const userObj = user?.toObject?.() || { ...(user || {}) };
   delete userObj.password;
+  delete userObj.failed_login_attempts;
+  delete userObj.login_locked_until;
 
   const actualRole = normalizeUserRole(userObj.role);
 
@@ -64,6 +70,7 @@ const serializeUserForClient = (user: any) => {
     ...userObj,
     role: getPublicUserRole(actualRole),
     is_superadmin: actualRole === "superadmin",
+    must_change_password: userObj.must_change_password === true,
   };
 };
 
@@ -106,6 +113,9 @@ export const registerUserController = async (req: Request, res: Response) => {
       res.status(500).json({ error: "Email is already taken" });
       return;
     }
+    if (!String(user?.password || "").trim()) {
+      return res.status(400).json({ error: "La contrasena es obligatoria" });
+    }
     console.log("Email not taken");
     const encryptPassword = await hashPassword(user.password);
     console.log("Encriptado");
@@ -114,6 +124,7 @@ export const registerUserController = async (req: Request, res: Response) => {
       role: normalizedRole,
       password: encryptPassword,
       sucursal: resolveUserBranchForRole(normalizedRole, user.sucursal ?? user.sucursalId),
+      must_change_password: true,
     });
     res.json({
       status: true,
@@ -130,16 +141,43 @@ export const loginUserController = async (req: Request, res: Response) => {
   const { email, password, sucursalId } = req.body;
 
   try {
-    const user = await UserService.findByEmailService(email);
+    const user = await UserService.findByEmailService(String(email || "").trim().toLowerCase());
 
     if (!user) {
       return res.status(401).json({ success: false, msg: "Credenciales invalidas" });
     }
 
+    const lockedUntil = user.login_locked_until ? new Date(user.login_locked_until) : null;
+    if (lockedUntil && lockedUntil.getTime() > Date.now()) {
+      return res.status(429).json({
+        success: false,
+        msg: `Demasiados intentos fallidos. Intenta nuevamente despues de ${lockedUntil.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}.`,
+      });
+    }
+
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
+      const failedAttempts = Number(user.failed_login_attempts || 0) + 1;
+      const shouldLock = failedAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+      user.failed_login_attempts = failedAttempts;
+      user.login_locked_until = shouldLock
+        ? new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000)
+        : null;
+      await user.save();
+
+      if (shouldLock) {
+        return res.status(429).json({
+          success: false,
+          msg: `Demasiados intentos fallidos. La cuenta fue bloqueada por ${LOGIN_LOCK_MINUTES} minutos.`,
+        });
+      }
+
       return res.status(401).json({ success: false, msg: "Credenciales invalidas" });
     }
+
+    user.failed_login_attempts = 0;
+    user.login_locked_until = null;
+    await user.save();
 
     let id_vendedor = null;
     let nombre_vendedor = null;
@@ -184,7 +222,7 @@ export const loginUserController = async (req: Request, res: Response) => {
 
     res
       .cookie("token", token, {
-        maxAge: 24 * 60 * 60 * 1000,
+        maxAge: SESSION_TTL_HOURS * 60 * 60 * 1000,
         httpOnly: true,
         secure: isSecure,
         sameSite: isSecure ? "none" : "lax",
@@ -199,6 +237,55 @@ export const loginUserController = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const changePasswordController = async (req: Request, res: Response) => {
+  try {
+    const userId = String(res.locals.auth?.id || "");
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!userId) {
+      return res.status(401).json({ success: false, msg: "No autenticado" });
+    }
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ success: false, msg: "Completa todos los campos" });
+    }
+    if (String(newPassword) !== String(confirmPassword)) {
+      return res.status(400).json({ success: false, msg: "Las contrasenas no coinciden" });
+    }
+
+    const user = await UserService.getUserByIdService(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    const currentPasswordMatches = await comparePassword(String(currentPassword), user.password);
+    if (!currentPasswordMatches) {
+      return res.status(401).json({ success: false, msg: "La contrasena actual no es correcta" });
+    }
+
+    const isSamePassword = await comparePassword(String(newPassword), user.password);
+    if (isSamePassword) {
+      return res.status(400).json({ success: false, msg: "La nueva contrasena debe ser diferente" });
+    }
+
+    assertPasswordStrength(String(newPassword));
+    const hashedPassword = await hashPassword(String(newPassword));
+    const updatedUser = await UserService.updateUserPassword(userId, hashedPassword);
+
+    res.json({
+      success: true,
+      msg: "Contrasena actualizada correctamente",
+      data: serializeUserForClient(updatedUser),
+    });
+  } catch (error: any) {
+    const status = Number(error?.status || 500);
+    res.status(status).json({
+      success: false,
+      msg: error?.message || "Error al cambiar contrasena",
+      details: error?.details,
+    });
   }
 };
 
@@ -334,6 +421,10 @@ export const updateUserController = async (req: Request, res: Response) => {
     
     if (password) {
       updateData.password = await hashPassword(password);
+      updateData.must_change_password = true;
+      updateData.password_changed_at = null;
+      updateData.failed_login_attempts = 0;
+      updateData.login_locked_until = null;
     }
 
     const updatedUser = await UserService.updateUser(id, updateData);

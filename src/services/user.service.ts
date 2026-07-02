@@ -20,6 +20,10 @@ const updateUser = async (id: string, updateData: any) => {
   return await UserRepository.updateUser(id, updateData);
 };
 
+const updateUserPassword = async (id: string, hashedPassword: string) => {
+  return await UserRepository.updateUserPassword(id, hashedPassword);
+};
+
 const deleteUser = async (id: string) => {
   return await UserRepository.deleteUser(id);
 };
@@ -34,6 +38,7 @@ export const UserService = {
   getUserByIdService,
   getAllUsers,
   updateUser,
+  updateUserPassword,
   deleteUser,
   getAdmins
 };

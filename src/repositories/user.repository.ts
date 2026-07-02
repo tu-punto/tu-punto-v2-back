@@ -37,6 +37,20 @@ const updateUser = async (id: string, updateData: any) => {
   return await UserModel.findByIdAndUpdate(id, updateData, { new: true }).select('-password').populate("sucursal");
 };
 
+const updateUserPassword = async (id: string, hashedPassword: string) => {
+  return await UserModel.findByIdAndUpdate(
+    id,
+    {
+      password: hashedPassword,
+      must_change_password: false,
+      password_changed_at: new Date(),
+      failed_login_attempts: 0,
+      login_locked_until: null,
+    },
+    { new: true }
+  ).select("-password").populate("sucursal");
+};
+
 const deleteUser = async (id: string) => {
   return await UserModel.findByIdAndDelete(id);
 };
@@ -48,6 +62,7 @@ export const UserRepository = {
   getUserById,
   getAllUsers,
   updateUser,
+  updateUserPassword,
   deleteUser,
   getAdmins
 };

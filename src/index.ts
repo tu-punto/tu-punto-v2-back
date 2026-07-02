@@ -9,11 +9,14 @@ import { seedUser } from "./seeds/seedUser";
 import { seedFinanceFluxCategory } from "./seeds/seedFinanceFluxCategory";
 import { NotificationService } from "./services/notification.service";
 import { SellerService } from "./services/seller.service";
+import { validateProductionSecrets } from "./config/secrets";
 
 const app: Express = express();
 const port = process.env.SERVER_PORT || 3000;
 const client_url = process.env.CLIENT_URL || "http://localhost:5173";
 const client_url2 = process.env.CLIENT_URL_2 || "http://localhost:5173";
+
+validateProductionSecrets();
 
 connectToMongoDB().then(async () => {
   //await seedSucursal();

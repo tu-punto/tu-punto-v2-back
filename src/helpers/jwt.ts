@@ -1,10 +1,12 @@
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { getJwtSecret } from "../config/secrets";
 
-const JWT_SECRET = process.env.JWT_SECRET || "LKDSJF";
+const JWT_SECRET = getJwtSecret();
+const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS || 24);
 
 const generateToken = (id: string, role: string, sucursalId?: string) => {
   const payload = {
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // Token expires in 24h
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * SESSION_TTL_HOURS,
     id: id,
     role,
     sucursalId, 

@@ -19,6 +19,11 @@ type AuthPayload = {
 
 const isSecure = process.env.NODE_ENV === "production";
 
+const canPassWithPendingPasswordChange = (originalUrl: string) =>
+  originalUrl.includes("/user/info") ||
+  originalUrl.includes("/user/logout") ||
+  originalUrl.includes("/user/change-password");
+
 const getTokenFromRequest = (req: Request): string | null => {
   const cookieToken = req.cookies?.token;
   if (typeof cookieToken === "string" && cookieToken.length > 0) {
@@ -55,6 +60,21 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
       role,
       sucursalId: decoded.sucursalId,
     };
+
+    const user = await UserModel.findById(decoded.id)
+      .select("must_change_password role")
+      .lean();
+    if (!user) {
+      return res.status(401).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    if (user.must_change_password === true && !canPassWithPendingPasswordChange(req.originalUrl || "")) {
+      return res.status(403).json({
+        success: false,
+        code: "PASSWORD_CHANGE_REQUIRED",
+        msg: "Debes cambiar tu contrasena antes de continuar",
+      });
+    }
 
     if (role === "seller") {
       const seller = await resolveSellerByUserId(decoded.id);

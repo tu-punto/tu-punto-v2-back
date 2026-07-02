@@ -8,6 +8,7 @@ import {
   updateUserController,
   deleteUserController,
   getAdminsController,
+  changePasswordController,
 } from "../controllers/user.controller";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 
@@ -19,6 +20,7 @@ userRouter.post("/register", registerUserController);
 userRouter.post("/login", loginUserController);
 userRouter.get("/info", requireAuth, getUserInfoController);
 userRouter.post("/logout", requireAuth, logoutUserController);
+userRouter.post("/change-password", requireAuth, changePasswordController);
 
 userRouter.get("/", requireAuth, requireRole("admin"), getAllUsersController);
 userRouter.get("/admins", requireAuth, requireRole("admin", "operator"), getAdminsController);
