@@ -283,7 +283,7 @@ export const changePasswordController = async (req: Request, res: Response) => {
     const status = Number(error?.status || 500);
     res.status(status).json({
       success: false,
-      msg: error?.message || "Error al cambiar contrasena",
+      msg: error?.message || "Error al cambiar contraseña",
       details: error?.details,
     });
   }
