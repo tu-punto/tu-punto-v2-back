@@ -35,6 +35,14 @@ connectToMongoDB().then(async () => {
   app.use(express.urlencoded({ extended: false }));
 
   app.use((req, _res, next) => {
+    if (req.method === "POST") {
+      console.log("[http] incoming POST", {
+        method: req.method,
+        originalUrl: req.originalUrl,
+        url: req.url,
+        baseUrl: req.baseUrl,
+      });
+    }
     if (req.method === "POST" && req.originalUrl.includes("/user/change-password")) {
       console.log("[change-password] incoming request", {
         method: req.method,
