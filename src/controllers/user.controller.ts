@@ -7,6 +7,8 @@ import { UserService } from "../services/user.service";
 import { generateToken } from "../helpers/jwt";
 import { getJwtSecret } from "../config/secrets";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
+import { TrabajadorModel } from "../entities/implements/TrabajadorSchema";
+import { UserModel } from "../entities/implements/UserSchema";
 import { Types } from "mongoose";
 import {
   ASSIGNABLE_USER_ROLES,
@@ -292,6 +294,109 @@ export const changePasswordController = async (req: Request, res: Response) => {
       success: false,
       msg: error?.message || "Error al cambiar contraseña",
       details: error?.details,
+    });
+  }
+};
+
+const resolveResetPasswordFromProfile = async (user: any) => {
+  if (user?.vendedor) {
+    const vendedor = await VendedorModel.findById(user.vendedor).select("carnet").lean();
+    const carnet = String((vendedor as any)?.carnet || "").trim();
+    if (carnet) return carnet;
+  }
+
+  if (user?.role && String(user.role).toLowerCase() === "seller" && user?.email) {
+    const vendedor = await VendedorModel.findOne({ mail: user.email }).select("carnet").lean();
+    const carnet = String((vendedor as any)?.carnet || "").trim();
+    if (carnet) return carnet;
+  }
+
+  if (user?.trabajador) {
+    const trabajador = await TrabajadorModel.findById(user.trabajador).select("numero").lean();
+    const numero = String((trabajador as any)?.numero || "").trim();
+    if (numero) return numero;
+  }
+
+  return "";
+};
+
+export const resetUserPasswordToCarnetController = async (req: Request, res: Response) => {
+  try {
+    const userId = String(req.params?.id || "").trim();
+    if (!userId) {
+      return res.status(400).json({ success: false, msg: "Usuario requerido" });
+    }
+
+    const user = await UserService.getUserByIdService(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    const carnetPassword = await resolveResetPasswordFromProfile(user);
+    if (!carnetPassword) {
+      return res.status(400).json({
+        success: false,
+        msg: "No se pudo obtener un carnet o numero para restablecer la contrasena",
+      });
+    }
+
+    const hashedPassword = await hashPassword(carnetPassword);
+    const updatedUser = await UserService.updateUserPassword(userId, hashedPassword);
+
+    return res.json({
+      success: true,
+      msg: "Contrasena restablecida al carnet",
+      data: serializeUserForClient(updatedUser),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      msg: error?.message || "Error al restablecer contrasena",
+    });
+  }
+};
+
+export const resetSellerPasswordController = async (req: Request, res: Response) => {
+  try {
+    const sellerId = String(req.params?.sellerId || "").trim();
+    const newPassword = String(req.body?.newPassword ?? "");
+
+    if (!sellerId) {
+      return res.status(400).json({ success: false, msg: "Vendedor requerido" });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({ success: false, msg: "La nueva contraseña es obligatoria" });
+    }
+
+    const seller = await VendedorModel.findById(sellerId).select("mail carnet").lean();
+    if (!seller) {
+      return res.status(404).json({ success: false, msg: "Vendedor no encontrado" });
+    }
+
+    const normalizedMail = String((seller as any)?.mail || "").trim().toLowerCase();
+    let user = normalizedMail ? await UserService.findByEmailService(normalizedMail) : null;
+
+    if (!user) {
+      user = await UserModel.findOne({ vendedor: sellerId }).lean();
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "Usuario asociado no encontrado" });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    const updatedUser = await UserService.updateUserPassword(String(user._id), hashedPassword);
+
+    return res.json({
+      success: true,
+      msg: "Contrasena restablecida correctamente",
+      data: serializeUserForClient(updatedUser),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      msg: error?.message || "Error al restablecer la contrasena",
     });
   }
 };
