@@ -9,6 +9,8 @@ import {
   deleteUserController,
   getAdminsController,
   changePasswordController,
+  resetUserPasswordToCarnetController,
+  resetSellerPasswordController,
 } from "../controllers/user.controller";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 
@@ -29,6 +31,8 @@ userRouter.get("/", requireAuth, requireRole("admin"), getAllUsersController);
 userRouter.get("/admins", requireAuth, requireRole("admin", "operator"), getAdminsController);
 
 userRouter.put("/:id", requireAuth, requireRole("admin"), updateUserController);
+userRouter.post("/sellers/:sellerId/reset-password", requireAuth, requireRole("superadmin"), resetSellerPasswordController);
+userRouter.post("/:id/reset-password-to-carnet", requireAuth, requireRole("admin"), resetUserPasswordToCarnetController);
 userRouter.delete("/:id", requireAuth, requireRole("admin"), deleteUserController);
 
 
