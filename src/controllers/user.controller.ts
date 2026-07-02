@@ -245,6 +245,13 @@ export const changePasswordController = async (req: Request, res: Response) => {
     const userId = String(res.locals.auth?.id || "");
     const { currentPassword, newPassword, confirmPassword } = req.body || {};
 
+    console.log("[change-password] controller", {
+      userId,
+      hasCurrentPassword: Boolean(currentPassword),
+      hasNewPassword: Boolean(newPassword),
+      hasConfirmPassword: Boolean(confirmPassword),
+    });
+
     if (!userId) {
       return res.status(401).json({ success: false, msg: "No autenticado" });
     }
