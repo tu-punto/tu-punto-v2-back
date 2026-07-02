@@ -30,6 +30,22 @@ const UserSchema = new Schema<IUserDocument>({
     type: Schema.Types.ObjectId,
     ref: 'Trabajador',
     required: false
+  },
+  must_change_password: {
+    type: Boolean,
+    default: false
+  },
+  password_changed_at: {
+    type: Date,
+    required: false
+  },
+  failed_login_attempts: {
+    type: Number,
+    default: 0
+  },
+  login_locked_until: {
+    type: Date,
+    required: false
   }
 }, {
   collection: 'User',

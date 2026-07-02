@@ -457,10 +457,6 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
-  const packagePricePosition = Math.max(
-    1,
-    toNumber(input.package_position_in_batch ?? input.numero_paquete, batchPackageCount)
-  );
   const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
   const effectiveDeliverySpaces = requestedDeliverySpaces;
   const packageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
@@ -482,7 +478,7 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const branchRoutePrice = deliveryPricing.total;
   const configuredPackagePrice = await PackageEscalationConfigService.getExternalUnitPrice({
     routeId: branchRoute.routeId,
-    packageCount: packagePricePosition,
+    packageCount: batchPackageCount,
     packageSize,
   });
   const packagePrice = getOptionalNonNegativeAmount(input.precio_paquete) ?? configuredPackagePrice;
@@ -697,9 +693,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   if (shouldRecalculateRoutePricing) {
     nextBranchRoute = await resolveExternalBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
     deliverySpaces = Math.max(1, toNumber(externalSale.delivery_spaces ?? existing.delivery_spaces ?? 1, 1));
-    const packagePricePosition = Math.max(
+    const packagePriceCount = Math.max(
       1,
-      toNumber(externalSale.package_position_in_batch ?? externalSale.numero_paquete ?? existing.numero_paquete, 1)
+      toNumber(externalSale.batch_package_count ?? externalSale.numero_paquetes ?? existing.numero_paquete, 1)
     );
     nextPackageSize = await PackageEscalationConfigService.resolvePackageSizeBySpaces({
       routeId: nextBranchRoute.routeId,
@@ -721,7 +717,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     branchRoutePrice = deliveryPricing.total;
     const configuredPrice = await PackageEscalationConfigService.getExternalUnitPrice({
       routeId: nextBranchRoute.routeId,
-      packageCount: packagePricePosition,
+      packageCount: packagePriceCount,
       packageSize: nextPackageSize,
     });
     price = getOptionalNonNegativeAmount(externalSale.precio_paquete) ?? configuredPrice;

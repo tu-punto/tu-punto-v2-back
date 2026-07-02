@@ -364,6 +364,7 @@ const createOrLinkSellerUser = async (seller: any) => {
     password,
     role: "seller",
     vendedor: sellerId,
+    must_change_password: true,
   });
   await SellerRepository.updateSeller(seller._id, { user: user._id } as any);
   return user;

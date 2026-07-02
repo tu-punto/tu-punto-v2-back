@@ -9,11 +9,14 @@ import { seedUser } from "./seeds/seedUser";
 import { seedFinanceFluxCategory } from "./seeds/seedFinanceFluxCategory";
 import { NotificationService } from "./services/notification.service";
 import { SellerService } from "./services/seller.service";
+import { validateProductionSecrets } from "./config/secrets";
 
 const app: Express = express();
-const port = process.env.SERVER_PORT || 3000;
+const port = process.env.PORT || process.env.SERVER_PORT || 3000;
 const client_url = process.env.CLIENT_URL || "http://localhost:5173";
 const client_url2 = process.env.CLIENT_URL_2 || "http://localhost:5173";
+
+validateProductionSecrets();
 
 connectToMongoDB().then(async () => {
   //await seedSucursal();
@@ -30,6 +33,27 @@ connectToMongoDB().then(async () => {
   app.use(express.json());
   app.use(cookieParser());
   app.use(express.urlencoded({ extended: false }));
+
+  app.use((req, _res, next) => {
+    if (req.method === "POST") {
+      console.log("[http] incoming POST", {
+        method: req.method,
+        originalUrl: req.originalUrl,
+        url: req.url,
+        baseUrl: req.baseUrl,
+      });
+    }
+    if (req.method === "POST" && req.originalUrl.includes("/user/change-password")) {
+      console.log("[change-password] incoming request", {
+        method: req.method,
+        originalUrl: req.originalUrl,
+        baseUrl: req.baseUrl,
+        hasTokenCookie: Boolean(req.cookies?.token),
+      });
+    }
+    next();
+  });
+
   app.use(routes);
   NotificationService.startReminderScheduler();
   SellerService.startAutoRenewalScheduler();

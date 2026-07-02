@@ -247,7 +247,10 @@ const notifyCatalogRejected = async (
 ) => {
   const baseUrl = text(process.env.CATALOG_API_URL).replace(/\/+$/, "");
   const token = text(process.env.CATALOG_INTEGRATION_TOKEN);
-  if (!baseUrl || !token) throw new Error("Callback al catalogo no configurado");
+  if (!baseUrl || !token) {
+    console.warn("[catalog-integration] callback omitido: no configurado");
+    return;
+  }
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -275,7 +278,10 @@ const notifyCatalogRejected = async (
 const notifyCatalogStatus = async (catalogOrderId: string, status: string) => {
   const baseUrl = text(process.env.CATALOG_API_URL).replace(/\/+$/, "");
   const token = text(process.env.CATALOG_INTEGRATION_TOKEN);
-  if (!baseUrl || !token) throw new Error("Callback al catalogo no configurado");
+  if (!baseUrl || !token) {
+    console.warn("[catalog-integration] callback omitido: no configurado");
+    return;
+  }
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {

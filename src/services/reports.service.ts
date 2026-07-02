@@ -3248,8 +3248,10 @@ if (resumen.length) {
   async getIngresosMensualesSucursalServicio({ mes, meses, sucursalIds }: Params) {
     const mesesSeleccionados = normalizeMeses(mes, meses);
     const sucursalFilter = new Set((sucursalIds || []).map(String));
-    const [vendedores, branches] = await Promise.all([
-      ReportsRepository.fetchVendedoresConPagoSucursales(),
+    const { start: rangeStart, end: rangeEnd } =
+      mesesSeleccionados.length > 1 ? rangeMeses(mesesSeleccionados) : monthRange(mesesSeleccionados[0]);
+    const [incomeDocs, branches] = await Promise.all([
+      ReportsRepository.fetchIngresosFlujoEnRango({ start: rangeStart, end: rangeEnd, includeHidden: true }),
       ReportsRepository.fetchSucursalesBasicas(),
     ]);
     const branchNames = new Map((branches as any[]).map((branch) => [String(branch?._id || ""), String(branch?.nombre || "Sucursal")]));
@@ -3259,6 +3261,18 @@ if (resumen.length) {
       { key: "delivery", label: "Delivery" },
       { key: "entrega_simple", label: "Entrega simple" },
     ] as const;
+    const resolveFallbackService = (income: any) => {
+      const text = `${income?.concepto || ""} ${income?.categoria || ""}`.toLowerCase();
+      if (text.includes("simple") || text.includes("externa") || text.includes("external")) {
+        return null;
+      }
+      if (text.includes("alquiler") || text.includes("almacen")) return { key: "alquiler", label: "Alquiler" };
+      if (text.includes("exhib")) return { key: "exhibicion", label: "Exhibicion" };
+      if (text.includes("delivery")) return { key: "delivery", label: "Delivery" };
+      if (text.includes("entrega")) return { key: "entrega_simple", label: "Entrega simple" };
+      return null;
+    };
+    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => isAltaRenovacionIncome(doc));
     const rows: Array<{
       mes: string;
       id_sucursal: string;
@@ -3272,38 +3286,52 @@ if (resumen.length) {
       const { start, end } = monthRange(selectedMonth);
       const monthRows = new Map<string, { id_sucursal: string; sucursal: string; servicio: string; monto_bs: number; clientes: Set<string> }>();
 
-      for (const vendedor of vendedores as any[]) {
-        const sellerId = String(vendedor?._id || "").trim();
-        if (!sellerId) continue;
+      for (const income of serviceIncomeDocs) {
+        const incomeDate = income?.fecha ? new Date(income.fecha) : null;
+        if (!incomeDate || Number.isNaN(incomeDate.getTime()) || incomeDate < start || incomeDate >= end) continue;
 
-        const vigencia = vendedor?.fecha_vigencia ? moment.tz(vendedor.fecha_vigencia, TZ).endOf("day") : null;
-        if (vigencia && vigencia.isBefore(start)) continue;
+        const detailRows = Array.isArray(income?.detalle_servicios) && income.detalle_servicios.length
+          ? income.detalle_servicios
+          : (() => {
+              const branchId = String((income?.id_sucursal as any)?._id || income?.id_sucursal || "");
+              const service = resolveFallbackService(income);
+              if (!branchId || !service) return [];
+              return [{
+                id_sucursal: income.id_sucursal,
+                sucursalName: (income?.id_sucursal as any)?.nombre || "",
+                [service.key]: safeNum(income?.monto),
+                __serviceLabel: service.label,
+                __serviceKey: service.key,
+              }];
+            })();
 
-        const pagos = Array.isArray(vendedor?.pago_sucursales) ? vendedor.pago_sucursales : [];
-        for (const pago of pagos) {
-          if (pago?.activo === false) continue;
-
-          const branchId = String(pago?.id_sucursal?._id || pago?.id_sucursal || "").trim();
+        for (const branchDetail of detailRows) {
+          const branchId = String(
+            branchDetail?.id_sucursal?._id ||
+            branchDetail?.id_sucursal ||
+            (income?.id_sucursal as any)?._id ||
+            income?.id_sucursal ||
+            ""
+          ).trim();
           if (!branchId || (sucursalFilter.size && !sucursalFilter.has(branchId))) continue;
 
-          const fechaIngreso = pago?.fecha_ingreso ? moment.tz(pago.fecha_ingreso, TZ).startOf("day") : null;
-          const fechaSalida = pago?.fecha_salida ? moment.tz(pago.fecha_salida, TZ).endOf("day") : null;
-          if (fechaIngreso && fechaIngreso.toDate() >= end) continue;
-          if (fechaSalida && fechaSalida.toDate() < start) continue;
+          const servicesForDetail = branchDetail.__serviceKey
+            ? [{ key: branchDetail.__serviceKey, label: branchDetail.__serviceLabel }]
+            : services;
 
-          for (const service of services) {
-            const amount = roundCurrency(safeNum(pago?.[service.key]));
+          for (const service of servicesForDetail) {
+            const amount = roundCurrency(safeNum(branchDetail?.[service.key]));
             if (amount <= 0) continue;
             const mapKey = `${branchId}|||${service.key}`;
             const current = monthRows.get(mapKey) || {
               id_sucursal: branchId,
-              sucursal: branchNames.get(branchId) || String(pago?.sucursalName || "Sucursal"),
+              sucursal: branchNames.get(branchId) || String(branchDetail?.sucursalName || "Sucursal"),
               servicio: service.label,
               monto_bs: 0,
               clientes: new Set<string>(),
             };
             current.monto_bs = roundCurrency(current.monto_bs + amount);
-            current.clientes.add(sellerId);
+            current.clientes.add(String(income?.id_vendedor?._id || income?.id_vendedor || income?._id || ""));
             monthRows.set(mapKey, current);
           }
         }
