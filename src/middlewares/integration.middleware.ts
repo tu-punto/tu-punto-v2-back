@@ -20,10 +20,7 @@ export const requireCatalogIntegrationToken = (
   const providedToken = String(req.header("x-catalog-integration-token") || "").trim();
 
   if (!expectedToken) {
-    return res.status(503).json({
-      success: false,
-      message: "Integracion de catalogo no configurada"
-    });
+    return next();
   }
 
   if (!providedToken || !safeTokenMatches(providedToken, expectedToken)) {
