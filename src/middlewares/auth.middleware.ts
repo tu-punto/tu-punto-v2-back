@@ -24,6 +24,9 @@ const canPassWithPendingPasswordChange = (originalUrl: string) =>
   originalUrl.includes("/user/logout") ||
   originalUrl.includes("/user/change-password");
 
+const canBypassSellerAccessCheck = (originalUrl: string) =>
+  canPassWithPendingPasswordChange(originalUrl);
+
 const getTokenFromRequest = (req: Request): string | null => {
   const cookieToken = req.cookies?.token;
   if (typeof cookieToken === "string" && cookieToken.length > 0) {
@@ -82,7 +85,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
         authData.sellerId = String(seller._id);
       }
 
-      if (seller && !sellerHasSystemAccess(seller.fecha_vigencia)) {
+      if (seller && !sellerHasSystemAccess(seller.fecha_vigencia) && !canBypassSellerAccessCheck(req.originalUrl || "")) {
         res.clearCookie("token", {
           httpOnly: true,
           secure: isSecure,
