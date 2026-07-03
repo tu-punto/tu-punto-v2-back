@@ -153,6 +153,17 @@ function isAltaRenovacionIncome(doc: any): boolean {
   return isIngreso && notRecovery && !isSimpleOrExternal && isAltaOrRenov;
 }
 
+function isMatrizIncome(doc: any): boolean {
+  const text = getIncomeText(doc);
+  const isIngreso = String(doc?.tipo || "").toUpperCase() === "INGRESO";
+  const notRecovery = String(doc?.clase_cobro || "").toUpperCase() !== "RECUPERACION";
+  return isIngreso && notRecovery && /(^|[^a-z0-9])matriz($|[^a-z0-9])/.test(text);
+}
+
+function shouldIncludeIncomeInMatrixReports(doc: any): boolean {
+  return isAltaRenovacionIncome(doc) || isMatrizIncome(doc);
+}
+
 function buildInventoryAliasKeys(params: {
   idProducto?: unknown;
   variantKey?: unknown;
@@ -1799,7 +1810,7 @@ export const ReportsService = {
     const docs = await ReportsRepository.fetchIngresosFlujoEnRango({ start, end });
 
     const detalle = (docs as any[])
-      .filter((d) => isAltaRenovacionIncome(d))
+      .filter((d) => shouldIncludeIncomeInMatrixReports(d))
       .map((d) => {
         const mesRow = d.fecha ? moment.utc(d.fecha).format("YYYY-MM") : "";
         return {
@@ -2881,7 +2892,7 @@ export const ReportsService = {
     });
 
     // ===== 1) Armar detalle con mes =====
-    const detalle = (docs as any[]).filter((d) => isAltaRenovacionIncome(d)).map((d) => {
+    const detalle = (docs as any[]).filter((d) => shouldIncludeIncomeInMatrixReports(d)).map((d) => {
     const mes = moment.utc(d.fecha).format("YYYY-MM");
       return {
         mes,
@@ -3270,21 +3281,37 @@ if (resumen.length) {
       if (text.includes("exhib")) return { key: "exhibicion", label: "Exhibicion" };
       if (text.includes("delivery")) return { key: "delivery", label: "Delivery" };
       if (text.includes("entrega")) return { key: "entrega_simple", label: "Entrega simple" };
-      return null;
+      return { key: "__monto", label: "Matriz" };
     };
-    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => isAltaRenovacionIncome(doc));
-    const rows: Array<{
+    const serviceIncomeDocs = (incomeDocs as any[]).filter((doc) => shouldIncludeIncomeInMatrixReports(doc));
+    type MatrixRow = {
+      id_sucursal: string;
+      sucursal: string;
+      servicio: string;
+      clientes: Set<string>;
+      total_bs: number;
+      [mes: string]: any;
+    };
+    const matrixMap = new Map<string, MatrixRow>();
+    const detalleOrigen: Array<{
       mes: string;
+      fecha: string;
+      id_flujo: string;
+      concepto: string;
+      categoria: string;
+      clase_cobro: string;
+      es_deuda: boolean;
+      id_vendedor: string;
+      id_trabajador: string;
       id_sucursal: string;
       sucursal: string;
       servicio: string;
       monto_bs: number;
-      clientes: number;
+      origen: string;
     }> = [];
 
     for (const selectedMonth of mesesSeleccionados) {
       const { start, end } = monthRange(selectedMonth);
-      const monthRows = new Map<string, { id_sucursal: string; sucursal: string; servicio: string; monto_bs: number; clientes: Set<string> }>();
 
       for (const income of serviceIncomeDocs) {
         const incomeDate = income?.fecha ? new Date(income.fecha) : null;
@@ -3306,7 +3333,7 @@ if (resumen.length) {
             })();
 
         for (const branchDetail of detailRows) {
-          const branchId = String(
+            const branchId = String(
             branchDetail?.id_sucursal?._id ||
             branchDetail?.id_sucursal ||
             (income?.id_sucursal as any)?._id ||
@@ -3323,70 +3350,83 @@ if (resumen.length) {
             const amount = roundCurrency(safeNum(branchDetail?.[service.key]));
             if (amount <= 0) continue;
             const mapKey = `${branchId}|||${service.key}`;
-            const current = monthRows.get(mapKey) || {
+            const current = (matrixMap.get(mapKey) || {
               id_sucursal: branchId,
               sucursal: branchNames.get(branchId) || String(branchDetail?.sucursalName || "Sucursal"),
               servicio: service.label,
-              monto_bs: 0,
               clientes: new Set<string>(),
-            };
-            current.monto_bs = roundCurrency(current.monto_bs + amount);
+              total_bs: 0,
+              ...Object.fromEntries(mesesSeleccionados.map((m) => [m, 0])),
+            }) as MatrixRow;
+            current[selectedMonth] = roundCurrency(safeNum((current as any)[selectedMonth]) + amount);
+            current.total_bs = roundCurrency(current.total_bs + amount);
             current.clientes.add(String(income?.id_vendedor?._id || income?.id_vendedor || income?._id || ""));
-            monthRows.set(mapKey, current);
+            matrixMap.set(mapKey, current);
+
+            detalleOrigen.push({
+              mes: selectedMonth,
+              fecha: moment.tz(incomeDate, TZ).format("DD/MM/YYYY HH:mm"),
+              id_flujo: String(income?._id || ""),
+              concepto: String(income?.concepto || ""),
+              categoria: String(income?.categoria || ""),
+              clase_cobro: String(income?.clase_cobro || ""),
+              es_deuda: Boolean(income?.esDeuda),
+              id_vendedor: String(income?.id_vendedor?._id || income?.id_vendedor || ""),
+              id_trabajador: String(income?.id_trabajador?._id || income?.id_trabajador || ""),
+              id_sucursal: branchId,
+              sucursal: String(branchNames.get(branchId) || branchDetail?.sucursalName || "Sucursal"),
+              servicio: service.label,
+              monto_bs: amount,
+              origen: branchDetail.__serviceKey ? "detalle_servicios" : "fallback",
+            });
           }
         }
       }
-
-      for (const row of monthRows.values()) {
-        rows.push({
-          mes: selectedMonth,
-          id_sucursal: row.id_sucursal,
-          sucursal: row.sucursal,
-          servicio: row.servicio,
-          monto_bs: row.monto_bs,
-          clientes: row.clientes.size,
-        });
-      }
     }
 
-    rows.sort((a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal) || a.servicio.localeCompare(b.servicio));
-    const resumenMap = new Map<string, { mes: string; id_sucursal: string; sucursal: string; total_bs: number }>();
-    for (const row of rows) {
-      const key = `${row.mes}|||${row.id_sucursal}`;
-      const current = resumenMap.get(key) || { mes: row.mes, id_sucursal: row.id_sucursal, sucursal: row.sucursal, total_bs: 0 };
-      current.total_bs = roundCurrency(current.total_bs + row.monto_bs);
-      resumenMap.set(key, current);
-    }
+    const matriz = (Array.from(matrixMap.values())
+      .map((row) => ({ ...row, clientes: row.clientes.size })) as Array<MatrixRow & { clientes: number }>)
+      .sort((a, b) => a.sucursal.localeCompare(b.sucursal) || a.servicio.localeCompare(b.servicio));
+
+    const totalesPorMes = mesesSeleccionados.map((m) => ({
+      mes: m,
+      monto_bs: roundCurrency((matriz as any[]).reduce((sum, row) => sum + safeNum(row[m]), 0)),
+    }));
+
     const selectedBranches = (branches as any[]).filter((branch) => {
       const branchId = String(branch?._id || "");
       return branchId && (!sucursalFilter.size || sucursalFilter.has(branchId));
     });
-    for (const selectedMonth of mesesSeleccionados) {
-      for (const branch of selectedBranches) {
+
+    const resumenPorSucursal = mesesSeleccionados.flatMap((selectedMonth) =>
+      selectedBranches.map((branch) => {
         const branchId = String(branch?._id || "");
-        const key = `${selectedMonth}|||${branchId}`;
-        if (!resumenMap.has(key)) {
-          resumenMap.set(key, {
-            mes: selectedMonth,
-            id_sucursal: branchId,
-            sucursal: String(branch?.nombre || "Sucursal"),
-            total_bs: 0,
-          });
-        }
-      }
-    }
-    const resumenPorSucursal = Array.from(resumenMap.values()).sort(
-      (a, b) => a.mes.localeCompare(b.mes) || a.sucursal.localeCompare(b.sucursal)
+        const total_bs = roundCurrency(
+          (matriz as any[])
+            .filter((row) => row.id_sucursal === branchId)
+            .reduce((sum, row) => sum + safeNum(row[selectedMonth]), 0)
+        );
+        return {
+          mes: selectedMonth,
+          id_sucursal: branchId,
+          sucursal: String(branch?.nombre || "Sucursal"),
+          total_bs,
+        };
+      })
     );
 
     return {
       meses: mesesSeleccionados,
       totalGeneral: {
-        monto_bs: roundCurrency(rows.reduce((sum, row) => sum + row.monto_bs, 0)),
-        sucursales: new Set(resumenPorSucursal.map((row) => row.id_sucursal)).size,
+        monto_bs: roundCurrency(totalesPorMes.reduce((sum, row) => sum + safeNum(row.monto_bs), 0)),
+        sucursales: new Set((matriz as any[]).map((row) => row.id_sucursal)).size,
+        servicios: new Set((matriz as any[]).map((row) => row.servicio)).size,
       },
       resumenPorSucursal,
-      rows,
+      matriz,
+      rows: matriz,
+      totalesPorMes,
+      detalleOrigen,
     };
   },
 
@@ -3396,27 +3436,45 @@ if (resumen.length) {
     wb.creator = "TuPunto Reports";
     wb.created = new Date();
 
-    const wsResumen = wb.addWorksheet("Resumen_Por_Sucursal");
+    const wsResumen = wb.addWorksheet("Resumen_Por_Mes");
     wsResumen.columns = [
       { header: "Mes", key: "mes", width: 14 },
-      { header: "Id Sucursal", key: "id_sucursal", width: 26 },
-      { header: "Sucursal", key: "sucursal", width: 28 },
-      { header: "Total (Bs)", key: "total_bs", width: 16 },
+      { header: "Monto (Bs)", key: "monto_bs", width: 16 },
     ];
-    data.resumenPorSucursal.forEach((row) => wsResumen.addRow(row));
+    data.totalesPorMes.forEach((row) => wsResumen.addRow(row));
     wsResumen.getRow(1).font = { bold: true };
 
-    const wsDetalle = wb.addWorksheet("Detalle_Por_Servicio");
-    wsDetalle.columns = [
-      { header: "Mes", key: "mes", width: 14 },
+    const wsMatriz = wb.addWorksheet("Matriz");
+    wsMatriz.columns = [
       { header: "Id Sucursal", key: "id_sucursal", width: 26 },
       { header: "Sucursal", key: "sucursal", width: 28 },
       { header: "Servicio", key: "servicio", width: 18 },
+      ...data.meses.map((mesKey) => ({ header: mesKey, key: mesKey, width: 16 })),
+      { header: "Total (Bs)", key: "total_bs", width: 16 },
       { header: "Clientes", key: "clientes", width: 12 },
-      { header: "Monto (Bs)", key: "monto_bs", width: 16 },
     ];
-    data.rows.forEach((row) => wsDetalle.addRow(row));
-    wsDetalle.getRow(1).font = { bold: true };
+    data.matriz.forEach((row) => wsMatriz.addRow(row));
+    wsMatriz.getRow(1).font = { bold: true };
+
+    const wsOrigen = wb.addWorksheet("Detalle_Origen");
+    wsOrigen.columns = [
+      { header: "Mes", key: "mes", width: 14 },
+      { header: "Fecha", key: "fecha", width: 20 },
+      { header: "Id Flujo", key: "id_flujo", width: 26 },
+      { header: "Concepto", key: "concepto", width: 28 },
+      { header: "Categoria", key: "categoria", width: 18 },
+      { header: "Clase Cobro", key: "clase_cobro", width: 14 },
+      { header: "Es Deuda", key: "es_deuda", width: 11 },
+      { header: "Id Vendedor", key: "id_vendedor", width: 26 },
+      { header: "Id Trabajador", key: "id_trabajador", width: 26 },
+      { header: "Id Sucursal", key: "id_sucursal", width: 26 },
+      { header: "Sucursal", key: "sucursal", width: 28 },
+      { header: "Servicio", key: "servicio", width: 18 },
+      { header: "Monto (Bs)", key: "monto_bs", width: 16 },
+      { header: "Origen", key: "origen", width: 16 },
+    ];
+    data.detalleOrigen.forEach((row) => wsOrigen.addRow(row));
+    wsOrigen.getRow(1).font = { bold: true };
 
     const nombreMeses =
       data.meses.length <= 1
