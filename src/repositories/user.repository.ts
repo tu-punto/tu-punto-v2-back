@@ -14,7 +14,7 @@ const registerUserRepo = async (user: IUser): Promise<IUserDocument> => {
 };
 
 const getUserByEmail = async (email: string): Promise<IUserDocument | null> => {
-  const user = await UserModel.findOne({ email: email }).populate("sucursal"); 
+  const user = await UserModel.findOne({ email: new RegExp(`^${String(email || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }).populate("sucursal"); 
   console.log("Encontrado:", user); 
   return user;
 };
