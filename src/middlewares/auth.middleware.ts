@@ -71,14 +71,6 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ success: false, msg: "Usuario no encontrado" });
     }
 
-    if (user.must_change_password === true && !canPassWithPendingPasswordChange(req.originalUrl || "")) {
-      return res.status(403).json({
-        success: false,
-        code: "PASSWORD_CHANGE_REQUIRED",
-        msg: "Debes cambiar tu contrasena antes de continuar",
-      });
-    }
-
     if (role === "seller") {
       const seller = await resolveSellerByUserId(decoded.id);
       if (seller?._id) {
