@@ -799,7 +799,7 @@ const requestSellerPayment = async (
   };
 };
 
-const declineSellerService = async (id: string) => {
+const declineSellerService = async (id: string, options?: { ignoreDeadline?: boolean }) => {
   const seller = await SellerRepository.findById(id);
   if (!seller) {
     const error: any = new Error("Vendedor no encontrado");
@@ -818,12 +818,14 @@ const declineSellerService = async (id: string) => {
     throw error;
   }
 
-  const today = dayjs().startOf("day");
-  const deadline = vigencia.subtract(5, "day").endOf("day");
-  if (today.isAfter(deadline)) {
-    const error: any = new Error("La declinacion solo esta habilitada hasta 5 dias antes de la vigencia");
-    error.status = 400;
-    throw error;
+  if (!options?.ignoreDeadline) {
+    const today = dayjs().startOf("day");
+    const deadline = vigencia.subtract(5, "day").endOf("day");
+    if (today.isAfter(deadline)) {
+      const error: any = new Error("La declinacion solo esta habilitada hasta 5 dias antes de la vigencia");
+      error.status = 400;
+      throw error;
+    }
   }
 
   return await SellerRepository.updateSeller(id, {

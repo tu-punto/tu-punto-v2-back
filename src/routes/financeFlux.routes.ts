@@ -1,15 +1,16 @@
 import { Router } from "express";
 import * as fluxController from "../controllers/financeFlux.controller";
 import { getFinancialSummaryController, getCommissionController, getMerchandiseSoldController } from "../controllers/financeFlux.controller";
+import { uploadFinanceFluxAttachment } from "../middlewares/upload.middleware";
 const financeFluxRouter = Router();
 
-financeFluxRouter.post("/register", fluxController.registerFinanceFlux);
+financeFluxRouter.post("/register", uploadFinanceFluxAttachment.single("attachment"), fluxController.registerFinanceFlux);
 
 financeFluxRouter.patch("/:id/pay", fluxController.payDebt);
 
 financeFluxRouter.get("/worker/:id", fluxController.getWorker);
 
-financeFluxRouter.put("/:id", fluxController.updateFinanceFlux);
+financeFluxRouter.put("/:id", uploadFinanceFluxAttachment.single("attachment"), fluxController.updateFinanceFlux);
 
 financeFluxRouter.get("/seller/:id", fluxController.getSeller);
 

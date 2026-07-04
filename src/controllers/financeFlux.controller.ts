@@ -65,9 +65,7 @@ export const registerFinanceFlux = async (req: Request, res: Response) => {
       ...req.body,
       founder: await getAuthenticatedResponsibleName(res),
     };
-    const createdFlux = await FinanceFluxService.registerFinanceFlux(
-      fluxPayload
-    );
+    const createdFlux = await FinanceFluxService.registerFinanceFlux(fluxPayload, req.file as Express.Multer.File | undefined);
     res.json({ ok: true, createdFlux });
   } catch (err) {
     res.status(500).json({ msg: "Error registrando flujo", err });
@@ -100,7 +98,7 @@ export const updateFinanceFlux = async (req: Request, res: Response) => {
     const fluxId = req.params.id;
     const updates = req.body;
 
-    const updatedFlux = await FinanceFluxService.updateFinanceFlux(fluxId, updates);
+    const updatedFlux = await FinanceFluxService.updateFinanceFlux(fluxId, updates, req.file as Express.Multer.File | undefined);
     res.json({ ok: true, updatedFlux });
   } catch (err: any) {
     res.status(400).json({ ok: false, error: err.message });

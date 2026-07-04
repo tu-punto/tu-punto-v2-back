@@ -685,6 +685,9 @@ const updateShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  if ((shipping as any)?.pagado_al_vendedor === true) {
+    throw new Error("No se puede editar una entrega que ya fue pagada al vendedor");
+  }
   if (
     (shipping as any)?.origen_pedido === "catalogo" &&
     ["Rechazado", "Cancelado", "No entregado"].includes(String(newData?.estado_pedido || ""))

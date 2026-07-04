@@ -270,7 +270,10 @@ export const requestSellerPayment = async (req: Request, res: Response) => {
 export const declineSellerService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const seller = await SellerService.declineSellerService(id);
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const seller = await SellerService.declineSellerService(id, {
+      ignoreDeadline: authRole === "admin" || authRole === "operator" || authRole === "superadmin",
+    });
     res.json({
       ok: true,
       msg: "Declinacion del servicio registrada correctamente",

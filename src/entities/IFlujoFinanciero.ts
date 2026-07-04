@@ -14,6 +14,10 @@ export interface IFlujoFinanciero {
   clase_cobro?: "INGRESO" | "RECUPERACION";
   descuento_porcentaje?: number;
   monto_sin_descuento?: number;
+  attachment_url?: string;
+  attachment_key?: string;
+  attachment_name?: string;
+  attachment_type?: string;
   detalle_servicios?: {
     id_sucursal?: Types.ObjectId | ISucursal;
     sucursalName: string;

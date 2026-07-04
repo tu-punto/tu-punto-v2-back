@@ -13,6 +13,8 @@ import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import moment from "moment-timezone";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
+import { uploadFileToAws } from "./bucket.service";
+import { awsFolderNames } from "../config/bucketConfig";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -79,6 +81,29 @@ const projectFluxesForSucursales = (fluxes: any[], sucursalIds?: string[]) => {
 const toNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toBoolean = (value: unknown) =>
+  value === true || ["true", "si", "sí", "1"].includes(String(value || "").trim().toLowerCase());
+
+const sanitizeFileName = (value: string) =>
+  String(value || "archivo")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(-100);
+
+const buildAttachmentPayload = async (file?: Express.Multer.File) => {
+  if (!file) return {};
+
+  const safeName = sanitizeFileName(file.originalname || "comprobante");
+  const key = `${awsFolderNames.comprobantes}/finance-flux/${Date.now()}-${safeName}`;
+  const url = await uploadFileToAws(file.buffer, key, file.mimetype || "application/octet-stream");
+
+  return {
+    attachment_url: url,
+    attachment_key: key,
+    attachment_name: file.originalname || safeName,
+    attachment_type: file.mimetype || "application/octet-stream",
+  };
 };
 
 const normalizeServiceDetailUpdates = (detalleServicios: any[] = []) => {
@@ -157,20 +182,28 @@ const getDailyServiceIncomeByDateAndSucursal = async (
 
 const getDebts = async () => await FinanceFluxRepository.findAllDebts();
 
-const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
-  let montoFinal = flux.monto;
+const registerFinanceFlux = async (flux: IFlujoFinanciero, file?: Express.Multer.File) => {
+  let montoFinal = toNumber(flux.monto);
+  const normalizedFlux = {
+    ...flux,
+    monto: montoFinal,
+    esDeuda: toBoolean((flux as any).esDeuda),
+  };
 
-  if (flux.tipo === "INGRESO" && flux.id_vendedor) {
-    const vendedor = await SellerRepository.findById(flux.id_vendedor);
+  if (normalizedFlux.tipo === "INGRESO" && normalizedFlux.id_vendedor) {
+    const vendedor = await SellerRepository.findById(normalizedFlux.id_vendedor);
     if (vendedor && vendedor.comision_porcentual) {
-      const extra = flux.monto * (vendedor.comision_porcentual / 100);
+      const extra = montoFinal * (vendedor.comision_porcentual / 100);
       montoFinal += extra;
     }
   }
 
+  const attachment = await buildAttachmentPayload(file);
+
   await FinanceFluxRepository.registerFinanceFlux({
-    ...flux,
+    ...normalizedFlux,
     monto: montoFinal,
+    ...attachment,
   });
 };
 
@@ -225,7 +258,8 @@ const getStatsService = async () => {
 
 const updateFinanceFlux = async (
   fluxId: string,
-  updates: Partial<IFlujoFinanciero>
+  updates: Partial<IFlujoFinanciero>,
+  file?: Express.Multer.File
 ) => {
   const _id = new Types.ObjectId(fluxId);
 
@@ -233,7 +267,11 @@ const updateFinanceFlux = async (
   if (!existingFlux) throw new Error("Flujo no encontrado");
 
   const oldDeuda = existingFlux.esDeuda ? existingFlux.monto : 0;
-  const payload: Partial<IFlujoFinanciero> = { ...updates };
+  const payload: Partial<IFlujoFinanciero> = {
+    ...updates,
+    ...(Object.prototype.hasOwnProperty.call(updates, "esDeuda") ? { esDeuda: toBoolean((updates as any).esDeuda) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(updates, "monto") ? { monto: toNumber((updates as any).monto) } : {}),
+  };
 
   if (Array.isArray((updates as any).detalle_servicios)) {
     const { detail, total } = normalizeServiceDetailUpdates(
@@ -243,7 +281,11 @@ const updateFinanceFlux = async (
     payload.monto = total;
   }
 
-  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, payload);
+  const attachment = await buildAttachmentPayload(file);
+  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, {
+    ...payload,
+    ...attachment,
+  });
   if (!updatedFlux) throw new Error("Error al actualizar el flujo");
 
   const newDeuda = updatedFlux.esDeuda ? updatedFlux.monto : 0;
