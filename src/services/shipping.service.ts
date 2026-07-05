@@ -106,6 +106,51 @@ const buildGoogleMapsSearchUrl = (query: string): string => {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 };
 
+const isDeliveryLikeShipping = (shipping: any) =>
+  String(shipping?.tipo_destino || "").trim().toLowerCase() === "otro_lugar" ||
+  Boolean(
+    shipping?.costo_delivery ||
+      shipping?.cargo_delivery ||
+      shipping?.quien_paga_delivery ||
+      shipping?.delivery_spaces
+  );
+
+const validateDeliveryCutoff = async (shipping: any) => {
+  if (!isDeliveryLikeShipping(shipping)) return;
+
+  const branchId = resolveBranchId(shipping?.lugar_origen) || resolveBranchId(shipping?.sucursal);
+  if (!branchId || !Types.ObjectId.isValid(branchId)) return;
+
+  const branch = await SucursalModel.findById(branchId)
+    .select("nombre delivery_cutoff_enabled delivery_cutoff_time")
+    .lean();
+
+  if (!branch?.delivery_cutoff_enabled || !branch?.delivery_cutoff_time) return;
+
+  const targetDate = shipping?.fecha_pedido
+    ? moment.tz(shipping.fecha_pedido, "America/La_Paz")
+    : moment().tz("America/La_Paz");
+  const now = moment().tz("America/La_Paz");
+
+  if (targetDate.format("YYYY-MM-DD") !== now.format("YYYY-MM-DD")) return;
+
+  const [hoursRaw, minutesRaw] = String(branch.delivery_cutoff_time).split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  const cutoff = now
+    .clone()
+    .hour(Number.isFinite(hours) ? hours : 0)
+    .minute(Number.isFinite(minutes) ? minutes : 0)
+    .second(0)
+    .millisecond(0);
+
+  if (now.isAfter(cutoff)) {
+    throw new Error(
+      `La sucursal ${String(branch.nombre || branchId)} ya superó la hora limite para delivery de hoy (${cutoff.format("HH:mm")}). Registra el pedido para el dia siguiente.`
+    );
+  }
+};
+
 const normalizeDestinationType = (value: unknown): "sucursal" | "otro_lugar" =>
   value === "sucursal" || value === "esta_sucursal" ? "sucursal" : "otro_lugar";
 
@@ -488,6 +533,7 @@ const registerShipping = async (shipping: any) => {
 
   normalizeOrderPaymentData(shipping);
   await normalizeShippingBranches(shipping);
+  await validateDeliveryCutoff(shipping);
   if (shipping?.simple_package_order === true) {
     await OrderGuideService.assignOrderGuide(shipping);
   }

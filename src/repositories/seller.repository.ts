@@ -162,23 +162,14 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
 
   const trimmedQuery = String(params?.q || "").trim();
   if (trimmedQuery) {
-    match.$expr = {
-      $regexMatch: {
-        input: {
-          $trim: {
-            input: {
-              $concat: [
-                { $ifNull: ["$nombre", ""] },
-                " ",
-                { $ifNull: ["$apellido", ""] }
-              ]
-            }
-          }
-        },
-        regex: escapeRegex(trimmedQuery),
-        options: "i"
-      }
-    };
+    const tokens = trimmedQuery.split(/\s+/).filter(Boolean).slice(0, 4);
+    const searchableFields = ["nombre", "apellido", "marca", "mail"];
+
+    match.$and = tokens.map((token) => ({
+      $or: searchableFields.map((field) => ({
+        [field]: { $regex: escapeRegex(token), $options: "i" },
+      })),
+    }));
   }
 
   const todayStart = dayjs().startOf("day");

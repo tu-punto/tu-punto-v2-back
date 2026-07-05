@@ -23,6 +23,7 @@ type TrackingOrderLike = {
   fecha_pedido?: unknown;
   public_tracking_received_at?: unknown;
   public_tracking_schedule_base_at?: unknown;
+  public_tracking_ready_for_pickup_at?: unknown;
   public_tracking_frozen?: unknown;
   public_tracking_frozen_status?: unknown;
   hora_entrega_real?: unknown;
@@ -70,7 +71,7 @@ const getScheduleBaseDate = (order: TrackingOrderLike, fallback: Date): Date => 
 };
 
 const isDelivered = (order: TrackingOrderLike) =>
-  toTrimmed(order.estado_pedido).toLowerCase() === "entregado";
+  toTrimmed(order.estado_pedido).toLowerCase() === "entregado" && !order.public_tracking_ready_for_pickup_at;
 
 const isFrozen = (order: TrackingOrderLike) => order.public_tracking_frozen === true;
 
@@ -178,12 +179,15 @@ const buildPublicTracking = (order: TrackingOrderLike, now = new Date()) => {
   const scheduleBaseAt = getScheduleBaseDate(order, receptionAt);
   const delivery = isDeliveryOrder(order);
   const delivered = isDelivered(order);
+  const readyForPickupAt = toDateOrNull(order.public_tracking_ready_for_pickup_at);
   const deliveredAt = delivered ? toDateOrNull(order.hora_entrega_real) || now : null;
   const transferTimes = delivery
     ? getTransferTimes(scheduleBaseAt)
     : { inTransitAt: undefined, readyAt: receptionAt };
   const status =
-    isFrozen(order) && delivery && !delivered
+    readyForPickupAt
+      ? "READY_FOR_PICKUP"
+      : isFrozen(order) && delivery && !delivered
       ? normalizeFrozenStatus(order.public_tracking_frozen_status) || "RECEPTION"
       : pickCurrentStatus({
           delivered,
@@ -199,7 +203,7 @@ const buildPublicTracking = (order: TrackingOrderLike, now = new Date()) => {
     hasDelivery: delivery,
     receptionAt,
     inTransitAt: transferTimes.inTransitAt || null,
-    readyForPickupAt: transferTimes.readyAt,
+    readyForPickupAt: readyForPickupAt || transferTimes.readyAt,
     deliveredAt,
     steps: buildSteps({
       status,

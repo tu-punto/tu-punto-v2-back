@@ -17,6 +17,14 @@ export const SucursalSchema = new Schema({
     type: Number,
     required: true
   },
+  delivery_cutoff_enabled: {
+    type: Boolean,
+    default: false
+  },
+  delivery_cutoff_time: {
+    type: String,
+    default: ""
+  },
   imagen_header: {
     type: String,
     default: ""

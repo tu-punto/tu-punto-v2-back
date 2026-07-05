@@ -27,6 +27,11 @@ type CommissionRange = {
   from?: string;
   to?: string;
   sucursalIds?: string[];
+  months?: string[];
+  expenseCategories?: string[];
+  includeCommissions?: boolean;
+  includeDeliveries?: boolean;
+  deliveryMode?: "real" | "potential";
 };
 
 const normalizeSucursalIds = (sucursalIds?: string[]) =>
@@ -39,6 +44,35 @@ const normalizeSucursalIds = (sucursalIds?: string[]) =>
   );
 
 const normalizeId = (value: any) => String(value?._id || value || "").trim();
+
+const normalizeText = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+const toMonthKey = (value: unknown) => {
+  const date = value ? new Date(value as any) : null;
+  return date && !Number.isNaN(date.getTime()) ? moment(date).format("YYYY-MM") : "";
+};
+
+const normalizeStringList = (values?: string[]) =>
+  Array.from(new Set((values || []).map((item) => String(item || "").trim()).filter(Boolean)));
+
+const toBoolean = (value: unknown, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["true", "1", "si", "sí", "yes"].includes(normalizeText(value));
+};
+
+const matchesMonths = (dateValue: unknown, months?: string[]) => {
+  const normalizedMonths = normalizeStringList(months);
+  if (!normalizedMonths.length) return true;
+  const monthKey = toMonthKey(dateValue);
+  return monthKey ? normalizedMonths.includes(monthKey) : false;
+};
+
+const getDeliveryAmount = (shipping: any, mode: "real" | "potential") => {
+  const packagePrice = Number(shipping?.precio_paquete || 0);
+  const branchRoutePrice = Number(shipping?.precio_entre_sucursal ?? shipping?.cargo_delivery ?? 0);
+  const total = Number(shipping?.precio_total || packagePrice + branchRoutePrice);
+  return mode === "potential" ? total : (Number(shipping?.cargo_delivery || 0) + Number(shipping?.monto_paga_comprador || 0) + Number(shipping?.monto_paga_vendedor || 0));
+};
 
 const getFluxAmountForSucursales = (flux: any, sucursalIds?: string[]) => {
   const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
@@ -82,9 +116,6 @@ const toNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 };
-
-const toBoolean = (value: unknown) =>
-  value === true || ["true", "si", "sí", "1"].includes(String(value || "").trim().toLowerCase());
 
 const sanitizeFileName = (value: string) =>
   String(value || "archivo")
@@ -404,8 +435,13 @@ const getMerchandiseSoldTotal = async (opts: CommissionRange) => {
   return { mercaderiaVendida: calculateSoldMerchandiseValue(sales) };
 };
 
-const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucursalIds?: string[]) => {
-  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
+const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, opts: CommissionRange = {}) => {
+  const normalizedSucursalIds = normalizeSucursalIds(opts.sucursalIds);
+  const selectedMonths = normalizeStringList(opts.months);
+  const selectedExpenseCategories = normalizeStringList(opts.expenseCategories).map(normalizeText);
+  const includeCommissions = toBoolean(opts.includeCommissions, true);
+  const includeDeliveries = toBoolean(opts.includeDeliveries, true);
+  const deliveryMode: "real" | "potential" = opts.deliveryMode === "potential" ? "potential" : "real";
   const [
     fluxes,
     shippings,
@@ -429,7 +465,15 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   let simplePackagesNoDeliveryTotal = 0;
   let simplePackagesInterbranchTotal = 0;
 
-  for (const f of fluxes) {
+  const filteredFluxes = (fluxes || []).filter((f: any) => {
+    if (!matchesMonths(f.fecha, selectedMonths)) return false;
+    if (f.tipo === "GASTO" && selectedExpenseCategories.length > 0) {
+      return selectedExpenseCategories.includes(normalizeText(f.categoria));
+    }
+    return true;
+  });
+
+  for (const f of filteredFluxes) {
     const monto = getFluxAmountForSucursales(f, normalizedSucursalIds);
     if (f.tipo === "INGRESO") ingresosFluxes += monto;
     else if (f.tipo === "GASTO") gastos += monto;
@@ -437,32 +481,37 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   }
 
   for (const s of shippings) {
-    montoCobradoDelivery += s.cargo_delivery || 0;
-    costoDelivery += s.costo_delivery || 0;
-
-    if (!isCompletedSimplePackageShipping(s)) continue;
-
+    if (!matchesMonths((s as any)?.fecha_pedido, selectedMonths)) continue;
+    const realDeliveryAmount = Number(s.cargo_delivery || 0);
+    const realDeliveryExpense = Number(s.costo_delivery || 0);
     const packagePrice = Number((s as any)?.precio_paquete || 0);
-    const branchShippingPrice = Number(
-      (s as any)?.precio_entre_sucursal ?? s.cargo_delivery ?? 0
-    );
+    const branchShippingPrice = Number((s as any)?.precio_entre_sucursal ?? s.cargo_delivery ?? 0);
+    const deliveryAmount = deliveryMode === "potential"
+      ? Number((s as any)?.precio_total || packagePrice + branchShippingPrice)
+      : realDeliveryAmount;
 
-    if (branchShippingPrice > 0) {
-      simplePackagesInterbranchTotal += packagePrice + branchShippingPrice;
-    } else {
-      simplePackagesNoDeliveryTotal += packagePrice;
+    if (includeDeliveries) {
+      montoCobradoDelivery += deliveryMode === "potential" ? deliveryAmount : realDeliveryAmount;
+      costoDelivery += realDeliveryExpense;
+
+      if (branchShippingPrice > 0) {
+        simplePackagesInterbranchTotal += deliveryAmount || packagePrice + branchShippingPrice;
+      } else {
+        simplePackagesNoDeliveryTotal += deliveryMode === "potential" ? packagePrice : (isCompletedSimplePackageShipping(s) ? packagePrice : 0);
+      }
     }
   }
   const balanceDelivery = montoCobradoDelivery - costoDelivery;
 
   for (const v of sales) {
+    if (!matchesMonths((v as any)?.createdAt || (v as any)?.fecha || (v as any)?.id_pedido?.fecha_pedido, selectedMonths)) continue;
+    if (!includeCommissions) continue;
     comision += await calculateSaleCommission(v);
   }
 
   // Suma ingresos por entregas externas
   for (const e of externalSales) {
-    if (!isCompletedExternalSale(e)) continue;
-
+    if (!matchesMonths((e as any)?.fecha_pedido, selectedMonths)) continue;
     const subtotalQr = Number((e as any)?.subtotal_qr || 0);
     const subtotalEfectivo = Number((e as any)?.subtotal_efectivo || 0);
     const buyerIncome =
@@ -470,9 +519,14 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
         ? subtotalQr + subtotalEfectivo
         : Number((e as any)?.deuda_comprador ?? (e as any)?.monto_paga_comprador ?? (e as any)?.saldo_cobrar ?? 0);
     const sellerIncome = Number((e as any)?.monto_paga_vendedor || 0);
+    const deliveryValue = deliveryMode === "potential"
+      ? Number((e as any)?.precio_total || (e as any)?.precio_paquete || 0)
+      : (isCompletedExternalSale(e) ? Number((e as any)?.precio_paquete || 0) : 0);
 
-    ingresosEntregasExternas += buyerIncome + sellerIncome;
-    externalDeliveredPackageTotal += Number(e.precio_paquete || 0);
+    if (includeDeliveries) {
+      ingresosEntregasExternas += buyerIncome + sellerIncome;
+      externalDeliveredPackageTotal += deliveryValue;
+    }
   }
 
   const mercaderiaVendida = calculateSoldMerchandiseValue(sales);
@@ -500,13 +554,18 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
     simplePackagesInterbranchTotal,
     balanceDelivery,
     utilidad,
-    caja
+    caja,
+    monthlyPaymentsIncome: ingresosFluxes,
+    commissionIncome: comision,
+    deliveryPackagesIncome: externalDeliveredPackageTotal + simplePackagesNoDeliveryTotal + simplePackagesInterbranchTotal,
+    historicalIncome: ingresosFluxes + comision + ingresosEntregasExternas,
+    historicalExpenses: gastos,
   };
 };
 
 const getFinancialSummary = async (opts: CommissionRange = {}) => {
   const { fromDate, toDate } = parseRangeToDates(opts);
-  return await getFinancialSummaryForDates(fromDate, toDate, opts.sucursalIds);
+  return await getFinancialSummaryForDates(fromDate, toDate, opts);
 };
 
 const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
@@ -524,13 +583,13 @@ const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
     last365Summary,
     customSummary
   ] = await Promise.all([
-    getFinancialSummaryForDates(undefined, undefined, opts.sucursalIds),
-    getFinancialSummaryForDates(last7.fromDate, last7.toDate, opts.sucursalIds),
-    getFinancialSummaryForDates(last30.fromDate, last30.toDate, opts.sucursalIds),
-    getFinancialSummaryForDates(last90.fromDate, last90.toDate, opts.sucursalIds),
-    getFinancialSummaryForDates(last365.fromDate, last365.toDate, opts.sucursalIds),
+    getFinancialSummaryForDates(undefined, undefined, opts),
+    getFinancialSummaryForDates(last7.fromDate, last7.toDate, opts),
+    getFinancialSummaryForDates(last30.fromDate, last30.toDate, opts),
+    getFinancialSummaryForDates(last90.fromDate, last90.toDate, opts),
+    getFinancialSummaryForDates(last365.fromDate, last365.toDate, opts),
     custom.fromDate || custom.toDate
-      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate, opts.sucursalIds)
+      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate, opts)
       : Promise.resolve(null)
   ]);
 

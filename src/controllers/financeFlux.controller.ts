@@ -9,6 +9,11 @@ const parseStringList = (value: unknown) => {
   return undefined;
 };
 
+const parseBoolean = (value: unknown, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["true", "1", "si", "sí", "yes"].includes(String(value).trim().toLowerCase());
+};
+
 const getAuthenticatedResponsibleName = async (res: Response) => {
   const userId = String(res.locals.auth?.id || "").trim();
   if (!userId) return "Usuario actual";
@@ -136,13 +141,20 @@ export const getStatsController = async (_: Request, res: Response) => {
 
 export const getFinancialSummaryController = async (req: Request, res: Response) => {
   try {
-    const { range, from, to, mode } = req.query as any;
+    const { range, from, to, mode, includeCommissions, includeDeliveries, deliveryMode } = req.query as any;
     const sucursalIds = parseStringList(req.query?.sucursalIds);
+    const months = parseStringList(req.query?.months);
+    const expenseCategories = parseStringList(req.query?.expenseCategories);
     if (mode === 'ranges' || mode === 'all') {
       const summaries = await FinanceFluxService.getFinancialSummaryRanges({
         from: typeof from === 'string' ? from : undefined,
         to: typeof to === 'string' ? to : undefined,
         sucursalIds,
+        months,
+        expenseCategories,
+        includeCommissions: parseBoolean(includeCommissions, true),
+        includeDeliveries: parseBoolean(includeDeliveries, true),
+        deliveryMode: deliveryMode === 'potential' ? 'potential' : 'real',
       });
       res.json(summaries);
       return;
@@ -153,6 +165,11 @@ export const getFinancialSummaryController = async (req: Request, res: Response)
       from: typeof from === 'string' ? from : undefined,
       to: typeof to === 'string' ? to : undefined,
       sucursalIds,
+      months,
+      expenseCategories,
+      includeCommissions: parseBoolean(includeCommissions, true),
+      includeDeliveries: parseBoolean(includeDeliveries, true),
+      deliveryMode: deliveryMode === 'potential' ? 'potential' : 'real',
     });
     res.json(summary);
   } catch (err) {

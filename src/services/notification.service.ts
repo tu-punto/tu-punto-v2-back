@@ -50,6 +50,7 @@ type ShippingLike = {
   public_tracking_received_at?: unknown;
   hora_entrega_acordada?: unknown;
   hora_entrega_real?: unknown;
+  public_tracking_ready_for_pickup_at?: unknown;
   lugar_entrega?: unknown;
   buyer_tracking_code?: unknown;
   shipping_qr_code?: unknown;
@@ -496,13 +497,29 @@ const handleShippingStatusChange = async (params: {
       return;
     }
 
-    if (toStatus === BUYER_STATUSES.DELIVERED) {
+    if (toStatus === BUYER_STATUSES.DELIVERED && !params.after?.public_tracking_ready_for_pickup_at) {
       await sendBuyerPush({
         shippingId,
         trackingCode,
         title: "Pedido entregado",
         body: "Tu pedido ya fue marcado como entregado.",
         tag: `buyer-delivered-${shippingId}`,
+        data: {
+          shippingId,
+          fromStatus,
+          toStatus,
+        },
+      });
+      return;
+    }
+
+    if (toStatus === BUYER_STATUSES.DELIVERED && params.after?.public_tracking_ready_for_pickup_at) {
+      await sendBuyerPush({
+        shippingId,
+        trackingCode,
+        title: "Tu pedido ya llego a la sucursal",
+        body: "Tu pedido ya llego a la sucursal de destino. Puedes pasar a recogerlo.",
+        tag: `buyer-ready-for-pickup-${shippingId}`,
         data: {
           shippingId,
           fromStatus,
