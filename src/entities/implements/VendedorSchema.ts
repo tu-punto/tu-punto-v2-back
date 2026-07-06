@@ -47,7 +47,7 @@ export const VendedorSchema = new Schema({
     },
     sucursalName: {
       type: String,
-      default: 0
+      default: ""
     },
     alquiler: {
       type: Number,

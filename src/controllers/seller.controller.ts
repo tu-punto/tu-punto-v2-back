@@ -180,6 +180,19 @@ export const registerSeller = async (req: Request, res: Response) => {
 
 export const updateSeller = async (req: Request, res: Response) => {
   try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const incomingData = req.body?.newData || {};
+
+    if (
+      authRole === "seller" &&
+      Object.prototype.hasOwnProperty.call(incomingData, "pago_sucursales")
+    ) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No autorizado para editar sucursales",
+      });
+    }
+
     const id = req.params.id;
     const updated = await SellerService.updateSeller(id, req.body); // sin flux
     res.json({ ok: true, updated });
