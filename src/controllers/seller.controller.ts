@@ -271,10 +271,16 @@ export const declineSellerService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
-    const reason = String(req.body?.reason || req.body?.motivo || "").trim();
+    const body = req.body || {};
     const seller = await SellerService.declineSellerService(id, {
       ignoreDeadline: authRole === "admin" || authRole === "operator" || authRole === "superadmin",
-      reason: reason || undefined,
+      origin: authRole === "seller" ? "seller" : "admin",
+      reason: String(body?.reason || body?.motivo || "").trim() || undefined,
+      motivo_principal: String(body?.motivo_principal || "").trim() || undefined,
+      motivo_principal_otro: String(body?.motivo_principal_otro || "").trim() || undefined,
+      probabilidad_retorno: String(body?.probabilidad_retorno || "").trim() || undefined,
+      omitir_motivo_principal: body?.omitir_motivo_principal === true,
+      omitir_probabilidad_retorno: body?.omitir_probabilidad_retorno === true,
     });
     res.json({
       ok: true,

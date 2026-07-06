@@ -815,7 +815,16 @@ const requestSellerPayment = async (
 
 const declineSellerService = async (
   id: string,
-  options?: { ignoreDeadline?: boolean; reason?: string }
+  options?: {
+    ignoreDeadline?: boolean;
+    reason?: string;
+    origin?: "seller" | "admin";
+    motivo_principal?: string;
+    motivo_principal_otro?: string;
+    probabilidad_retorno?: string;
+    omitir_motivo_principal?: boolean;
+    omitir_probabilidad_retorno?: boolean;
+  }
 ) => {
   const seller = await SellerRepository.findById(id);
   if (!seller) {
@@ -848,7 +857,12 @@ const declineSellerService = async (
   return await SellerRepository.updateSeller(id, {
     declinacion_servicio_fecha: new Date(),
     declinacion_servicio_fecha_limite_retiro: vigencia.add(5, "day").toDate(),
-    declinacion_servicio_motivo: String(options?.reason || "").trim() || undefined,
+    declinacion_servicio_origen: options?.origin || undefined,
+    declinacion_servicio_motivo_principal: String(options?.motivo_principal || options?.reason || "").trim() || undefined,
+    declinacion_servicio_motivo_principal_otro: String(options?.motivo_principal_otro || "").trim() || undefined,
+    declinacion_servicio_probabilidad_retorno: String(options?.probabilidad_retorno || "").trim() || undefined,
+    declinacion_servicio_omitir_motivo_principal: options?.omitir_motivo_principal === true,
+    declinacion_servicio_omitir_probabilidad_retorno: options?.omitir_probabilidad_retorno === true,
   } as any);
 };
 
@@ -864,7 +878,12 @@ const cancelSellerServiceDecline = async (id: string) => {
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
-      declinacion_servicio_motivo: "",
+      declinacion_servicio_origen: "",
+      declinacion_servicio_motivo_principal: "",
+      declinacion_servicio_motivo_principal_otro: "",
+      declinacion_servicio_probabilidad_retorno: "",
+      declinacion_servicio_omitir_motivo_principal: "",
+      declinacion_servicio_omitir_probabilidad_retorno: "",
     },
   } as any);
 };
