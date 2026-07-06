@@ -22,7 +22,7 @@ const getBranchShippings = async (branchID: string): Promise<IGuiaEnvioDocument[
      }
 
      const branchObjectID = new Types.ObjectId(branchID);
-     return await GuiaEnviosModel.find({ sucursal: branchObjectID }).populate('sucursal').populate('vendedor')
+    return await GuiaEnviosModel.find({ sucursal: branchObjectID, isRecogido: false }).populate('sucursal').populate('vendedor')
 }
 
 const uploadShipping = async(shippingGuide: IGuiaEnvio): Promise<IGuiaEnvioDocument> => {

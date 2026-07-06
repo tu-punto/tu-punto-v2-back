@@ -20,6 +20,7 @@ import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
+import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -731,9 +732,7 @@ const updateShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
-  if ((shipping as any)?.pagado_al_vendedor === true) {
-    throw new Error("No se puede editar una entrega que ya fue pagada al vendedor");
-  }
+  assertEditableIfNotDeliveredOlderThanFiveDays(shipping as any);
   if (
     (shipping as any)?.origen_pedido === "catalogo" &&
     ["Rechazado", "Cancelado", "No entregado"].includes(String(newData?.estado_pedido || ""))
@@ -983,6 +982,7 @@ const addTemporaryProductsToShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  assertEditableIfNotDeliveredOlderThanFiveDays(shipping as any);
 
   await PedidoModel.findByIdAndUpdate(shippingId, {
     $set: {
@@ -994,6 +994,7 @@ const addTemporaryProductsToShipping = async (
 const deleteShippingById = async (id: string) => {
   const pedido = await PedidoModel.findById(id);
   if (!pedido) throw new Error("Pedido no encontrado");
+  assertEditableIfNotDeliveredOlderThanFiveDays(pedido as any);
 
   if (pedido.venta && pedido.venta.length > 0) {
     for (const ventaId of pedido.venta) {

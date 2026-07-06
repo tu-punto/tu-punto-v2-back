@@ -121,7 +121,8 @@ const updateShipping = async (req: Request, res: Response) => {
     res.json({ success: true, shippingUpdated });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, msg: "Internal Server Error", error });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    res.status(400).json({ success: false, msg: message, message, error });
   }
 };
 export const addTemporaryProductsToShipping = async (req: Request, res: Response) => {
@@ -279,9 +280,10 @@ export const transitionShippingStatusByQRController = async (req: Request, res: 
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
+    const message = error instanceof Error ? error.message : "Error al cambiar estado por QR";
+    res.status(400).json({
       success: false,
-      message: "Error al cambiar estado por QR",
+      message,
       error
     });
   }

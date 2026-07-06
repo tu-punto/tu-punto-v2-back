@@ -12,6 +12,7 @@ import { OrderGuideService } from "./orderGuide.service";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 import { TrackingFreezeService } from "./trackingFreeze.service";
+import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -798,8 +799,9 @@ const updateSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
-    throw new Error("No se puede modificar un paquete que ya fue convertido o entregado");
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
+  if ((existing as any).is_external) {
+    throw new Error("No se puede modificar un paquete que ya fue convertido");
   }
 
   const role = String(params.role || "").toLowerCase();
@@ -974,8 +976,9 @@ const deleteSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
-    throw new Error("No se puede eliminar un paquete que ya fue convertido o entregado");
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
+  if ((existing as any).is_external) {
+    throw new Error("No se puede eliminar un paquete que ya fue convertido");
   }
 
   const role = String(params.role || "").toLowerCase();

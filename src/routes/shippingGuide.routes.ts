@@ -16,10 +16,10 @@ const uploadGuideImageSingle = (req: any, res: any, next: any) => {
   });
 };
 
-shippingGuideRouter.get("/", requireRole("admin", "operator"), getAllShippings)
+shippingGuideRouter.get("/", requireRole("admin", "operator", "superadmin"), getAllShippings)
 shippingGuideRouter.get('/seller/:id', requireRole("admin", "operator", "seller"), requireSellerOwnership("id"), getSellerShippings)
-shippingGuideRouter.get('/branch/:id', requireRole("admin", "operator"), getBranchShippings)
-shippingGuideRouter.post("/upload", requireRole("admin", "operator", "seller"), uploadGuideImageSingle, uploadShipping)
-shippingGuideRouter.put("/mark-deliver/:id", requireRole("admin", "operator", "seller"), markAsDelivered)
+shippingGuideRouter.get('/branch/:id', requireRole("admin", "operator", "superadmin"), getBranchShippings)
+shippingGuideRouter.post("/upload", requireRole("admin", "operator", "seller", "superadmin"), uploadGuideImageSingle, uploadShipping)
+shippingGuideRouter.put("/mark-deliver/:id", requireRole("admin", "operator", "superadmin", "seller"), markAsDelivered)
 
 export default shippingGuideRouter;

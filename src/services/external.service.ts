@@ -11,6 +11,7 @@ import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { TrackingFreezeService } from "./trackingFreeze.service";
+import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -631,17 +632,17 @@ const registerExternalSalesByPackages = async (payload: any) => {
 };
 
 const deleteExternalSaleByID = async (id: string) => {
+  const existing = await ExternalSaleRepository.getExternalSaleByID(id);
+  if (!existing) return null;
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
   return await ExternalSaleRepository.deleteExternalSaleByID(id);
 };
 
 const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
   const existingDelivered = existing.estado_pedido === "Entregado" || existing.delivered === true;
-
-  if (existingDelivered) {
-    throw new Error("No se puede editar una entrega que ya fue entregada");
-  }
 
   const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
     | "external"
