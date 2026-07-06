@@ -28,6 +28,7 @@ import {
   exportVentasTemporalesPorVendedorXlsx,
   getVentasTemporalesPorVendedor,
   getRiesgoClientesVentas,
+  exportRiesgoClientesVentasXlsx,
 } from "../controllers/reports.controller";
 
 const reportsRouter = Router();
@@ -50,6 +51,7 @@ reportsRouter.post("/clientes-activos", getClientesActivos);
 reportsRouter.get("/clientes-activos/xlsx", exportClientesActivosXlsx);
 reportsRouter.post("/ventas-vendedores", getVentasVendedores);
 reportsRouter.post("/riesgo-clientes-ventas", getRiesgoClientesVentas);
+reportsRouter.get("/riesgo-clientes-ventas/xlsx", exportRiesgoClientesVentasXlsx);
 reportsRouter.get("/ventas-vendedores-4m/xlsx", exportVentasVendedores4mXlsx);
 reportsRouter.post("/ventas-qr", getVentasQr);
 reportsRouter.get("/ventas-qr/xlsx", exportVentasQrXlsx);

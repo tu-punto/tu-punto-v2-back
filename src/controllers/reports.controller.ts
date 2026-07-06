@@ -379,6 +379,19 @@ export const getRiesgoClientesVentas = async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, msg: "Internal Error", error: err?.message });
   }
 };
+
+export const exportRiesgoClientesVentasXlsx = async (req: Request, res: Response) => {
+  try {
+    const { mes, meses } = parseMesesInput(req.query);
+    const mesFin = String(req.query.mesFin || "");
+    const { filePath, filename } = await ReportsService.exportRiesgoClientesPorVentasXlsx({ mes, meses, mesFin });
+    return res.download(filePath, filename);
+  } catch (err: any) {
+    console.error("exportRiesgoClientesVentasXlsx error:", err);
+    return res.status(500).json({ ok: false, msg: "No se pudo generar el XLSX", error: err?.message });
+  }
+};
+
 export const getVentasQr = async (req: Request, res: Response) => {
   try {
     const { meses, mes, sucursales } = req.body || {};

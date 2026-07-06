@@ -413,7 +413,25 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
 };
 
 const updateSeller = async (id: string, data: any) => {
-  return await SellerRepository.updateSeller(id, normalizeSellerServiceValues(data.newData));
+  const vendedor = await SellerRepository.findById(id);
+  if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
+
+  const normalizedData = normalizeSellerServiceValues(data.newData);
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = normalizedData.pago_sucursales || [];
+
+  if (normalizedData.pago_sucursales) {
+    await handleSucursalRemovals(id, previousBranches, nextBranches);
+  }
+
+  const actualizado = await SellerRepository.updateSeller(id, normalizedData);
+
+  const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
+  if (nuevasSucursales.length > 0) {
+    await syncSellerProductBranches(id, nuevasSucursales);
+  }
+
+  return actualizado;
 };
 const syncSellerProductBranches = async (
   sellerId: string,
@@ -516,6 +534,14 @@ const handleSucursalRemovals = async (
   }
 };
 
+const getNewSellerBranches = (anteriores: any[] = [], actuales: any[] = []) =>
+  actuales.filter(
+    (curr: any) =>
+      !anteriores.some(
+        (prev: any) => prev.id_sucursal.toString() === curr.id_sucursal.toString()
+      )
+  );
+
 const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
   const vendedor = await SellerRepository.findById(id);
   if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
@@ -529,11 +555,12 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
     data.deuda = nuevaDeuda;
   }
 
-  await handleSucursalRemovals(
-    id,
-    vendedor.pago_sucursales || [],
-    data.pago_sucursales || []
-  );
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = data.pago_sucursales || [];
+
+  if (data.pago_sucursales) {
+    await handleSucursalRemovals(id, previousBranches, nextBranches);
+  }
 
   const actualizado = await SellerRepository.updateSeller(id, data);
 
@@ -549,16 +576,9 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
       detalle_servicios: buildServiceIncomeDetail(data.pago_sucursales),
     });
   }
-  if (data.pago_sucursales?.length) {
-    const nuevasSucursales = data.pago_sucursales.filter((s: any) => {
-      return !vendedor.pago_sucursales?.some(
-        (ps: any) => ps.id_sucursal.toString() === s.id_sucursal.toString()
-      );
-    });
-
-    if (nuevasSucursales.length > 0) {
-      await syncSellerProductBranches(id, nuevasSucursales);
-    }
+  const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
+  if (nuevasSucursales.length > 0) {
+    await syncSellerProductBranches(id, nuevasSucursales);
   }
 
   return actualizado;
@@ -595,11 +615,12 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     data.deuda = nuevaDeuda;
   }
 
-  await handleSucursalRemovals(
-    id,
-    vendedor.pago_sucursales || [],
-    data.pago_sucursales || []
-  );
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = data.pago_sucursales || [];
+
+  if (data.pago_sucursales) {
+    await handleSucursalRemovals(id, previousBranches, nextBranches);
+  }
 
   const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
   const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
@@ -636,16 +657,9 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     }
   }
 
-  if (data.pago_sucursales?.length) {
-    const nuevasSucursales = data.pago_sucursales.filter((s: any) => {
-      return !vendedor.pago_sucursales?.some(
-        (ps: any) => ps.id_sucursal.toString() === s.id_sucursal.toString()
-      );
-    });
-
-    if (nuevasSucursales.length > 0) {
-      await syncSellerProductBranches(id, nuevasSucursales);
-    }
+  const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
+  if (nuevasSucursales.length > 0) {
+    await syncSellerProductBranches(id, nuevasSucursales);
   }
 
   return actualizado;
