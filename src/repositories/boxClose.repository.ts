@@ -2,11 +2,15 @@ import { CierreCajaModel } from "../entities/implements/CierreCajaSchema";
 import { ICierreCaja } from "../entities/ICierreCaja";
 import { Types } from "mongoose";
 
-const findAll = async (sucursalId?: string): Promise<ICierreCaja[]> => {
+const findAll = async (sucursalIds?: string[]): Promise<ICierreCaja[]> => {
   const filter: Record<string, unknown> = {};
 
-  if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
-    filter.id_sucursal = new Types.ObjectId(sucursalId);
+  const validSucursalIds = Array.isArray(sucursalIds)
+    ? sucursalIds.filter((id) => Types.ObjectId.isValid(id))
+    : [];
+
+  if (validSucursalIds.length > 0) {
+    filter.id_sucursal = { $in: validSucursalIds.map((id) => new Types.ObjectId(id)) };
   }
 
   return await CierreCajaModel.find(filter)

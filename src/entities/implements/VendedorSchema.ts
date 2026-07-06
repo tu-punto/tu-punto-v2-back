@@ -132,6 +132,9 @@ export const VendedorSchema = new Schema({
   declinacion_servicio_fecha_limite_retiro: {
     type: Date,
   },
+  declinacion_servicio_motivo: {
+    type: String,
+  },
   comprobante_entrada: [{
     type: Types.ObjectId,
     ref: 'ComprobanteEntrada'

@@ -12,6 +12,23 @@ export const getBoxClosingsController = async (req: Request, res: Response) => {
   }
 };
 
+export const getBoxCloseSummaryController = async (req: Request, res: Response) => {
+  try {
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
+    const sucursalIds = String(req.query.sucursalIds || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const boxClosings = await BoxCloseService.getBoxCloseSummary({ from, to, sucursalIds });
+    res.json(boxClosings);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export const registerBoxCloseController = async (req: Request, res: Response) => {
   const boxClose = req.body;
 

@@ -2,9 +2,28 @@ import { ICierreCaja } from "../entities/ICierreCaja";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { Types } from "mongoose";
+import dayjs from "dayjs";
 
 const getAllBoxClosings = async () => {
   return await BoxCloseRepository.findAll();
+};
+
+const getBoxCloseSummary = async (filters?: {
+  from?: string;
+  to?: string;
+  sucursalIds?: string[];
+}) => {
+  const boxClosings = await BoxCloseRepository.findAll(filters?.sucursalIds);
+  const from = filters?.from ? dayjs(filters.from) : null;
+  const to = filters?.to ? dayjs(filters.to) : null;
+
+  return boxClosings.filter((boxClose: any) => {
+    const date = dayjs(boxClose?.closed_at || boxClose?.created_at);
+    if (!date.isValid()) return false;
+    if (from?.isValid() && date.isBefore(from, "day")) return false;
+    if (to?.isValid() && date.isAfter(to, "day")) return false;
+    return true;
+  });
 };
 
 const normalizeOperationType = (tipo: unknown): "INGRESO" | "GASTO" => {
@@ -89,6 +108,7 @@ const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
 
 export const BoxCloseService = {
   getAllBoxClosings,
+  getBoxCloseSummary,
   registerBoxClose,
   getBoxCloseById,
   updateBoxClose,

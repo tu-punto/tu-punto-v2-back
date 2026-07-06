@@ -813,7 +813,10 @@ const requestSellerPayment = async (
   };
 };
 
-const declineSellerService = async (id: string, options?: { ignoreDeadline?: boolean }) => {
+const declineSellerService = async (
+  id: string,
+  options?: { ignoreDeadline?: boolean; reason?: string }
+) => {
   const seller = await SellerRepository.findById(id);
   if (!seller) {
     const error: any = new Error("Vendedor no encontrado");
@@ -845,6 +848,7 @@ const declineSellerService = async (id: string, options?: { ignoreDeadline?: boo
   return await SellerRepository.updateSeller(id, {
     declinacion_servicio_fecha: new Date(),
     declinacion_servicio_fecha_limite_retiro: vigencia.add(5, "day").toDate(),
+    declinacion_servicio_motivo: String(options?.reason || "").trim() || undefined,
   } as any);
 };
 
@@ -860,6 +864,7 @@ const cancelSellerServiceDecline = async (id: string) => {
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
+      declinacion_servicio_motivo: "",
     },
   } as any);
 };

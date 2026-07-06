@@ -271,8 +271,10 @@ export const declineSellerService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const reason = String(req.body?.reason || req.body?.motivo || "").trim();
     const seller = await SellerService.declineSellerService(id, {
       ignoreDeadline: authRole === "admin" || authRole === "operator" || authRole === "superadmin",
+      reason: reason || undefined,
     });
     res.json({
       ok: true,
