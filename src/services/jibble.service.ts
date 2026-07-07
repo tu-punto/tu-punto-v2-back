@@ -110,9 +110,23 @@ const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
   const payload = text ? (isJson ? JSON.parse(text) : text) : null;
 
   if (!response.ok) {
-    const message = typeof payload === "string"
-      ? payload
-      : payload?.error_description || payload?.error || `Error HTTP ${response.status}`;
+    const payloadMessage = (() => {
+      if (typeof payload === "string") return payload;
+      if (payload && typeof payload === "object") {
+        const errorDescription = (payload as any).error_description;
+        const error = (payload as any).error;
+        const message = (payload as any).message;
+        const details = (payload as any).details;
+        if (typeof errorDescription === "string" && errorDescription.trim()) return errorDescription;
+        if (typeof error === "string" && error.trim()) return error;
+        if (typeof message === "string" && message.trim()) return message;
+        if (typeof details === "string" && details.trim()) return details;
+        return JSON.stringify(payload);
+      }
+      return null;
+    })();
+
+    const message = payloadMessage || `Error HTTP ${response.status}`;
     throw new Error(message);
   }
 
@@ -163,6 +177,8 @@ const unwrapOData = <T,>(payload: any): T[] => {
   return [];
 };
 
+const ODATA_PAGE_SIZE = 1000;
+
 export const getJibbleConfig = () => getConfig();
 
 export const getJibblePeople = async (): Promise<JibblePerson[]> => {
@@ -172,16 +188,37 @@ export const getJibblePeople = async (): Promise<JibblePerson[]> => {
   const token = await getAccessToken(config);
   if (!token) return [];
 
-  const params = new URLSearchParams();
+  const people: JibblePerson[] = [];
+  let skip = 0;
+
+  while (true) {
+    const params = new URLSearchParams();
   params.set("$select", "id,fullName,email,groupId,group,role,status,code,latestTimeEntryTime");
-  params.set("$top", "5000");
+    params.set("$top", String(ODATA_PAGE_SIZE));
+    if (skip > 0) {
+      params.set("$skip", String(skip));
+    }
 
-  const payload = await fetchJson<any>(`${config.workspaceUrl}/v1/People?${params.toString()}`, {
-    method: "GET",
-    headers: buildAuthHeaders(token),
-  });
+    const payload = await fetchJson<any>(`${config.workspaceUrl}/v1/People?${params.toString()}`, {
+      method: "GET",
+      headers: buildAuthHeaders(token),
+    });
 
-  return unwrapOData<JibblePerson>(payload).filter((person) => Boolean(person?.id));
+    const page = unwrapOData<JibblePerson>(payload).filter((person) => Boolean(person?.id));
+    people.push(...page);
+
+    if (page.length < ODATA_PAGE_SIZE) {
+      break;
+    }
+
+    skip += ODATA_PAGE_SIZE;
+
+    if (skip > 10_000) {
+      break;
+    }
+  }
+
+  return people;
 };
 
 export const getJibbleTimesheetsSummary = async (params: {
@@ -199,7 +236,9 @@ export const getJibbleTimesheetsSummary = async (params: {
   query.set("period", "Custom");
   query.set("date", params.from);
   query.set("endDate", params.to);
-  query.set("personIds", params.personIds.join(","));
+  for (const personId of params.personIds) {
+    query.append("personIds", personId);
+  }
 
   const payload = await fetchJson<any>(`${config.timeAttendanceUrl}/v1/TimesheetsSummary?${query.toString()}`, {
     method: "GET",
