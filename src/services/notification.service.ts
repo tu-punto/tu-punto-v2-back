@@ -30,6 +30,8 @@ const BUYER_STATUSES = {
   DELIVERED: "Entregado",
 } as const;
 
+const READY_FOR_PICKUP_STATUSES = new Set(["En Espera", "LISTO PARA RECOGER"]);
+
 type InternalRole = (typeof INTERNAL_NOTIFICATION_ROLES)[number];
 type InternalRecipientRole = (typeof INTERNAL_RECIPIENT_ROLES)[number];
 
@@ -450,7 +452,8 @@ const handleShippingCreated = async (shipping: ShippingLike) => {
     if (!shippingId) return;
 
     const trackingCode = await ensureBuyerTrackingCode(shipping);
-    if (toStringValue(shipping?.estado_pedido) !== BUYER_STATUSES.CONFIRMED) return;
+    const currentStatus = toStringValue(shipping?.estado_pedido);
+    if (![BUYER_STATUSES.CONFIRMED, "LISTO PARA RECOGER"].includes(currentStatus)) return;
 
     await sendBuyerPush({
       shippingId,
@@ -513,7 +516,7 @@ const handleShippingStatusChange = async (params: {
       return;
     }
 
-    if (toStatus === BUYER_STATUSES.DELIVERED && params.after?.public_tracking_ready_for_pickup_at) {
+    if (READY_FOR_PICKUP_STATUSES.has(toStatus) && params.after?.public_tracking_ready_for_pickup_at) {
       await sendBuyerPush({
         shippingId,
         trackingCode,

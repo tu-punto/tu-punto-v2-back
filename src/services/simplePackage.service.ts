@@ -331,7 +331,10 @@ const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) =
     ubicacion_link: "",
     costo_delivery: 0,
     cargo_delivery: roundCurrency(Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0)),
-    estado_pedido: "En Espera",
+    estado_pedido:
+      originBranchId && destinationBranchId && originBranchId !== destinationBranchId
+        ? "PARA ENVIAR A OTRA SUCURSAL"
+        : "LISTO PARA RECOGER",
     public_tracking_received_at: new Date(),
     adelanto_cliente: 0,
     esta_pagado: paymentData.esta_pagado,
@@ -628,6 +631,10 @@ const createSimplePackageOrders = async (params: {
         estado_pedido: createdShipping.estado_pedido,
         delivered: createdShipping.estado_pedido === "Entregado",
         seller_balance_applied: createdShipping.estado_pedido === "Entregado",
+        public_tracking_ready_for_pickup_at:
+          String(createdShipping.estado_pedido || "").trim() === "LISTO PARA RECOGER"
+            ? orderCreatedAt
+            : (row as any)?.public_tracking_ready_for_pickup_at,
         seller_debt_applied: !paymentMethod,
         esta_pagado: "no",
         metodo_pago: paymentMethod,
@@ -637,7 +644,7 @@ const createSimplePackageOrders = async (params: {
         shipping_qr_code: (createdShipping as any).shipping_qr_code || row?.shipping_qr_code || "",
         shipping_qr_payload: (createdShipping as any).shipping_qr_payload || row?.shipping_qr_payload || "",
         shipping_qr_image_path: (createdShipping as any).shipping_qr_image_path || row?.shipping_qr_image_path || "",
-      });
+      } as any);
 
       shippingResults.push({
         packageId: row._id,

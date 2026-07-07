@@ -564,17 +564,9 @@ const syncSellerProductBranches = async (
 
       if (sucursalesExistentes.includes(nuevaId)) continue; // ya existe, skip
 
-      const nuevasCombinaciones = (sucursalReferencia.combinaciones || []).map(
-        (c) => ({
-          variantes: c.variantes,
-          stock: 0,
-          precio: c.precio, // podrías poner 0 si querés obligar a definirlo por sucursal
-        })
-      );
-
       producto.sucursales.push({
         id_sucursal: nuevaSucursal.id_sucursal,
-        combinaciones: nuevasCombinaciones,
+        combinaciones: [],
       });
     }
 

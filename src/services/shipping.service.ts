@@ -109,12 +109,13 @@ const buildGoogleMapsSearchUrl = (query: string): string => {
 
 const isDeliveryLikeShipping = (shipping: any) =>
   String(shipping?.tipo_destino || "").trim().toLowerCase() === "otro_lugar" ||
+  (String(shipping?.tipo_destino || "").trim().toLowerCase() !== "sucursal" &&
   Boolean(
     shipping?.costo_delivery ||
       shipping?.cargo_delivery ||
       shipping?.quien_paga_delivery ||
       shipping?.delivery_spaces
-  );
+  ));
 
 const validateDeliveryCutoff = async (shipping: any) => {
   if (!isDeliveryLikeShipping(shipping)) return;
@@ -622,9 +623,14 @@ const resolveShippingByCodeOrId = async (codeOrId: string) => {
   return null;
 };
 
+const READY_FOR_PICKUP_STATUS = "LISTO PARA RECOGER";
+const SEND_TO_BRANCH_STATUS = "PARA ENVIAR A OTRA SUCURSAL";
+
 const allowedShippingTransitions: Record<string, string[]> = {
-  "En Espera": ["En camino", "Entregado", "No entregado", "Cancelado"],
-  "En camino": ["Entregado", "No entregado", "Cancelado"],
+  "En Espera": ["En camino", READY_FOR_PICKUP_STATUS, "Entregado", "No entregado", "Cancelado"],
+  [READY_FOR_PICKUP_STATUS]: ["Entregado", "Cancelado"],
+  [SEND_TO_BRANCH_STATUS]: ["En camino", "Cancelado"],
+  "En camino": [READY_FOR_PICKUP_STATUS, "Entregado", "No entregado", "Cancelado"],
   "No entregado": ["En camino", "Cancelado"],
   "Cancelado": [],
   "Entregado": []
@@ -899,13 +905,18 @@ const updateShipping = async (
   ).trim();
 
   if (resShip && simplePackageSourceId) {
+    const nextStatus = String((resShip as any).estado_pedido || "").trim();
     const simplePackageUpdatePayload = {
       estado_pedido: (resShip as any).estado_pedido,
-      delivered: String((resShip as any).estado_pedido || "").trim() === "Entregado",
-      seller_balance_applied: String((resShip as any).estado_pedido || "").trim() === "Entregado",
+      delivered: nextStatus === "Entregado",
+      seller_balance_applied: nextStatus === "Entregado",
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
       hora_entrega_real: (resShip as any).hora_entrega_real,
+      public_tracking_ready_for_pickup_at:
+        nextStatus === READY_FOR_PICKUP_STATUS
+          ? (resShip as any).public_tracking_ready_for_pickup_at || moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss")
+          : (resShip as any).public_tracking_ready_for_pickup_at,
       retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
       seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
@@ -1459,6 +1470,12 @@ const transitionShippingStatusByQR = async (params: {
   const updateData: Record<string, unknown> = {
     estado_pedido: toStatus
   };
+
+  if (toStatus === READY_FOR_PICKUP_STATUS) {
+    updateData.public_tracking_ready_for_pickup_at = moment()
+      .tz("America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
 
   if (toStatus === "Entregado") {
     updateData.hora_entrega_real = moment()
