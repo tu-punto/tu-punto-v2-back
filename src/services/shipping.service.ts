@@ -128,13 +128,7 @@ const validateDeliveryCutoff = async (shipping: any) => {
     .lean();
 
   if (!branch?.delivery_cutoff_enabled || !branch?.delivery_cutoff_time) return;
-
-  const targetDate = shipping?.fecha_pedido
-    ? moment.tz(shipping.fecha_pedido, "America/La_Paz")
-    : moment().tz("America/La_Paz");
   const now = moment().tz("America/La_Paz");
-
-  if (targetDate.format("YYYY-MM-DD") !== now.format("YYYY-MM-DD")) return;
 
   const [hoursRaw, minutesRaw] = String(branch.delivery_cutoff_time).split(":");
   const hours = Number(hoursRaw);
@@ -146,9 +140,23 @@ const validateDeliveryCutoff = async (shipping: any) => {
     .second(0)
     .millisecond(0);
 
+  const scheduledDelivery = shipping?.hora_entrega_acordada
+    ? moment.tz(shipping.hora_entrega_acordada, "America/La_Paz")
+    : null;
+
   if (now.isAfter(cutoff)) {
     throw new Error(
-      `La sucursal ${String(branch.nombre || branchId)} ya superó la hora limite para delivery de hoy (${cutoff.format("HH:mm")}). Registra el pedido para el dia siguiente.`
+      `La sucursal ${String(branch.nombre || branchId)} ya superó la hora limite para delivery (${cutoff.format("HH:mm")}).`
+    );
+  }
+
+  if (
+    scheduledDelivery?.isValid() &&
+    scheduledDelivery.format("YYYY-MM-DD") === now.format("YYYY-MM-DD") &&
+    scheduledDelivery.isAfter(cutoff)
+  ) {
+    throw new Error(
+      `La entrega programada no puede superar la hora limite de delivery (${cutoff.format("HH:mm")}) para la sucursal ${String(branch.nombre || branchId)}.`
     );
   }
 };
