@@ -574,7 +574,22 @@ const registerExternalSale = async (externalSale: any) => {
   const created = await ExternalSaleRepository.registerExternalSale(record);
   await applyExternalMixedIncomeFromRecords([record]);
   const populatedCreated = await ExternalSaleRepository.getExternalSaleByID(String(created._id));
-  void OrderGuideWhatsappService.sendExternalRowsBestEffort([populatedCreated || created]);
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort([populatedCreated || created])
+    .then((result) => {
+      console.log("[external-service] whatsapp-dispatch:done", {
+        externalSaleId: String(created._id),
+        success: result?.success,
+        sentCount: result?.sentCount,
+        skippedCount: result?.skippedCount,
+        failedCount: result?.failedCount,
+      });
+    })
+    .catch((error) => {
+      console.error("[external-service] whatsapp-dispatch:error", {
+        externalSaleId: String(created._id),
+        error: error?.message || String(error),
+      });
+    });
   return created;
 };
 
@@ -627,7 +642,22 @@ const registerExternalSalesByPackages = async (payload: any) => {
 
   const created = await ExternalSaleRepository.registerExternalSales(toCreate);
   await applyExternalMixedIncomeFromRecords(toCreate);
-  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created);
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created)
+    .then((result) => {
+      console.log("[external-service] whatsapp-dispatch:done", {
+        externalSaleIds: created.map((row) => String(row?._id || "")).filter(Boolean),
+        success: result?.success,
+        sentCount: result?.sentCount,
+        skippedCount: result?.skippedCount,
+        failedCount: result?.failedCount,
+      });
+    })
+    .catch((error) => {
+      console.error("[external-service] whatsapp-dispatch:error", {
+        externalSaleIds: created.map((row) => String(row?._id || "")).filter(Boolean),
+        error: error?.message || String(error),
+      });
+    });
   return created;
 };
 

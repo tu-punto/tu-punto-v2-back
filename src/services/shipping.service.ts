@@ -124,19 +124,32 @@ const validateDeliveryCutoff = async (shipping: any) => {
   if (!branchId || !Types.ObjectId.isValid(branchId)) return;
 
   const branch = await SucursalModel.findById(branchId)
-    .select("nombre delivery_cutoff_enabled delivery_cutoff_time")
+    .select("nombre delivery_cutoff_enabled delivery_cutoff_start_time delivery_cutoff_end_time delivery_cutoff_time")
     .lean();
 
-  if (!branch?.delivery_cutoff_enabled || !branch?.delivery_cutoff_time) return;
+  if (!branch?.delivery_cutoff_enabled) return;
   const now = moment().tz("America/La_Paz");
 
-  const [hoursRaw, minutesRaw] = String(branch.delivery_cutoff_time).split(":");
-  const hours = Number(hoursRaw);
-  const minutes = Number(minutesRaw);
-  const cutoff = now
+  const startTime = String(branch.delivery_cutoff_start_time || "00:00").trim();
+  const endTime = String(branch.delivery_cutoff_end_time || branch.delivery_cutoff_time || "").trim();
+  if (!startTime && !endTime) return;
+
+  const [startHoursRaw, startMinutesRaw] = String(startTime || "00:00").split(":");
+  const [endHoursRaw, endMinutesRaw] = String(endTime || startTime || "00:00").split(":");
+  const startHours = Number(startHoursRaw);
+  const startMinutes = Number(startMinutesRaw);
+  const endHours = Number(endHoursRaw);
+  const endMinutes = Number(endMinutesRaw);
+  const start = now
     .clone()
-    .hour(Number.isFinite(hours) ? hours : 0)
-    .minute(Number.isFinite(minutes) ? minutes : 0)
+    .hour(Number.isFinite(startHours) ? startHours : 0)
+    .minute(Number.isFinite(startMinutes) ? startMinutes : 0)
+    .second(0)
+    .millisecond(0);
+  const end = now
+    .clone()
+    .hour(Number.isFinite(endHours) ? endHours : 0)
+    .minute(Number.isFinite(endMinutes) ? endMinutes : 0)
     .second(0)
     .millisecond(0);
 
@@ -144,19 +157,20 @@ const validateDeliveryCutoff = async (shipping: any) => {
     ? moment.tz(shipping.hora_entrega_acordada, "America/La_Paz")
     : null;
 
-  if (now.isAfter(cutoff)) {
+  if (now.isBefore(start) || now.isAfter(end)) {
     throw new Error(
-      `La sucursal ${String(branch.nombre || branchId)} ya superó la hora limite para delivery (${cutoff.format("HH:mm")}).`
+      `La sucursal ${String(branch.nombre || branchId)} solo permite delivery entre ${start.format("HH:mm")} y ${end.format("HH:mm")}.`
     );
   }
 
   if (
     scheduledDelivery?.isValid() &&
     scheduledDelivery.format("YYYY-MM-DD") === now.format("YYYY-MM-DD") &&
-    scheduledDelivery.isAfter(cutoff)
+    (scheduledDelivery.isBefore(start) || scheduledDelivery.isAfter(end))
   ) {
     throw new Error(
-      `La entrega programada no puede superar la hora limite de delivery (${cutoff.format("HH:mm")}) para la sucursal ${String(branch.nombre || branchId)}.`
+      `La entrega programada debe estar entre ${start.format("HH:mm")} y ${end.format("HH:mm")}` +
+        ` para la sucursal ${String(branch.nombre || branchId)}.`
     );
   }
 };

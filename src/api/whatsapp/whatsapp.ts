@@ -43,6 +43,10 @@ export const sendTextMessage = async (phone: string, msg: string): Promise<Whats
     if (!bodyText) throw new Error("Mensaje de WhatsApp requerido");
 
     const config = getWhatsAppConfig();
+    console.log("[whatsapp-api] sendTextMessage:start", {
+        to,
+        messageLength: bodyText.length,
+    });
 
     const body = {
         messaging_product: "whatsapp",
@@ -63,6 +67,12 @@ export const sendTextMessage = async (phone: string, msg: string): Promise<Whats
         body: JSON.stringify(body)
     })
     const data = await res.json().catch(() => ({}));
+    console.log("[whatsapp-api] sendTextMessage:response", {
+        to,
+        status: res.status,
+        ok: res.ok,
+        data,
+    });
 
     return {
         success: res.ok,
@@ -124,6 +134,16 @@ export const sendTemplateMessage = async (params: {
         body.template.components = components;
     }
 
+    console.log("[whatsapp-api] sendTemplateMessage:start", {
+        to,
+        templateName,
+        languageCode,
+        componentTypes: components.map((component) => component.type),
+        bodyParametersCount: bodyParameters.length,
+        headerParametersCount: headerParameters.length,
+        buttonUrlParametersCount: buttonUrlParameters.length,
+    });
+
     const res = await fetch(config.uri, {
         method: "POST",
         headers: {
@@ -133,6 +153,13 @@ export const sendTemplateMessage = async (params: {
         body: JSON.stringify(body)
     });
     const data = await res.json().catch(() => ({}));
+    console.log("[whatsapp-api] sendTemplateMessage:response", {
+        to,
+        templateName,
+        status: res.status,
+        ok: res.ok,
+        data,
+    });
 
     return {
         success: res.ok,

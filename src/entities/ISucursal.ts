@@ -10,6 +10,10 @@ export interface ISucursal {
     direccion: string;
     ciudad: string;
     telefono: number;
+    delivery_cutoff_enabled?: boolean;
+    delivery_cutoff_start_time?: string;
+    delivery_cutoff_end_time?: string;
+    delivery_cutoff_time?: string;
     imagen_header?: string;
      
     pedido?: Types.ObjectId[];  

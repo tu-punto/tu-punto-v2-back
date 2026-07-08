@@ -21,6 +21,14 @@ export const SucursalSchema = new Schema({
     type: Boolean,
     default: false
   },
+  delivery_cutoff_start_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_end_time: {
+    type: String,
+    default: ""
+  },
   delivery_cutoff_time: {
     type: String,
     default: ""

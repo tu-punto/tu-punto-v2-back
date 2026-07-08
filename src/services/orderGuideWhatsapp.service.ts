@@ -22,6 +22,10 @@ const DEFAULT_BUYER_TRANSFER_TEMPLATE = "pedido_listo_traslado";
 const DEFAULT_SELLER_TEMPLATE = "paquetes_entregados_sucursal";
 const GUIDE_WHATSAPP_MESSAGES_DISABLED = process.env.W_DISABLE_GUIDE_WHATSAPP_MESSAGES !== undefined;
 
+const logGuideWhatsapp = (context: string, event: string, payload?: Record<string, any>) => {
+  console.log(`[${context}] ${event}`, payload || {});
+};
+
 const BRANCH_LOCATION_LINKS = [
   {
     matches: ["cocha", "cochabamba"],
@@ -133,7 +137,20 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
     : toTrimmed(process.env.W_BUYER_TRANSFER_TEMPLATE_NAME) || DEFAULT_BUYER_TRANSFER_TEMPLATE;
   const languageCode = toTrimmed(process.env.W_GUIDE_TEMPLATE_LANGUAGE) || "es";
 
+  logGuideWhatsapp("guide-whatsapp", "buyer-template:prepare", {
+    orderId: String(row?._id || ""),
+    guide,
+    phone,
+    templateName,
+    sameBranch,
+  });
+
   if (!phone) {
+    logGuideWhatsapp("guide-whatsapp", "buyer-template:skip", {
+      orderId: String(row?._id || ""),
+      guide,
+      reason: "Telefono del comprador no registrado",
+    });
     return {
       type: "buyer",
       template: templateName,
@@ -164,6 +181,16 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
       buttonUrlParameters: locationButtonValue ? [templateParam(locationButtonValue)] : undefined,
     });
 
+    logGuideWhatsapp("guide-whatsapp", "buyer-template:result", {
+      orderId: String(row?._id || ""),
+      guide,
+      phone,
+      templateName,
+      success: response.success,
+      status: response.status,
+      response: response.data,
+    });
+
     return {
       type: "buyer",
       template: templateName,
@@ -176,6 +203,13 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
       reason: response.success ? undefined : "WhatsApp API rechazo el mensaje",
     };
   } catch (error: any) {
+    logGuideWhatsapp("guide-whatsapp", "buyer-template:error", {
+      orderId: String(row?._id || ""),
+      guide,
+      phone,
+      templateName,
+      error: error?.message || String(error),
+    });
     return {
       type: "buyer",
       template: templateName,
@@ -197,7 +231,18 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
   const languageCode = toTrimmed(process.env.W_GUIDE_TEMPLATE_LANGUAGE) || "es";
   const guideList = compactGuideList(rows);
 
+  logGuideWhatsapp("guide-whatsapp", "seller-template:prepare", {
+    rowsCount: rows.length,
+    phone,
+    templateName,
+    guideList,
+  });
+
   if (!phone) {
+    logGuideWhatsapp("guide-whatsapp", "seller-template:skip", {
+      rowsCount: rows.length,
+      reason: "Telefono del vendedor no registrado",
+    });
     return {
       type: "seller",
       template: templateName,
@@ -222,6 +267,15 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
       bodyParameters,
     });
 
+    logGuideWhatsapp("guide-whatsapp", "seller-template:result", {
+      rowsCount: rows.length,
+      phone,
+      templateName,
+      success: response.success,
+      status: response.status,
+      response: response.data,
+    });
+
     return {
       type: "seller",
       template: templateName,
@@ -232,6 +286,12 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
       reason: response.success ? undefined : "WhatsApp API rechazo el mensaje",
     };
   } catch (error: any) {
+    logGuideWhatsapp("guide-whatsapp", "seller-template:error", {
+      rowsCount: rows.length,
+      phone,
+      templateName,
+      error: error?.message || String(error),
+    });
     return {
       type: "seller",
       template: templateName,
@@ -250,11 +310,20 @@ const ensureGuides = (rows: any[]) => {
 };
 
 const sendForRows = async (rows: any[]) => {
+  logGuideWhatsapp("guide-whatsapp", "sendForRows:start", {
+    rowsCount: rows.length,
+    disabled: GUIDE_WHATSAPP_MESSAGES_DISABLED,
+    orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
+  });
   ensureGuides(rows);
 
   const attempts: SendAttempt[] = [];
 
   if (GUIDE_WHATSAPP_MESSAGES_DISABLED) {
+    logGuideWhatsapp("guide-whatsapp", "sendForRows:disabled", {
+      rowsCount: rows.length,
+      reason: "Envios de WhatsApp deshabilitados por configuracion",
+    });
     if (rows.length) {
       attempts.push({
         type: "seller",
@@ -283,13 +352,22 @@ const sendForRows = async (rows: any[]) => {
     }
   } else {
     if (rows.length) {
-      attempts.push(await sendSellerTemplate(rows));
+      const sellerAttempt = await sendSellerTemplate(rows);
+      attempts.push(sellerAttempt);
     }
 
     for (const row of rows) {
-      attempts.push(await sendBuyerTemplate(row));
+      const buyerAttempt = await sendBuyerTemplate(row);
+      attempts.push(buyerAttempt);
     }
   }
+
+  logGuideWhatsapp("guide-whatsapp", "sendForRows:done", {
+    rowsCount: rows.length,
+    successCount: attempts.filter((attempt) => attempt.success).length,
+    skippedCount: attempts.filter((attempt) => attempt.skipped).length,
+    failedCount: attempts.filter((attempt) => !attempt.success && !attempt.skipped).length,
+  });
 
   return {
     success: attempts.some((attempt) => attempt.success),
@@ -302,10 +380,15 @@ const sendForRows = async (rows: any[]) => {
 
 const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsapp") => {
   try {
+    logGuideWhatsapp(context, "bestEffort:start", {
+      rowsCount: rows.length,
+      orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
+    });
     const result = await sendForRows(rows);
+    logGuideWhatsapp(context, "bestEffort:result", result as any);
     return result;
   } catch (error) {
-    console.error(`[${context}] Error enviando WhatsApp`, error);
+    console.error(`[${context}] bestEffort:error`, error);
     return {
       success: false,
       sentCount: 0,
@@ -317,8 +400,12 @@ const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsap
 };
 
 const sendExternalGuideMessages = async (id: string) => {
+  logGuideWhatsapp("external-guide-whatsapp", "manual-send:start", { id });
   const row = await ExternalSaleRepository.getExternalSaleByID(id);
-  if (!row) throw new Error("Pedido externo no encontrado");
+  if (!row) {
+    logGuideWhatsapp("external-guide-whatsapp", "manual-send:missing-order", { id });
+    throw new Error("Pedido externo no encontrado");
+  }
   return sendForRows([row as IVentaExterna]);
 };
 
@@ -332,17 +419,30 @@ const sendSimplePackageGuideMessages = async (params: {
   currentBranchId?: string;
 }) => {
   const packageIds = (params.packageIds || []).map((id) => toTrimmed(id)).filter(Boolean);
+  logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:start", {
+    packageIds,
+    role: params.role,
+    authSellerId: params.authSellerId,
+    currentBranchId: params.currentBranchId,
+  });
   if (!packageIds.length) throw new Error("Debe seleccionar al menos un paquete");
 
   const role = toTrimmed(params.role).toLowerCase();
   const rows = await SimplePackageRepository.getSimplePackagesByIDs(packageIds);
   const pendingRows = rows.filter((row: any) => !row?.is_external);
-  if (!pendingRows.length) throw new Error("No hay paquetes simples pendientes para notificar");
+  if (!pendingRows.length) {
+    logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:no-pending-rows", { packageIds });
+    throw new Error("No hay paquetes simples pendientes para notificar");
+  }
 
   if (
     role === "seller" &&
     pendingRows.some((row: any) => String(row?.id_vendedor || "") !== String(params.authSellerId || ""))
   ) {
+    logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:unauthorized-seller", {
+      packageIds,
+      authSellerId: params.authSellerId,
+    });
     throw new Error("No autorizado para enviar estos paquetes");
   }
 
@@ -351,6 +451,10 @@ const sendSimplePackageGuideMessages = async (params: {
     params.currentBranchId &&
     pendingRows.some((row: any) => String((row?.origen_sucursal as any)?._id || row?.origen_sucursal || "") !== String(params.currentBranchId))
   ) {
+    logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:unauthorized-branch", {
+      packageIds,
+      currentBranchId: params.currentBranchId,
+    });
     throw new Error("Solo puedes enviar WhatsApp de paquetes de tu sucursal actual");
   }
 

@@ -580,7 +580,7 @@ const createSimplePackageOrders = async (params: {
     throw new Error("Solo puedes crear pedidos de paquetes de tu sucursal actual");
   }
 
-  const shippingResults = [];
+  const shippingResults: any[] = [];
   let debtAmount = 0;
   let debtCount = 0;
   let effectivoAmount = 0;
@@ -689,7 +689,22 @@ const createSimplePackageOrders = async (params: {
 
   if (!skipGuideNotification) {
     const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
-    void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
+    void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp")
+      .then((result) => {
+        console.log("[simple-package-service] whatsapp-dispatch:done", {
+          packageIds: shippingResults.map((result: any) => String(result?.packageId || "")).filter(Boolean),
+          success: result?.success,
+          sentCount: result?.sentCount,
+          skippedCount: result?.skippedCount,
+          failedCount: result?.failedCount,
+        });
+      })
+      .catch((error) => {
+        console.error("[simple-package-service] whatsapp-dispatch:error", {
+          packageIds: shippingResults.map((result: any) => String(result?.packageId || "")).filter(Boolean),
+          error: error?.message || String(error),
+        });
+      });
   }
 
   return shippingResults;
