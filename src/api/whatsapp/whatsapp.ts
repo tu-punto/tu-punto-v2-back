@@ -67,10 +67,16 @@ export const sendTextMessage = async (phone: string, msg: string): Promise<Whats
         body: JSON.stringify(body)
     })
     const data = await res.json().catch(() => ({}));
+    const contacts = Array.isArray(data?.contacts) ? data.contacts : [];
+    const messageIds = Array.isArray(data?.messages)
+        ? data.messages.map((message: any) => message?.id).filter(Boolean)
+        : [];
     console.log("[whatsapp-api] sendTextMessage:response", {
         to,
         status: res.status,
         ok: res.ok,
+        contacts,
+        messageIds,
         data,
     });
 
@@ -153,11 +159,17 @@ export const sendTemplateMessage = async (params: {
         body: JSON.stringify(body)
     });
     const data = await res.json().catch(() => ({}));
+    const contacts = Array.isArray(data?.contacts) ? data.contacts : [];
+    const messageIds = Array.isArray(data?.messages)
+        ? data.messages.map((message: any) => message?.id).filter(Boolean)
+        : [];
     console.log("[whatsapp-api] sendTemplateMessage:response", {
         to,
         templateName,
         status: res.status,
         ok: res.ok,
+        contacts,
+        messageIds,
         data,
     });
 
