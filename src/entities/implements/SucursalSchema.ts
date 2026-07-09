@@ -21,6 +21,30 @@ export const SucursalSchema = new Schema({
     type: Boolean,
     default: false
   },
+  delivery_cutoff_weekdays_registration_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_weekdays_closing_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_saturday_registration_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_saturday_closing_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_sunday_registration_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_sunday_closing_time: {
+    type: String,
+    default: ""
+  },
   delivery_cutoff_start_time: {
     type: String,
     default: ""

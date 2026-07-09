@@ -93,6 +93,63 @@ const normalizeTextValue = (value: unknown): string => String(value ?? "").trim(
 const normalizeBranchName = (value: unknown): string =>
   normalizeTextValue(value).toLowerCase().replace(/\s+/g, " ");
 
+type DeliveryCutoffDayGroup = "weekdays" | "saturday" | "sunday";
+
+const getDeliveryCutoffDayGroup = (date: moment.Moment): DeliveryCutoffDayGroup => {
+  const day = date.day();
+  if (day >= 1 && day <= 5) return "weekdays";
+  if (day === 6) return "saturday";
+  return "sunday";
+};
+
+const parseDeliveryTime = (value?: string | null) => {
+  const [hoursRaw, minutesRaw] = String(value || "").split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+
+  return {
+    hours: Number.isFinite(hours) ? hours : 0,
+    minutes: Number.isFinite(minutes) ? minutes : 0,
+  };
+};
+
+const buildMomentFromTime = (base: moment.Moment, value?: string | null) => {
+  const { hours, minutes } = parseDeliveryTime(value);
+  return base
+    .clone()
+    .hour(hours)
+    .minute(minutes)
+    .second(0)
+    .millisecond(0);
+};
+
+const getBranchDeliveryCutoffConfig = (branch: any, date: moment.Moment) => {
+  const dayGroup = getDeliveryCutoffDayGroup(date);
+  const legacyRegistration = String(branch?.delivery_cutoff_start_time || branch?.delivery_cutoff_time || "").trim();
+  const legacyClosing = String(branch?.delivery_cutoff_end_time || branch?.delivery_cutoff_time || "").trim();
+
+  const configByGroup: Record<DeliveryCutoffDayGroup, { registrationTime: string; closingTime: string }> = {
+    weekdays: {
+      registrationTime: String(branch?.delivery_cutoff_weekdays_registration_time || legacyRegistration || "").trim(),
+      closingTime: String(branch?.delivery_cutoff_weekdays_closing_time || legacyClosing || "").trim(),
+    },
+    saturday: {
+      registrationTime: String(branch?.delivery_cutoff_saturday_registration_time || legacyRegistration || "").trim(),
+      closingTime: String(branch?.delivery_cutoff_saturday_closing_time || legacyClosing || "").trim(),
+    },
+    sunday: {
+      registrationTime: String(branch?.delivery_cutoff_sunday_registration_time || legacyRegistration || "").trim(),
+      closingTime: String(branch?.delivery_cutoff_sunday_closing_time || legacyClosing || "").trim(),
+    },
+  };
+
+  return {
+    enabled: Boolean(branch?.delivery_cutoff_enabled),
+    dayGroup,
+    ...configByGroup[dayGroup],
+  };
+};
+
 const resolveBranchId = (value: any): string => {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -124,53 +181,37 @@ const validateDeliveryCutoff = async (shipping: any) => {
   if (!branchId || !Types.ObjectId.isValid(branchId)) return;
 
   const branch = await SucursalModel.findById(branchId)
-    .select("nombre delivery_cutoff_enabled delivery_cutoff_start_time delivery_cutoff_end_time delivery_cutoff_time")
+    .select(
+      "nombre delivery_cutoff_enabled delivery_cutoff_weekdays_registration_time delivery_cutoff_weekdays_closing_time delivery_cutoff_saturday_registration_time delivery_cutoff_saturday_closing_time delivery_cutoff_sunday_registration_time delivery_cutoff_sunday_closing_time delivery_cutoff_start_time delivery_cutoff_end_time delivery_cutoff_time"
+    )
     .lean();
 
   if (!branch?.delivery_cutoff_enabled) return;
   const now = moment().tz("America/La_Paz");
 
-  const startTime = String(branch.delivery_cutoff_start_time || "00:00").trim();
-  const endTime = String(branch.delivery_cutoff_end_time || branch.delivery_cutoff_time || "").trim();
-  if (!startTime && !endTime) return;
-
-  const [startHoursRaw, startMinutesRaw] = String(startTime || "00:00").split(":");
-  const [endHoursRaw, endMinutesRaw] = String(endTime || startTime || "00:00").split(":");
-  const startHours = Number(startHoursRaw);
-  const startMinutes = Number(startMinutesRaw);
-  const endHours = Number(endHoursRaw);
-  const endMinutes = Number(endMinutesRaw);
-  const start = now
-    .clone()
-    .hour(Number.isFinite(startHours) ? startHours : 0)
-    .minute(Number.isFinite(startMinutes) ? startMinutes : 0)
-    .second(0)
-    .millisecond(0);
-  const end = now
-    .clone()
-    .hour(Number.isFinite(endHours) ? endHours : 0)
-    .minute(Number.isFinite(endMinutes) ? endMinutes : 0)
-    .second(0)
-    .millisecond(0);
-
   const scheduledDelivery = shipping?.hora_entrega_acordada
     ? moment.tz(shipping.hora_entrega_acordada, "America/La_Paz")
     : null;
+  const deliveryDate = scheduledDelivery?.isValid() ? scheduledDelivery : now;
+  const cutoff = getBranchDeliveryCutoffConfig(branch, deliveryDate);
+  if (!cutoff.registrationTime && !cutoff.closingTime) return;
 
-  if (now.isBefore(start) || now.isAfter(end)) {
+  const registrationLimit = buildMomentFromTime(deliveryDate, cutoff.registrationTime || cutoff.closingTime || "00:00");
+  const closingLimit = buildMomentFromTime(deliveryDate, cutoff.closingTime || cutoff.registrationTime || "00:00");
+  const selectedDateIsToday = deliveryDate.format("YYYY-MM-DD") === now.format("YYYY-MM-DD");
+
+  if (selectedDateIsToday && now.isAfter(registrationLimit)) {
     throw new Error(
-      `La sucursal ${String(branch.nombre || branchId)} solo permite delivery entre ${start.format("HH:mm")} y ${end.format("HH:mm")}.`
+      `La sucursal ${String(branch.nombre || branchId)} ya cerró el registro para hoy. Solo permite programar entregas para fechas futuras.`
     );
   }
 
   if (
     scheduledDelivery?.isValid() &&
-    scheduledDelivery.format("YYYY-MM-DD") === now.format("YYYY-MM-DD") &&
-    (scheduledDelivery.isBefore(start) || scheduledDelivery.isAfter(end))
+    scheduledDelivery.isAfter(closingLimit)
   ) {
     throw new Error(
-      `La entrega programada debe estar entre ${start.format("HH:mm")} y ${end.format("HH:mm")}` +
-        ` para la sucursal ${String(branch.nombre || branchId)}.`
+      `La entrega programada no puede superar la hora de cierre operativo (${closingLimit.format("HH:mm")}) de la sucursal ${String(branch.nombre || branchId)}.`
     );
   }
 };

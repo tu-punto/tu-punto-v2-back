@@ -11,6 +11,12 @@ export interface ISucursal {
     ciudad: string;
     telefono: number;
     delivery_cutoff_enabled?: boolean;
+    delivery_cutoff_weekdays_registration_time?: string;
+    delivery_cutoff_weekdays_closing_time?: string;
+    delivery_cutoff_saturday_registration_time?: string;
+    delivery_cutoff_saturday_closing_time?: string;
+    delivery_cutoff_sunday_registration_time?: string;
+    delivery_cutoff_sunday_closing_time?: string;
     delivery_cutoff_start_time?: string;
     delivery_cutoff_end_time?: string;
     delivery_cutoff_time?: string;
