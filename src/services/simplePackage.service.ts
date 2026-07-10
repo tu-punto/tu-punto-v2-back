@@ -13,6 +13,7 @@ import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 import { TrackingFreezeService } from "./trackingFreeze.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
+import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -331,10 +332,7 @@ const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) =
     ubicacion_link: "",
     costo_delivery: 0,
     cargo_delivery: roundCurrency(Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0)),
-    estado_pedido:
-      originBranchId && destinationBranchId && originBranchId !== destinationBranchId
-        ? "PARA ENVIAR A OTRA SUCURSAL"
-        : "LISTO PARA RECOGER",
+    estado_pedido: resolveBranchTransferInitialStatus(originBranchId, destinationBranchId),
     public_tracking_received_at: new Date(),
     adelanto_cliente: 0,
     esta_pagado: paymentData.esta_pagado,

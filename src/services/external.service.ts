@@ -12,6 +12,7 @@ import { PackageEscalationConfigService } from "./packageEscalationConfig.servic
 import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { TrackingFreezeService } from "./trackingFreeze.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
+import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -486,8 +487,14 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
-  const initialDelivered = input.delivered === true || input.estado_pedido === "Entregado";
-  const estadoPedido = normalizeOrderStatus(input.estado_pedido, initialDelivered);
+  const defaultStatus = resolveBranchTransferInitialStatus(branchRoute.originBranchId, branchRoute.destinationBranchId);
+  const requestedStatus = String(input.estado_pedido ?? "").trim();
+  const estadoPedido =
+    requestedStatus && requestedStatus !== "En Espera"
+      ? requestedStatus
+      : input.delivered === true
+        ? "Entregado"
+        : defaultStatus;
   const delivered = estadoPedido === "Entregado";
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,

@@ -206,5 +206,17 @@ export const sendHelloAPI = async (phone: String) => {
         },
         body: JSON.stringify(body)
     })
-    return res; 
+    const data = await res.json().catch(() => ({}));
+    console.log("[whatsapp-api] sendHelloAPI:response", {
+        phone,
+        status: res.status,
+        ok: res.ok,
+        data,
+    });
+
+    return {
+        success: res.ok,
+        status: res.status,
+        data,
+    };
 }
