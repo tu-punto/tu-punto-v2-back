@@ -219,8 +219,16 @@ const extractMinutes = (value: any): number | null => {
   return null;
 }
 
-const workedMinutes = (daily?: JibbleSummaryDaily | null): number => {
+const workedMinutes = (daily?: JibbleSummaryDaily | null, expectedMinutes = 0): number => {
   if (!daily) return 0;
+
+  const firstIn = parseTime(daily.firstIn || daily.firstInTimestamp || daily.startTime || null);
+  const lastOut = parseTime(daily.lastOut || daily.lastOutTimestamp || daily.endTime || null);
+
+  if (firstIn && !lastOut) {
+    return Math.max(0, expectedMinutes);
+  }
+
   const candidates = [
     daily.trackedHours?.worked,
     daily.trackedHours?.total,
@@ -234,8 +242,6 @@ const workedMinutes = (daily?: JibbleSummaryDaily | null): number => {
     if (minutes !== null) return minutes;
   }
 
-  const firstIn = parseTime(daily.firstIn || daily.firstInTimestamp || daily.startTime || null);
-  const lastOut = parseTime(daily.lastOut || daily.lastOutTimestamp || daily.endTime || null);
   if (firstIn && lastOut) {
     const start = toMinutes(firstIn);
     const end = toMinutes(lastOut);
@@ -483,7 +489,7 @@ export const AttendanceService = {
         const daily = findDaily(summaries, person.personId, dateKey);
         const actualStartTime = parseTime(daily?.firstIn || daily?.firstInTimestamp || daily?.startTime || null);
         const actualEndTime = parseTime(daily?.lastOut || daily?.lastOutTimestamp || daily?.endTime || null);
-        const worked = workedMinutes(daily);
+        const worked = workedMinutes(daily, schedule.expectedMinutes);
         const differenceMinutes = worked - schedule.expectedMinutes;
         const missingMinutes = Math.max(0, schedule.expectedMinutes - worked);
         const overtimeMinutes = Math.max(0, differenceMinutes);
