@@ -18,6 +18,7 @@ import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
+import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
@@ -959,6 +960,15 @@ const updateShipping = async (
     void CatalogOrderIntegrationService.syncOrderStatus(
       typeof (resShip as any).toObject === "function" ? (resShip as any).toObject() : resShip
     );
+  }
+
+  if (resShip && toStatus === READY_FOR_PICKUP_STATUS && toStatus !== fromStatus) {
+    void OrderGuideWhatsappService.sendPickupReadyMessage(resShip).catch((error) => {
+      console.error("[shipping-service] pickup-whatsapp:error", {
+        shippingId,
+        error: error?.message || String(error),
+      });
+    });
   }
 
   const simplePackageSourceId = String(

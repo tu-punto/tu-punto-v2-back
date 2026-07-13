@@ -12,7 +12,7 @@ import { PackageEscalationConfigService } from "./packageEscalationConfig.servic
 import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { TrackingFreezeService } from "./trackingFreeze.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
-import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
+import { READY_FOR_PICKUP_STATUS, resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -945,6 +945,15 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const previousSellerMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const previousSellerAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
   const updated = await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
+
+  if (updated && status === READY_FOR_PICKUP_STATUS && status !== existing.estado_pedido) {
+    void OrderGuideWhatsappService.sendPickupReadyMessage(updated).catch((error) => {
+      console.error("[external-service] pickup-whatsapp:error", {
+        externalSaleId: id,
+        error: error?.message || String(error),
+      });
+    });
+  }
 
   if (serviceOrigin === "external" && paymentEditRequested && updated) {
     const branchId = String((existing.sucursal as any)?._id || existing.sucursal || "");
