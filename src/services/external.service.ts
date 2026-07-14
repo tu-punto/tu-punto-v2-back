@@ -777,20 +777,27 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.delivered === true || existing.delivered === true
   );
   const delivered = status === "Entregado";
+  const hasPaymentAllocationUpdate =
+    paymentEditRequested ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador") ||
+    shouldRecalculateRoutePricing;
 
-  const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
-    paid,
-    amountToCharge,
-    externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
-    externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
-  );
+  const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = hasPaymentAllocationUpdate
+    ? resolvePaymentSplit(
+        paid,
+        amountToCharge,
+        externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
+        externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
+      )
+    : {
+        montoPagaVendedor: roundCurrency(Number(existing.monto_paga_vendedor || 0)),
+        montoPagaComprador: roundCurrency(Number(existing.monto_paga_comprador || 0)),
+        saldoCobrar: roundCurrency(Number(existing.saldo_cobrar || 0)),
+      };
   const hasPaymentStatusUpdate = Object.prototype.hasOwnProperty.call(externalSale, "esta_pagado");
   const hasSellerMethodUpdate = Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
-  const hasSellerAmountUpdate =
-    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
-    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador");
-  const shouldRecalculateExternalBuyerDebt =
-    hasPaymentStatusUpdate || hasSellerAmountUpdate || shouldRecalculateRoutePricing;
+  const shouldRecalculateExternalBuyerDebt = hasPaymentStatusUpdate || hasPaymentAllocationUpdate;
   const buyerDebtAmount =
     serviceOrigin === "simple_package"
       ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
@@ -825,7 +832,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     !existingSellerPaymentMethod &&
     !hasPaymentStatusUpdate &&
     !hasSellerMethodUpdate &&
-    !hasSellerAmountUpdate;
+    !hasPaymentAllocationUpdate;
   const sellerPaymentMethod = montoPagaVendedor > 0
     ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago) || (paymentEditRequested ? "efectivo" : "")
     : "";
