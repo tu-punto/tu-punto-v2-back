@@ -3,6 +3,7 @@ import { ExternalSaleRepository } from "../repositories/external.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { SucursalRepository } from "../repositories/sucursal.repository";
 import { sendTemplateMessage } from "../api/whatsapp/whatsapp";
+import { READY_FOR_PICKUP_STATUS } from "../utils/branchTransferStatus";
 
 type SendAttempt = {
   type: "seller" | "buyer";
@@ -350,6 +351,11 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
   }
 };
 
+const canSendBuyerNow = (row: any) => {
+  if (isSameBranchDelivery(row)) return true;
+  return toTrimmed(row?.estado_pedido) === READY_FOR_PICKUP_STATUS;
+};
+
 const ensureGuides = (rows: any[]) => {
   const missingGuide = rows.filter((row) => !getGuide(row));
   if (missingGuide.length) {
@@ -359,10 +365,10 @@ const ensureGuides = (rows: any[]) => {
 
 const sendForRows = async (
   rows: any[],
-  options: { includeSeller?: boolean; buyerMode?: "same-branch-only" | "force" } = {}
+  options: { includeSeller?: boolean; buyerMode?: "auto" | "force" } = {}
 ) => {
   const includeSeller = options.includeSeller !== false;
-  const buyerMode = options.buyerMode || "same-branch-only";
+  const buyerMode = options.buyerMode || "auto";
   logGuideWhatsapp("guide-whatsapp", "sendForRows:start", {
     rowsCount: rows.length,
     disabled: GUIDE_WHATSAPP_MESSAGES_DISABLED,
@@ -409,7 +415,7 @@ const sendForRows = async (
     }
 
     for (const row of rows) {
-      if (buyerMode === "force" || isSameBranchDelivery(row)) {
+      if (buyerMode === "force" || canSendBuyerNow(row)) {
         const buyerAttempt = await sendBuyerTemplate(row);
         attempts.push(buyerAttempt);
       } else {
@@ -471,7 +477,7 @@ const sendExternalGuideMessages = async (id: string) => {
     logGuideWhatsapp("external-guide-whatsapp", "manual-send:missing-order", { id });
     throw new Error("Pedido externo no encontrado");
   }
-  return sendForRows([row as IVentaExterna], { includeSeller: true, buyerMode: "force" });
+  return sendForRows([row as IVentaExterna], { includeSeller: true, buyerMode: "auto" });
 };
 
 const sendExternalRowsBestEffort = async (rows: any[]) =>
