@@ -23,7 +23,9 @@ const DEFAULT_SELLER_TEMPLATE = "paquetes_entregados_sucursal";
 const GUIDE_WHATSAPP_MESSAGES_DISABLED = process.env.W_DISABLE_GUIDE_WHATSAPP_MESSAGES !== undefined;
 
 const logGuideWhatsapp = (context: string, event: string, payload?: Record<string, any>) => {
-  console.log(`[${context}] ${event}`, payload || {});
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[${context}] ${event}`, payload || {});
+  }
 };
 
 const BRANCH_LOCATION_LINKS = [

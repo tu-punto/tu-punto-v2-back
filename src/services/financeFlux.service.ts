@@ -15,6 +15,7 @@ import moment from "moment-timezone";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { uploadFileToAws } from "./bucket.service";
 import { awsFolderNames } from "../config/bucketConfig";
+import { IN_TRANSIT_STATUS, READY_FOR_PICKUP_STATUS } from "../utils/branchTransferStatus";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -72,6 +73,35 @@ const getDeliveryAmount = (shipping: any, mode: "real" | "potential") => {
   const branchRoutePrice = Number(shipping?.precio_entre_sucursal ?? shipping?.cargo_delivery ?? 0);
   const total = Number(shipping?.precio_total || packagePrice + branchRoutePrice);
   return mode === "potential" ? total : (Number(shipping?.cargo_delivery || 0) + Number(shipping?.monto_paga_comprador || 0) + Number(shipping?.monto_paga_vendedor || 0));
+};
+
+const getShippingBranchIds = (shipping: any) => {
+  const originId = normalizeId(shipping?.lugar_origen);
+  const destinationId = normalizeId(shipping?.destino_sucursal || shipping?.sucursal);
+
+  return { originId, destinationId };
+};
+
+const shouldCountDeliveryExpenseForBranch = (shipping: any, sucursalIds?: string[]) => {
+  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
+  if (!normalizedSucursalIds.length) return true;
+
+  const { originId, destinationId } = getShippingBranchIds(shipping);
+  if (!originId || !destinationId || originId === destinationId) return true;
+
+  const currentStatus = normalizeText(shipping?.estado_pedido);
+  const isOriginBranchSelected = normalizedSucursalIds.includes(originId);
+  const isDestinationBranchSelected = normalizedSucursalIds.includes(destinationId);
+
+  if (isOriginBranchSelected && currentStatus === IN_TRANSIT_STATUS.toLowerCase()) {
+    return true;
+  }
+
+  if (isDestinationBranchSelected && currentStatus === READY_FOR_PICKUP_STATUS.toLowerCase()) {
+    return true;
+  }
+
+  return false;
 };
 
 const getFluxAmountForSucursales = (flux: any, sucursalIds?: string[]) => {
@@ -492,7 +522,9 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, opts:
 
     if (includeDeliveries) {
       montoCobradoDelivery += deliveryMode === "potential" ? deliveryAmount : realDeliveryAmount;
-      costoDelivery += realDeliveryExpense;
+      if (shouldCountDeliveryExpenseForBranch(s, normalizedSucursalIds)) {
+        costoDelivery += realDeliveryExpense;
+      }
 
       if (branchShippingPrice > 0) {
         simplePackagesInterbranchTotal += deliveryAmount || packagePrice + branchShippingPrice;
