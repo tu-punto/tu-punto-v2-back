@@ -34,6 +34,27 @@ const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
   return await CierreCajaModel.findByIdAndUpdate(id, updates, { new: true });
 };
 
+const findLatestBySucursalOnDay = async (
+  sucursalId: string,
+  dayStart: Date,
+  dayEnd: Date
+): Promise<ICierreCaja | null> => {
+  if (!Types.ObjectId.isValid(sucursalId)) return null;
+
+  return await CierreCajaModel.findOne({
+    id_sucursal: new Types.ObjectId(sucursalId),
+    $or: [
+      { closed_at: { $gte: dayStart, $lte: dayEnd } },
+      {
+        closed_at: { $exists: false },
+        created_at: { $gte: dayStart, $lte: dayEnd },
+      },
+    ],
+  })
+    .sort({ closed_at: -1, created_at: -1 })
+    .exec();
+};
+
 const findLatestBySucursalBefore = async (
   sucursalId: string,
   before: Date
@@ -58,4 +79,5 @@ export const BoxCloseRepository = {
   getBoxCloseById,
   updateBoxClose,
   findLatestBySucursalBefore,
+  findLatestBySucursalOnDay,
 };
