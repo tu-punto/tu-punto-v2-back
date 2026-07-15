@@ -893,7 +893,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.lugar_entrega = nextBranchRoute.destinationBranchName || existing.lugar_entrega;
   }
 
-  if (serviceOrigin === "simple_package") {
+  if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
     updatePayload.costo_delivery = toNumber(externalSale.costo_delivery ?? existing.costo_delivery, 0);
     updatePayload.seller_debt_applied = !(sellerPaymentMethod && montoPagaVendedor > 0);
   }
