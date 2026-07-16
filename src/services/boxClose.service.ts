@@ -216,7 +216,7 @@ const registerBranchTransferBoxCloseOperation = async (params: {
   }
 
   const operation = {
-    tipo: "delivery" as const,
+    tipo: "gasto" as const,
     descripcion:
       params.mode === "receive"
         ? `Confirmacion de llegada entre sucursales (${params.packageCount || 0} paquetes)`
@@ -225,7 +225,7 @@ const registerBranchTransferBoxCloseOperation = async (params: {
       params.mode === "receive"
         ? "Costo delivery por llegada entre sucursales"
         : "Costo delivery por envio entre sucursales",
-    categoria: "Ingreso (Cierre)",
+    categoria: "Gasto (Cierre)",
     metodo: params.method,
     monto: amount,
     afecta_empresa: true,
