@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getShipping,
+  getShippingDashboardList,
   getShippingList,
   registerShipping,
   registerSaleToShipping,
@@ -23,6 +24,7 @@ import { requireRole, requireSellerOwnership } from "../middlewares/auth.middlew
 const shippingRouter = Router();
 //rutas
 shippingRouter.get("/", getShipping);
+shippingRouter.get("/dashboard", getShippingDashboardList);
 shippingRouter.get("/list", getShippingList);
 
 shippingRouter.get("/:ids", getShippingByIds);

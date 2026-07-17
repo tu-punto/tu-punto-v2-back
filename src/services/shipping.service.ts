@@ -1,5 +1,7 @@
 import { IPedidoDocument } from "../entities/documents/IPedidoDocument";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
+import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
+import { VentaModel } from "../entities/implements/VentaSchema";
 import { Types } from "mongoose";
 import { SaleRepository } from "../repositories/sale.repository";
 import { ShippingRepository } from "../repositories/shipping.repository";
@@ -26,6 +28,12 @@ import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGua
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
 };
+
+const WAITING_RAW_STATUS = "En Espera";
+const READY_FOR_PICKUP_VISUAL_STATUS = "LISTO PARA RECOGER";
+const IN_TRANSIT_STATUS = "En camino";
+const INTERNAL_SALE_STATUS = "interno";
+const VISUAL_IN_TRANSIT_THRESHOLD_MINUTES = 30;
 
 let cachedTemporaryCategoryId = "";
 
@@ -91,6 +99,9 @@ const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
 };
 
 const normalizeTextValue = (value: unknown): string => String(value ?? "").trim();
+const normalizeTextLower = (value: unknown): string => normalizeTextValue(value).toLowerCase();
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const normalizeStatusValue = (value: unknown) => normalizeTextValue(value);
 const normalizeBranchName = (value: unknown): string =>
   normalizeTextValue(value).toLowerCase().replace(/\s+/g, " ");
 
@@ -500,6 +511,174 @@ const attachSimplePackageFieldsToShippings = async (rows: any[]) => {
   });
 };
 
+type ShippingDashboardTab = "todos" | "En Espera" | "para_enviar" | "en_camino" | "entregado";
+
+type ShippingDashboardParams = {
+  page?: number;
+  limit?: number;
+  tab?: ShippingDashboardTab;
+  from?: Date;
+  to?: Date;
+  currentBranchId?: string;
+  sellerId?: string;
+  client?: string;
+  guide?: string;
+  destinationMode?: "any" | "branch" | "other";
+  destinationQuery?: string;
+};
+
+const resolveInternalOriginBranchId = (row: any) =>
+  normalizeTextValue(row?.lugar_origen?._id || row?.lugar_origen || row?.origen_sucursal?._id || row?.origen_sucursal);
+
+const resolveInternalDestinationBranchId = (row: any) =>
+  normalizeTextValue(row?.sucursal?._id || row?.sucursal || row?.destino_sucursal?._id || row?.destino_sucursal);
+
+const resolveExternalOriginBranchId = (row: any) =>
+  normalizeTextValue(row?.origen_sucursal?._id || row?.origen_sucursal || row?.sucursal?._id || row?.sucursal);
+
+const resolveExternalDestinationBranchId = (row: any) =>
+  normalizeTextValue(row?.destino_sucursal?._id || row?.destino_sucursal || row?.sucursal?._id || row?.sucursal);
+
+const isInternalSaleLike = (row: any) => normalizeStatusValue(row?.estado_pedido).toLowerCase() === INTERNAL_SALE_STATUS;
+
+const isSimplePackageLike = (row: any) =>
+  Boolean(row?.simple_package_order || row?.simple_package_source_id || normalizeTextLower(row?.service_origin) === "simple_package");
+
+const isRegularInternalOrderLike = (row: any) => !isInternalSaleLike(row) && !isSimplePackageLike(row);
+
+const getScheduledMomentLike = (row: any) => {
+  const value = row?.hora_entrega_acordada || row?.fecha_pedido;
+  if (!value) return null;
+  const parsed = moment.parseZone(value);
+  return parsed.isValid() ? parsed : null;
+};
+
+const shouldDisplayAsInTransitLike = (row: any, now: moment.Moment) => {
+  const status = normalizeStatusValue(row?.estado_pedido);
+  if (status === IN_TRANSIT_STATUS) return true;
+  if (status !== WAITING_RAW_STATUS) return false;
+  if (!isRegularInternalOrderLike(row)) return false;
+
+  const scheduledAt = getScheduledMomentLike(row);
+  if (!scheduledAt) return false;
+
+  return now.isSameOrAfter(scheduledAt.clone().subtract(VISUAL_IN_TRANSIT_THRESHOLD_MINUTES, "minutes"));
+};
+
+const matchesDestinationFilter = (row: any, params: ShippingDashboardParams, knownBranchNames: Set<string>) => {
+  const mode = params.destinationMode || "any";
+  const query = normalizeTextLower(params.destinationQuery);
+  const destination = normalizeTextValue(row?.lugar_entrega);
+  const normalizedDestination = normalizeTextLower(destination);
+
+  if (mode === "any") return true;
+  if (mode === "branch") {
+    if (!query) return true;
+    return normalizedDestination.includes(query);
+  }
+
+  const isKnownBranch = knownBranchNames.has(normalizedDestination);
+  if (isKnownBranch) return false;
+  if (!query) return true;
+  return normalizedDestination.includes(query);
+};
+
+const classifyDashboardRow = (
+  row: any,
+  source: "shipping" | "external",
+  currentBranchId: string,
+  now: moment.Moment
+) => {
+  const isExternal = source === "external";
+  const status = normalizeStatusValue(row?.estado_pedido);
+  const delivered = status === "Entregado";
+  const originId = isExternal ? resolveExternalOriginBranchId(row) : resolveInternalOriginBranchId(row);
+  const destinationId = isExternal ? resolveExternalDestinationBranchId(row) : resolveInternalDestinationBranchId(row);
+  const related = Boolean(
+    currentBranchId &&
+    (originId === currentBranchId || destinationId === currentBranchId)
+  );
+  const interbranch = Boolean(originId && destinationId && originId !== destinationId);
+  const branchTransferManaged = isExternal || isSimplePackageLike(row);
+  const pendingSend =
+    status === SEND_TO_BRANCH_STATUS &&
+    branchTransferManaged &&
+    interbranch &&
+    originId === currentBranchId;
+  const inTransit =
+    !pendingSend &&
+    ((status === IN_TRANSIT_STATUS && (branchTransferManaged ? destinationId === currentBranchId || originId === currentBranchId : true)) ||
+      shouldDisplayAsInTransitLike(row, now));
+  const ready =
+    !delivered &&
+    !pendingSend &&
+    !inTransit &&
+    (status === WAITING_RAW_STATUS || status === READY_FOR_PICKUP_VISUAL_STATUS);
+  const visibleInAll = related && !delivered;
+
+  return {
+    source,
+    rowId: String(row?._id || ""),
+    related,
+    delivered,
+    pendingSend,
+    inTransit,
+    ready,
+    all: visibleInAll,
+    sortAt: (row?.hora_entrega_acordada || row?.fecha_pedido || row?.hora_entrega_real || new Date()).toString(),
+    isExternal,
+  };
+};
+
+const mapExternalRowToShippingShape = (externalSale: any) => {
+  const estaPagado =
+    externalSale?.esta_pagado === "mixto"
+      ? "mixto"
+      : externalSale?.esta_pagado === "si"
+      ? "si"
+      : "no";
+  const precioPaquete = Number(externalSale?.precio_paquete ?? externalSale?.precio_total ?? 0);
+  const pagaComprador = Number(externalSale?.monto_paga_comprador ?? 0);
+  const fechaBase = externalSale?.fecha_pedido || new Date().toISOString();
+  const sucursalOrigen =
+    typeof externalSale?.origen_sucursal === "object"
+      ? externalSale.origen_sucursal
+      : typeof externalSale?.sucursal === "object"
+      ? externalSale.sucursal
+      : null;
+  const destinationLabel =
+    externalSale?.lugar_entrega ||
+    externalSale?.destino_sucursal?.nombre ||
+    sucursalOrigen?.nombre ||
+    (externalSale?.service_origin === "simple_package" ? "Simple" : "Externo");
+
+  return {
+    ...externalSale,
+    key: `external-${externalSale._id}`,
+    is_external: true,
+    cliente: externalSale?.comprador || "Sin comprador",
+    telefono_cliente: externalSale?.telefono_comprador || "",
+    carnet_cliente: externalSale?.carnet_comprador || "",
+    hora_entrega_acordada: fechaBase,
+    hora_entrega_real: externalSale?.hora_entrega_real || fechaBase,
+    lugar_origen: sucursalOrigen,
+    lugar_entrega: destinationLabel,
+    id_sucursal: sucursalOrigen?._id || externalSale?.origen_sucursal || externalSale?.sucursal || externalSale?.id_sucursal,
+    sucursal: sucursalOrigen,
+    estado_pedido: normalizeStatusValue(externalSale?.estado_pedido || (externalSale?.delivered ? "Entregado" : WAITING_RAW_STATUS)),
+    esta_pagado: estaPagado,
+    saldo_cobrar: Number(
+      externalSale?.deuda_comprador ??
+        externalSale?.saldo_cobrar ??
+        (estaPagado === "si" ? 0 : estaPagado === "mixto" ? pagaComprador : precioPaquete)
+    ),
+    numero_guia: externalSale?.numero_guia || "",
+    observaciones: externalSale?.descripcion_paquete || "",
+    venta: [],
+    productos_temporales: [],
+  };
+};
+
 const normalizeShippingBranches = async (payload: any, currentShipping?: any) => {
   const originId = resolveBranchId(
     payload?.lugar_origen ?? currentShipping?.lugar_origen
@@ -577,6 +756,191 @@ const getShippingsList = async (params: {
   return {
     ...result,
     rows: await attachSimplePackageFieldsToShippings(result.rows || []),
+  };
+};
+
+const getShippingDashboardList = async (params: ShippingDashboardParams) => {
+  const safePage = Math.max(1, Number(params.page) || 1);
+  const safeLimit = Math.min(100, Math.max(1, Number(params.limit) || 30));
+  const currentBranchId = normalizeTextValue(params.currentBranchId);
+  const now = moment().tz("America/La_Paz");
+  const tab = (params.tab || "todos") as ShippingDashboardTab;
+  const knownBranchNames = new Set(
+    (
+      await SucursalModel.find({}, { nombre: 1 }).lean()
+    ).map((row: any) => normalizeTextLower(row?.nombre)).filter(Boolean)
+  );
+
+  const internalFilter: any = {
+    estado_pedido: { $ne: INTERNAL_SALE_STATUS },
+  };
+  const externalFilter: any = {
+    $or: [{ service_origin: { $exists: false } }, { service_origin: "external" }, { service_origin: "simple_package" }],
+  };
+
+  if (params.from || params.to) {
+    internalFilter.hora_entrega_acordada = {};
+    externalFilter.fecha_pedido = {};
+    if (params.from) {
+      internalFilter.hora_entrega_acordada.$gte = params.from;
+      externalFilter.fecha_pedido.$gte = params.from;
+    }
+    if (params.to) {
+      internalFilter.hora_entrega_acordada.$lte = params.to;
+      externalFilter.fecha_pedido.$lte = params.to;
+    }
+  }
+
+  if (currentBranchId && Types.ObjectId.isValid(currentBranchId)) {
+    const branchObjectId = new Types.ObjectId(currentBranchId);
+    internalFilter.$and = [
+      ...(internalFilter.$and || []),
+      {
+        $or: [
+          { lugar_origen: branchObjectId },
+          { sucursal: branchObjectId },
+        ],
+      },
+    ];
+    externalFilter.$and = [
+      ...(externalFilter.$and || []),
+      {
+        $or: [
+          { origen_sucursal: branchObjectId },
+          { destino_sucursal: branchObjectId },
+          { sucursal: branchObjectId },
+        ],
+      },
+    ];
+  }
+
+  if (params.client) {
+    const searchRegex = new RegExp(escapeRegex(params.client), "i");
+    const clientMatch = {
+      $or: [
+        { cliente: searchRegex },
+        { telefono_cliente: searchRegex },
+        { carnet_cliente: searchRegex },
+        { numero_guia: searchRegex },
+      ],
+    };
+    internalFilter.$and = [...(internalFilter.$and || []), clientMatch];
+    externalFilter.$and = [
+      ...(externalFilter.$and || []),
+      {
+        $or: [
+          { comprador: searchRegex },
+          { telefono_comprador: searchRegex },
+          { carnet_comprador: searchRegex },
+          { numero_guia: searchRegex },
+        ],
+      },
+    ];
+  }
+
+  if (params.guide) {
+    const guideRegex = new RegExp(escapeRegex(params.guide), "i");
+    internalFilter.$and = [...(internalFilter.$and || []), { numero_guia: guideRegex }];
+    externalFilter.$and = [...(externalFilter.$and || []), { numero_guia: guideRegex }];
+  }
+
+  const sellerId = normalizeTextValue(params.sellerId);
+  if (sellerId === "__EXTERNO__") {
+    internalFilter.$and = [...(internalFilter.$and || []), { _id: { $in: [] } }];
+  } else if (sellerId && Types.ObjectId.isValid(sellerId)) {
+    const sellerObjectId = new Types.ObjectId(sellerId);
+    const pedidoIdsBySales = await VentaModel.find({ vendedor: sellerObjectId }).select("pedido").lean();
+    const salesPedidoIds = pedidoIdsBySales.map((item: any) => item.pedido).filter(Boolean);
+    internalFilter.$and = [
+      ...(internalFilter.$and || []),
+      {
+        $or: [
+          { _id: { $in: salesPedidoIds } },
+          { "productos_temporales.id_vendedor": sellerObjectId },
+        ],
+      },
+    ];
+    externalFilter.$and = [...(externalFilter.$and || []), { _id: { $in: [] } }];
+  }
+
+  const [internalRowsLight, externalRowsLight] = await Promise.all([
+    PedidoModel.find(internalFilter)
+      .select("_id estado_pedido hora_entrega_acordada fecha_pedido lugar_origen sucursal simple_package_order simple_package_source_id lugar_entrega")
+      .sort({ hora_entrega_acordada: -1, _id: -1 })
+      .lean(),
+    VentaExternaModel.find(externalFilter)
+      .select("_id estado_pedido fecha_pedido hora_entrega_real origen_sucursal destino_sucursal sucursal service_origin lugar_entrega")
+      .sort({ fecha_pedido: -1, _id: -1 })
+      .lean(),
+  ]);
+
+  const classifiedInternal = internalRowsLight
+    .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
+    .map((row: any) => classifyDashboardRow(row, "shipping", currentBranchId, now));
+  const classifiedExternal = externalRowsLight
+    .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
+    .map((row: any) => classifyDashboardRow(row, "external", currentBranchId, now));
+
+  const allClassified = [...classifiedInternal, ...classifiedExternal]
+    .filter((row) => row.related)
+    .sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
+
+  const counts = {
+    todos: allClassified.filter((row) => row.all).length,
+    listo_para_recoger: allClassified.filter((row) => row.ready).length,
+    para_enviar: allClassified.filter((row) => row.pendingSend).length,
+    en_camino: allClassified.filter((row) => row.inTransit).length,
+    entregado: allClassified.filter((row) => row.delivered).length,
+  };
+
+  const tabRows = allClassified.filter((row) => {
+    if (tab === "todos") return row.all;
+    if (tab === "En Espera") return row.ready;
+    if (tab === "para_enviar") return row.pendingSend;
+    if (tab === "en_camino") return row.inTransit;
+    return row.delivered;
+  });
+
+  const pageSlice = tabRows.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+  const pageInternalIds = pageSlice.filter((row) => row.source === "shipping").map((row) => row.rowId);
+  const pageExternalIds = pageSlice.filter((row) => row.source === "external").map((row) => row.rowId);
+
+  const [internalFullRows, externalFullRows] = await Promise.all([
+    pageInternalIds.length
+      ? attachSimplePackageFieldsToShippings(await ShippingRepository.findByIds(pageInternalIds))
+      : Promise.resolve([]),
+    pageExternalIds.length
+      ? VentaExternaModel.find({ _id: { $in: pageExternalIds.map((id) => new Types.ObjectId(id)) } })
+          .populate({ path: "sucursal", select: "_id nombre" })
+          .populate({ path: "origen_sucursal", select: "_id nombre" })
+          .populate({ path: "destino_sucursal", select: "_id nombre" })
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
+  const rowMap = new Map<string, any>();
+  internalFullRows.forEach((row: any) => {
+    rowMap.set(`shipping:${String(row?._id)}`, {
+      ...row,
+      key: String(row?._id || ""),
+      is_external: false,
+    });
+  });
+  externalFullRows.forEach((row: any) => {
+    rowMap.set(`external:${String(row?._id)}`, mapExternalRowToShippingShape(row));
+  });
+
+  const rows = pageSlice
+    .map((row) => rowMap.get(`${row.source}:${row.rowId}`))
+    .filter(Boolean);
+
+  return {
+    rows,
+    counts,
+    total: tabRows.length,
+    page: safePage,
+    limit: safeLimit,
+    pages: Math.max(1, Math.ceil(tabRows.length / safeLimit)),
   };
 };
 
@@ -1648,6 +2012,7 @@ const markSellerWithdrawal = async (params: {
 
 export const ShippingService = {
   getAllShippings,
+  getShippingDashboardList,
   getShippingsList,
   getShippingsByDateRange,
   getShippingByIds,

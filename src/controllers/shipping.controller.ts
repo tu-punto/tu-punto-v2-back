@@ -51,6 +51,48 @@ export const getShippingList = async (req: Request, res: Response) => {
   }
 };
 
+export const getShippingDashboardList = async (req: Request, res: Response) => {
+  try {
+    const auth = res.locals.auth as { role?: string; sucursalId?: string } | undefined;
+    const authRole = String(auth?.role || "").toLowerCase();
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 30);
+    const tab = (req.query.tab as string | undefined) || "todos";
+    const sellerId = (req.query.sellerId as string | undefined) || undefined;
+    const client = (req.query.client as string | undefined) || undefined;
+    const guide = (req.query.guide as string | undefined) || undefined;
+    const destinationMode = (req.query.destinationMode as "any" | "branch" | "other" | undefined) || "any";
+    const destinationQuery = (req.query.destinationQuery as string | undefined) || undefined;
+    const fromRaw = (req.query.from as string | undefined) || undefined;
+    const toRaw = (req.query.to as string | undefined) || undefined;
+    const from = fromRaw ? new Date(fromRaw) : undefined;
+    const to = toRaw ? new Date(toRaw) : undefined;
+    const currentBranchId =
+      authRole === "admin" || authRole === "operator" || authRole === "superadmin"
+        ? String(req.query.currentBranchId || auth?.sucursalId || "").trim()
+        : String(auth?.sucursalId || "").trim();
+
+    const result = await ShippingService.getShippingDashboardList({
+      page,
+      limit,
+      tab: tab as any,
+      from,
+      to,
+      currentBranchId,
+      sellerId,
+      client,
+      guide,
+      destinationMode,
+      destinationQuery,
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export const getShippingByIds = async (req: Request, res: Response) => {
   const { ids } = req.params;
   try {
