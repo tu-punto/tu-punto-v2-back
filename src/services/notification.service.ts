@@ -82,7 +82,7 @@ const PUSH_VAPID_PUBLIC_KEY = String(process.env.PUSH_VAPID_PUBLIC_KEY || "").tr
 const PUSH_VAPID_PRIVATE_KEY = String(process.env.PUSH_VAPID_PRIVATE_KEY || "").trim();
 const PUSH_VAPID_SUBJECT = String(process.env.PUSH_VAPID_SUBJECT || "mailto:admin@example.com").trim();
 const CLIENT_URL = String(
-  process.env.CLIENT_URL || process.env.CLIENT_URL_2 || "http://localhost:5173"
+  process.env.CLIENT_URL_2 || process.env.CLIENT_URL || "http://localhost:5173"
 ).trim();
 
 let reminderTimer: NodeJS.Timeout | null = null;
