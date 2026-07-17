@@ -601,34 +601,42 @@ const classifyDashboardRow = (
   row: any,
   source: "shipping" | "external",
   currentBranchId: string,
-  now: moment.Moment
+  now: moment.Moment,
+  ignoreBranchVisibility = false
 ) => {
   const isExternal = source === "external";
   const status = normalizeStatusValue(row?.estado_pedido);
   const delivered = status === "Entregado";
   const originId = isExternal ? resolveExternalOriginBranchId(row) : resolveInternalOriginBranchId(row);
   const destinationId = isExternal ? resolveExternalDestinationBranchId(row) : resolveInternalDestinationBranchId(row);
-  const related = Boolean(
-    currentBranchId &&
-    (originId === currentBranchId || destinationId === currentBranchId)
-  );
+  const related = ignoreBranchVisibility
+    ? true
+    : Boolean(
+        currentBranchId &&
+        (originId === currentBranchId || destinationId === currentBranchId)
+      );
   const interbranch = Boolean(originId && destinationId && originId !== destinationId);
   const branchTransferManaged = isExternal || isSimplePackageLike(row);
   const pendingSend =
     status === SEND_TO_BRANCH_STATUS &&
     branchTransferManaged &&
     interbranch &&
-    originId === currentBranchId;
+    (ignoreBranchVisibility || originId === currentBranchId);
   const inTransit =
     !pendingSend &&
-    ((status === IN_TRANSIT_STATUS && (branchTransferManaged ? destinationId === currentBranchId || originId === currentBranchId : true)) ||
+    ((status === IN_TRANSIT_STATUS &&
+      (ignoreBranchVisibility
+        ? true
+        : branchTransferManaged
+        ? destinationId === currentBranchId || originId === currentBranchId
+        : true)) ||
       shouldDisplayAsInTransitLike(row, now));
   const ready =
     !delivered &&
     !pendingSend &&
     !inTransit &&
     (status === WAITING_RAW_STATUS || status === READY_FOR_PICKUP_VISUAL_STATUS);
-  const visibleInAll = related && !delivered;
+  const visibleInAll = !delivered && (ignoreBranchVisibility || related);
 
   return {
     source,
@@ -779,6 +787,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   const currentBranchId = normalizeTextValue(params.currentBranchId);
   const category = (params.category || "all") as ShippingDashboardCategory;
   const ignoreBranchVisibility = Boolean(params.ignoreBranchVisibility);
+  const debugSeller = ignoreBranchVisibility || Boolean(params.sellerId);
   const now = moment().tz("America/La_Paz");
   const tab = (params.tab || "todos") as ShippingDashboardTab;
   const knownBranchNames = new Set(
@@ -861,6 +870,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   }
 
   const sellerId = normalizeTextValue(params.sellerId);
+  let salesPedidoIds: any[] = [];
   if (sellerId === "__EXTERNO__") {
     internalFilter.$and = [...(internalFilter.$and || []), { _id: { $in: [] } }];
   } else if (sellerId && Types.ObjectId.isValid(sellerId)) {
@@ -871,7 +881,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
         { id_vendedor: sellerObjectId },
       ],
     }).select("pedido").lean();
-    const salesPedidoIds = pedidoIdsBySales.map((item: any) => item.pedido).filter(Boolean);
+    salesPedidoIds = pedidoIdsBySales.map((item: any) => item.pedido).filter(Boolean);
     internalFilter.$and = [
       ...(internalFilter.$and || []),
       {
@@ -895,14 +905,34 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       .lean(),
   ]);
 
+  if (debugSeller) {
+    console.log("[shipping-dashboard][service][input]", {
+      sellerId,
+      currentBranchId,
+      ignoreBranchVisibility,
+      category,
+      tab,
+      from: params.from || null,
+      to: params.to || null,
+      destinationMode: params.destinationMode || "any",
+      destinationQuery: params.destinationQuery || "",
+      client: params.client || "",
+      guide: params.guide || "",
+      salesPedidoIdsCount: salesPedidoIds.length,
+      salesPedidoIdsSample: salesPedidoIds.slice(0, 10).map((id: any) => String(id)),
+      internalRowsLight: internalRowsLight.length,
+      externalRowsLight: externalRowsLight.length,
+    });
+  }
+
   const classifiedInternal = internalRowsLight
     .filter((row: any) => matchesDashboardCategory(row, "shipping", category))
     .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
-    .map((row: any) => classifyDashboardRow(row, "shipping", currentBranchId, now));
+    .map((row: any) => classifyDashboardRow(row, "shipping", currentBranchId, now, ignoreBranchVisibility));
   const classifiedExternal = externalRowsLight
     .filter((row: any) => matchesDashboardCategory(row, "external", category))
     .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
-    .map((row: any) => classifyDashboardRow(row, "external", currentBranchId, now));
+    .map((row: any) => classifyDashboardRow(row, "external", currentBranchId, now, ignoreBranchVisibility));
 
   const allClassified = [...classifiedInternal, ...classifiedExternal]
     .filter((row) => ignoreBranchVisibility || row.related)
@@ -961,6 +991,22 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   const rows = pageSlice
     .map((row) => rowMap.get(`${row.source}:${row.rowId}`))
     .filter(Boolean);
+
+  if (debugSeller) {
+    console.log("[shipping-dashboard][service][classified]", {
+      classifiedInternal: classifiedInternal.length,
+      classifiedExternal: classifiedExternal.length,
+      allClassified: allClassified.length,
+      counts,
+      tabRows: tabRows.length,
+      pageSlice: pageSlice.length,
+      pageInternalIds: pageInternalIds.length,
+      pageExternalIds: pageExternalIds.length,
+      pageRowIds: pageSlice.map((row) => `${row.source}:${row.rowId}`),
+      finalRows: rows.length,
+      finalRowIds: rows.map((row: any) => String(row?.key || row?._id || "")),
+    });
+  }
 
   return {
     rows,

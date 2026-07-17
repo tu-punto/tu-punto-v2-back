@@ -53,12 +53,16 @@ export const getShippingList = async (req: Request, res: Response) => {
 
 export const getShippingDashboardList = async (req: Request, res: Response) => {
   try {
-    const auth = res.locals.auth as { role?: string; sucursalId?: string } | undefined;
+    const auth = res.locals.auth as { role?: string; sucursalId?: string; sellerId?: string } | undefined;
     const authRole = String(auth?.role || "").toLowerCase();
+    const isSellerRole = authRole === "seller";
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 30);
     const tab = (req.query.tab as string | undefined) || "todos";
-    const sellerId = (req.query.sellerId as string | undefined) || undefined;
+    const requestedSellerId = (req.query.sellerId as string | undefined) || undefined;
+    const sellerId = isSellerRole
+      ? String(auth?.sellerId || requestedSellerId || "").trim() || undefined
+      : requestedSellerId;
     const client = (req.query.client as string | undefined) || undefined;
     const guide = (req.query.guide as string | undefined) || undefined;
     const destinationMode = (req.query.destinationMode as "any" | "branch" | "other" | undefined) || "any";
@@ -72,7 +76,27 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
         ? String(req.query.currentBranchId || auth?.sucursalId || "").trim()
         : String(auth?.sucursalId || "").trim();
     const category = (req.query.category as "all" | "externos" | "paquetes" | undefined) || "all";
-    const ignoreBranchVisibility = authRole === "vendedor";
+    const ignoreBranchVisibility = isSellerRole;
+
+    if (isSellerRole || sellerId) {
+      console.log("[shipping-dashboard][controller][context]", {
+        authRole,
+        authSellerId: auth?.sellerId || "",
+        authSucursalId: auth?.sucursalId || "",
+        currentBranchId,
+        requestedSellerId: requestedSellerId || "",
+        sellerId,
+        tab,
+        category,
+        destinationMode,
+        destinationQuery: destinationQuery || "",
+        client: client || "",
+        guide: guide || "",
+        page,
+        limit,
+        ignoreBranchVisibility,
+      });
+    }
 
     const result = await ShippingService.getShippingDashboardList({
       page,
@@ -89,6 +113,17 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
       destinationMode,
       destinationQuery,
     });
+
+    if (isSellerRole || sellerId) {
+      console.log("[shipping-dashboard][controller][context][result]", {
+        authRole,
+        sellerId: sellerId || "",
+        ignoreBranchVisibility,
+        rows: Array.isArray(result?.rows) ? result.rows.length : 0,
+        total: result?.total || 0,
+        counts: result?.counts || {},
+      });
+    }
 
     res.json(result);
   } catch (error) {
