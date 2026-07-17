@@ -512,14 +512,17 @@ const attachSimplePackageFieldsToShippings = async (rows: any[]) => {
 };
 
 type ShippingDashboardTab = "todos" | "En Espera" | "para_enviar" | "en_camino" | "entregado";
+type ShippingDashboardCategory = "all" | "externos" | "paquetes";
 
 type ShippingDashboardParams = {
   page?: number;
   limit?: number;
   tab?: ShippingDashboardTab;
+  category?: ShippingDashboardCategory;
   from?: Date;
   to?: Date;
   currentBranchId?: string;
+  ignoreBranchVisibility?: boolean;
   sellerId?: string;
   client?: string;
   guide?: string;
@@ -543,6 +546,17 @@ const isInternalSaleLike = (row: any) => normalizeStatusValue(row?.estado_pedido
 
 const isSimplePackageLike = (row: any) =>
   Boolean(row?.simple_package_order || row?.simple_package_source_id || normalizeTextLower(row?.service_origin) === "simple_package");
+
+const matchesDashboardCategory = (
+  row: any,
+  source: "shipping" | "external",
+  category: ShippingDashboardCategory
+) => {
+  if (category === "all") return true;
+  const isPackage = isSimplePackageLike(row);
+  if (category === "paquetes") return isPackage;
+  return !isPackage;
+};
 
 const isRegularInternalOrderLike = (row: any) => !isInternalSaleLike(row) && !isSimplePackageLike(row);
 
@@ -763,6 +777,8 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   const safePage = Math.max(1, Number(params.page) || 1);
   const safeLimit = Math.min(100, Math.max(1, Number(params.limit) || 30));
   const currentBranchId = normalizeTextValue(params.currentBranchId);
+  const category = (params.category || "all") as ShippingDashboardCategory;
+  const ignoreBranchVisibility = Boolean(params.ignoreBranchVisibility);
   const now = moment().tz("America/La_Paz");
   const tab = (params.tab || "todos") as ShippingDashboardTab;
   const knownBranchNames = new Set(
@@ -791,7 +807,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     }
   }
 
-  if (currentBranchId && Types.ObjectId.isValid(currentBranchId)) {
+  if (!ignoreBranchVisibility && currentBranchId && Types.ObjectId.isValid(currentBranchId)) {
     const branchObjectId = new Types.ObjectId(currentBranchId);
     internalFilter.$and = [
       ...(internalFilter.$and || []),
@@ -849,7 +865,12 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     internalFilter.$and = [...(internalFilter.$and || []), { _id: { $in: [] } }];
   } else if (sellerId && Types.ObjectId.isValid(sellerId)) {
     const sellerObjectId = new Types.ObjectId(sellerId);
-    const pedidoIdsBySales = await VentaModel.find({ vendedor: sellerObjectId }).select("pedido").lean();
+    const pedidoIdsBySales = await VentaModel.find({
+      $or: [
+        { vendedor: sellerObjectId },
+        { id_vendedor: sellerObjectId },
+      ],
+    }).select("pedido").lean();
     const salesPedidoIds = pedidoIdsBySales.map((item: any) => item.pedido).filter(Boolean);
     internalFilter.$and = [
       ...(internalFilter.$and || []),
@@ -875,14 +896,16 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   ]);
 
   const classifiedInternal = internalRowsLight
+    .filter((row: any) => matchesDashboardCategory(row, "shipping", category))
     .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
     .map((row: any) => classifyDashboardRow(row, "shipping", currentBranchId, now));
   const classifiedExternal = externalRowsLight
+    .filter((row: any) => matchesDashboardCategory(row, "external", category))
     .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
     .map((row: any) => classifyDashboardRow(row, "external", currentBranchId, now));
 
   const allClassified = [...classifiedInternal, ...classifiedExternal]
-    .filter((row) => row.related)
+    .filter((row) => ignoreBranchVisibility || row.related)
     .sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
 
   const counts = {

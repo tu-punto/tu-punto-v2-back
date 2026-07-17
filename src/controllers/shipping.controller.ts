@@ -71,14 +71,18 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
       authRole === "admin" || authRole === "operator" || authRole === "superadmin"
         ? String(req.query.currentBranchId || auth?.sucursalId || "").trim()
         : String(auth?.sucursalId || "").trim();
+    const category = (req.query.category as "all" | "externos" | "paquetes" | undefined) || "all";
+    const ignoreBranchVisibility = authRole === "vendedor";
 
     const result = await ShippingService.getShippingDashboardList({
       page,
       limit,
       tab: tab as any,
+      category,
       from,
       to,
       currentBranchId,
+      ignoreBranchVisibility,
       sellerId,
       client,
       guide,
