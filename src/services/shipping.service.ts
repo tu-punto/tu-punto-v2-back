@@ -806,11 +806,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     $or: [
       { service_origin: { $exists: false } },
       { service_origin: "external" },
-      {
-        service_origin: "simple_package",
-        pedido_ref: { $exists: true, $ne: null },
-        numero_guia: { $exists: true, $nin: ["", null] },
-      },
     ],
   };
 
