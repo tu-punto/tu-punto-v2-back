@@ -367,15 +367,19 @@ const ensureGuides = (rows: any[]) => {
 
 const sendForRows = async (
   rows: any[],
-  options: { includeSeller?: boolean; buyerMode?: "auto" | "force" } = {}
+  options: { includeSeller?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
 ) => {
   const includeSeller = options.includeSeller !== false;
   const buyerMode = options.buyerMode || "auto";
+  const sellerRows = includeSeller
+    ? (Array.isArray(options.sellerRows) ? options.sellerRows : rows).filter(Boolean)
+    : [];
   logGuideWhatsapp("guide-whatsapp", "sendForRows:start", {
     rowsCount: rows.length,
     disabled: GUIDE_WHATSAPP_MESSAGES_DISABLED,
     orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
     includeSeller,
+    sellerRowsCount: sellerRows.length,
     buyerMode,
   });
   ensureGuides(rows);
@@ -387,11 +391,11 @@ const sendForRows = async (
       rowsCount: rows.length,
       reason: "Envios de WhatsApp deshabilitados por configuracion",
     });
-    if (includeSeller && rows.length) {
+    if (sellerRows.length) {
       attempts.push({
         type: "seller",
         template: toTrimmed(process.env.W_SELLER_PACKAGES_TEMPLATE_NAME) || DEFAULT_SELLER_TEMPLATE,
-        phone: rows[0]?.telefono_vendedor,
+        phone: sellerRows[0]?.telefono_vendedor,
         success: false,
         skipped: true,
         reason: "Envios de WhatsApp deshabilitados por configuracion",
@@ -411,8 +415,8 @@ const sendForRows = async (
       });
     }
   } else {
-    if (includeSeller && rows.length) {
-      const sellerAttempt = await sendSellerTemplate(rows);
+    if (sellerRows.length) {
+      const sellerAttempt = await sendSellerTemplate(sellerRows);
       attempts.push(sellerAttempt);
     }
 
@@ -451,13 +455,17 @@ const sendForRows = async (
   };
 };
 
-const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsapp") => {
+const sendForRowsBestEffort = async (
+  rows: any[],
+  context = "order-guide-whatsapp",
+  options: { includeSeller?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
+) => {
   try {
     logGuideWhatsapp(context, "bestEffort:start", {
       rowsCount: rows.length,
       orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
     });
-    const result = await sendForRows(rows);
+    const result = await sendForRows(rows, options);
     logGuideWhatsapp(context, "bestEffort:result", result as any);
     return result;
   } catch (error) {
@@ -483,7 +491,10 @@ const sendExternalGuideMessages = async (id: string) => {
 };
 
 const sendExternalRowsBestEffort = async (rows: any[]) =>
-  sendForRowsBestEffort(rows, "external-guide-whatsapp");
+  sendForRowsBestEffort(rows, "external-guide-whatsapp", {
+    includeSeller: true,
+    sellerRows: rows.filter((row: any) => !isSameBranchDelivery(row)),
+  });
 
 const sendSimplePackageGuideMessages = async (params: {
   packageIds: string[];
@@ -535,7 +546,11 @@ const sendSimplePackageGuideMessages = async (params: {
 };
 
 const sendPickupReadyMessage = async (row: any) => {
-  return sendForRows([row], { includeSeller: false, buyerMode: "force" });
+  return sendForRows([row], {
+    includeSeller: isSameBranchDelivery(row),
+    sellerRows: isSameBranchDelivery(row) ? [row] : [],
+    buyerMode: "force",
+  });
 };
 
 export const OrderGuideWhatsappService = {
