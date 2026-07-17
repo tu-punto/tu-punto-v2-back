@@ -18,8 +18,10 @@ import { NotificationService } from "./notification.service";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
+import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
+import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -92,6 +94,63 @@ const normalizeTextValue = (value: unknown): string => String(value ?? "").trim(
 const normalizeBranchName = (value: unknown): string =>
   normalizeTextValue(value).toLowerCase().replace(/\s+/g, " ");
 
+type DeliveryCutoffDayGroup = "weekdays" | "saturday" | "sunday";
+
+const getDeliveryCutoffDayGroup = (date: moment.Moment): DeliveryCutoffDayGroup => {
+  const day = date.day();
+  if (day >= 1 && day <= 5) return "weekdays";
+  if (day === 6) return "saturday";
+  return "sunday";
+};
+
+const parseDeliveryTime = (value?: string | null) => {
+  const [hoursRaw, minutesRaw] = String(value || "").split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+
+  return {
+    hours: Number.isFinite(hours) ? hours : 0,
+    minutes: Number.isFinite(minutes) ? minutes : 0,
+  };
+};
+
+const buildMomentFromTime = (base: moment.Moment, value?: string | null) => {
+  const { hours, minutes } = parseDeliveryTime(value);
+  return base
+    .clone()
+    .hour(hours)
+    .minute(minutes)
+    .second(0)
+    .millisecond(0);
+};
+
+const getBranchDeliveryCutoffConfig = (branch: any, date: moment.Moment) => {
+  const dayGroup = getDeliveryCutoffDayGroup(date);
+  const legacyRegistration = String(branch?.delivery_cutoff_start_time || branch?.delivery_cutoff_time || "").trim();
+  const legacyClosing = String(branch?.delivery_cutoff_end_time || branch?.delivery_cutoff_time || "").trim();
+
+  const configByGroup: Record<DeliveryCutoffDayGroup, { registrationTime: string; closingTime: string }> = {
+    weekdays: {
+      registrationTime: String(branch?.delivery_cutoff_weekdays_registration_time || legacyRegistration || "").trim(),
+      closingTime: String(branch?.delivery_cutoff_weekdays_closing_time || legacyClosing || "").trim(),
+    },
+    saturday: {
+      registrationTime: String(branch?.delivery_cutoff_saturday_registration_time || legacyRegistration || "").trim(),
+      closingTime: String(branch?.delivery_cutoff_saturday_closing_time || legacyClosing || "").trim(),
+    },
+    sunday: {
+      registrationTime: String(branch?.delivery_cutoff_sunday_registration_time || legacyRegistration || "").trim(),
+      closingTime: String(branch?.delivery_cutoff_sunday_closing_time || legacyClosing || "").trim(),
+    },
+  };
+
+  return {
+    enabled: Boolean(branch?.delivery_cutoff_enabled),
+    dayGroup,
+    ...configByGroup[dayGroup],
+  };
+};
+
 const resolveBranchId = (value: any): string => {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -104,6 +163,58 @@ const resolveBranchId = (value: any): string => {
 const buildGoogleMapsSearchUrl = (query: string): string => {
   if (!query) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+};
+
+const isDeliveryLikeShipping = (shipping: any) =>
+  String(shipping?.tipo_destino || "").trim().toLowerCase() === "otro_lugar" ||
+  (String(shipping?.tipo_destino || "").trim().toLowerCase() !== "sucursal" &&
+  Boolean(
+    shipping?.costo_delivery ||
+      shipping?.cargo_delivery ||
+      shipping?.quien_paga_delivery ||
+      shipping?.delivery_spaces
+  ));
+
+const validateDeliveryCutoff = async (shipping: any) => {
+  if (!isDeliveryLikeShipping(shipping)) return;
+
+  const branchId = resolveBranchId(shipping?.lugar_origen) || resolveBranchId(shipping?.sucursal);
+  if (!branchId || !Types.ObjectId.isValid(branchId)) return;
+
+  const branch = await SucursalModel.findById(branchId)
+    .select(
+      "nombre delivery_cutoff_enabled delivery_cutoff_weekdays_registration_time delivery_cutoff_weekdays_closing_time delivery_cutoff_saturday_registration_time delivery_cutoff_saturday_closing_time delivery_cutoff_sunday_registration_time delivery_cutoff_sunday_closing_time delivery_cutoff_start_time delivery_cutoff_end_time delivery_cutoff_time"
+    )
+    .lean();
+
+  if (!branch?.delivery_cutoff_enabled) return;
+  const now = moment().tz("America/La_Paz");
+
+  const scheduledDelivery = shipping?.hora_entrega_acordada
+    ? moment.tz(shipping.hora_entrega_acordada, "America/La_Paz")
+    : null;
+  const deliveryDate = scheduledDelivery?.isValid() ? scheduledDelivery : now;
+  const cutoff = getBranchDeliveryCutoffConfig(branch, deliveryDate);
+  if (!cutoff.registrationTime && !cutoff.closingTime) return;
+
+  const registrationLimit = buildMomentFromTime(deliveryDate, cutoff.registrationTime || cutoff.closingTime || "00:00");
+  const closingLimit = buildMomentFromTime(deliveryDate, cutoff.closingTime || cutoff.registrationTime || "00:00");
+  const selectedDateIsToday = deliveryDate.format("YYYY-MM-DD") === now.format("YYYY-MM-DD");
+
+  if (selectedDateIsToday && now.isAfter(registrationLimit)) {
+    throw new Error(
+      `La sucursal ${String(branch.nombre || branchId)} ya cerró el registro para hoy. Solo permite programar entregas para fechas futuras.`
+    );
+  }
+
+  if (
+    scheduledDelivery?.isValid() &&
+    scheduledDelivery.isAfter(closingLimit)
+  ) {
+    throw new Error(
+      `La entrega programada no puede superar la hora de cierre operativo (${closingLimit.format("HH:mm")}) de la sucursal ${String(branch.nombre || branchId)}.`
+    );
+  }
 };
 
 const normalizeDestinationType = (value: unknown): "sucursal" | "otro_lugar" =>
@@ -488,6 +599,7 @@ const registerShipping = async (shipping: any) => {
 
   normalizeOrderPaymentData(shipping);
   await normalizeShippingBranches(shipping);
+  await validateDeliveryCutoff(shipping);
   if (shipping?.simple_package_order === true) {
     await OrderGuideService.assignOrderGuide(shipping);
   }
@@ -575,9 +687,14 @@ const resolveShippingByCodeOrId = async (codeOrId: string) => {
   return null;
 };
 
+const READY_FOR_PICKUP_STATUS = "LISTO PARA RECOGER";
+const SEND_TO_BRANCH_STATUS = "PARA ENVIAR A OTRA SUCURSAL";
+
 const allowedShippingTransitions: Record<string, string[]> = {
-  "En Espera": ["En camino", "Entregado", "No entregado", "Cancelado"],
-  "En camino": ["Entregado", "No entregado", "Cancelado"],
+  "En Espera": ["En camino", READY_FOR_PICKUP_STATUS, "Entregado", "No entregado", "Cancelado"],
+  [READY_FOR_PICKUP_STATUS]: ["Entregado", "Cancelado"],
+  [SEND_TO_BRANCH_STATUS]: ["En camino", "Cancelado"],
+  "En camino": [READY_FOR_PICKUP_STATUS, "Entregado", "No entregado", "Cancelado"],
   "No entregado": ["En camino", "Cancelado"],
   "Cancelado": [],
   "Entregado": []
@@ -685,6 +802,7 @@ const updateShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  assertEditableIfNotDeliveredOlderThanFiveDays(shipping as any);
   if (
     (shipping as any)?.origen_pedido === "catalogo" &&
     ["Rechazado", "Cancelado", "No entregado"].includes(String(newData?.estado_pedido || ""))
@@ -844,6 +962,15 @@ const updateShipping = async (
     );
   }
 
+  if (resShip && toStatus === READY_FOR_PICKUP_STATUS && toStatus !== fromStatus) {
+    void OrderGuideWhatsappService.sendPickupReadyMessage(resShip).catch((error) => {
+      console.error("[shipping-service] pickup-whatsapp:error", {
+        shippingId,
+        error: error?.message || String(error),
+      });
+    });
+  }
+
   const simplePackageSourceId = String(
     (resShip as any)?.simple_package_source_id ||
     (shipping as any)?.simple_package_source_id ||
@@ -851,13 +978,18 @@ const updateShipping = async (
   ).trim();
 
   if (resShip && simplePackageSourceId) {
+    const nextStatus = String((resShip as any).estado_pedido || "").trim();
     const simplePackageUpdatePayload = {
       estado_pedido: (resShip as any).estado_pedido,
-      delivered: String((resShip as any).estado_pedido || "").trim() === "Entregado",
-      seller_balance_applied: String((resShip as any).estado_pedido || "").trim() === "Entregado",
+      delivered: nextStatus === "Entregado",
+      seller_balance_applied: nextStatus === "Entregado",
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
       hora_entrega_real: (resShip as any).hora_entrega_real,
+      public_tracking_ready_for_pickup_at:
+        nextStatus === READY_FOR_PICKUP_STATUS
+          ? (resShip as any).public_tracking_ready_for_pickup_at || moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss")
+          : (resShip as any).public_tracking_ready_for_pickup_at,
       retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
       seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
@@ -934,6 +1066,7 @@ const addTemporaryProductsToShipping = async (
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
+  assertEditableIfNotDeliveredOlderThanFiveDays(shipping as any);
 
   await PedidoModel.findByIdAndUpdate(shippingId, {
     $set: {
@@ -945,6 +1078,7 @@ const addTemporaryProductsToShipping = async (
 const deleteShippingById = async (id: string) => {
   const pedido = await PedidoModel.findById(id);
   if (!pedido) throw new Error("Pedido no encontrado");
+  assertEditableIfNotDeliveredOlderThanFiveDays(pedido as any);
 
   if (pedido.venta && pedido.venta.length > 0) {
     for (const ventaId of pedido.venta) {
@@ -1409,6 +1543,12 @@ const transitionShippingStatusByQR = async (params: {
   const updateData: Record<string, unknown> = {
     estado_pedido: toStatus
   };
+
+  if (toStatus === READY_FOR_PICKUP_STATUS) {
+    updateData.public_tracking_ready_for_pickup_at = moment()
+      .tz("America/La_Paz")
+      .format("YYYY-MM-DD HH:mm:ss");
+  }
 
   if (toStatus === "Entregado") {
     updateData.hora_entrega_real = moment()

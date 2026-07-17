@@ -17,6 +17,62 @@ export const SucursalSchema = new Schema({
     type: Number,
     required: true
   },
+  pickup_schedule_weekdays_open_time: {
+    type: String,
+    default: ""
+  },
+  pickup_schedule_weekdays_close_time: {
+    type: String,
+    default: ""
+  },
+  pickup_schedule_saturday_open_time: {
+    type: String,
+    default: ""
+  },
+  pickup_schedule_saturday_close_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_enabled: {
+    type: Boolean,
+    default: false
+  },
+  delivery_cutoff_weekdays_registration_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_weekdays_closing_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_saturday_registration_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_saturday_closing_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_sunday_registration_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_sunday_closing_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_start_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_end_time: {
+    type: String,
+    default: ""
+  },
+  delivery_cutoff_time: {
+    type: String,
+    default: ""
+  },
   imagen_header: {
     type: String,
     default: ""

@@ -38,6 +38,8 @@ export interface ICierreCaja {
     id_vendedor?: Types.ObjectId;
     id_sucursal?: Types.ObjectId;
     finance_flux_id?: Types.ObjectId;
+    source_key?: string;
+    auto_generated?: boolean;
   }[];
 
   id_sucursal: Types.ObjectId;

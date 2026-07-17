@@ -180,6 +180,19 @@ export const registerSeller = async (req: Request, res: Response) => {
 
 export const updateSeller = async (req: Request, res: Response) => {
   try {
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const incomingData = req.body?.newData || {};
+
+    if (
+      authRole === "seller" &&
+      Object.prototype.hasOwnProperty.call(incomingData, "pago_sucursales")
+    ) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No autorizado para editar sucursales",
+      });
+    }
+
     const id = req.params.id;
     const updated = await SellerService.updateSeller(id, req.body); // sin flux
     res.json({ ok: true, updated });
@@ -270,7 +283,18 @@ export const requestSellerPayment = async (req: Request, res: Response) => {
 export const declineSellerService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const seller = await SellerService.declineSellerService(id);
+    const authRole = String(res.locals.auth?.role || "").toLowerCase();
+    const body = req.body || {};
+    const seller = await SellerService.declineSellerService(id, {
+      ignoreDeadline: authRole === "admin" || authRole === "operator" || authRole === "superadmin",
+      origin: authRole === "seller" ? "seller" : "admin",
+      reason: String(body?.reason || body?.motivo || "").trim() || undefined,
+      motivo_principal: String(body?.motivo_principal || "").trim() || undefined,
+      motivo_principal_otro: String(body?.motivo_principal_otro || "").trim() || undefined,
+      probabilidad_retorno: String(body?.probabilidad_retorno || "").trim() || undefined,
+      omitir_motivo_principal: body?.omitir_motivo_principal === true,
+      omitir_probabilidad_retorno: body?.omitir_probabilidad_retorno === true,
+    });
     res.json({
       ok: true,
       msg: "Declinacion del servicio registrada correctamente",

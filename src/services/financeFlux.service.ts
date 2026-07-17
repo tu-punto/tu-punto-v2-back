@@ -13,6 +13,9 @@ import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import moment from "moment-timezone";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
+import { uploadFileToAws } from "./bucket.service";
+import { awsFolderNames } from "../config/bucketConfig";
+import { IN_TRANSIT_STATUS, READY_FOR_PICKUP_STATUS } from "../utils/branchTransferStatus";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -25,6 +28,11 @@ type CommissionRange = {
   from?: string;
   to?: string;
   sucursalIds?: string[];
+  months?: string[];
+  expenseCategories?: string[];
+  includeCommissions?: boolean;
+  includeDeliveries?: boolean;
+  deliveryMode?: "real" | "potential";
 };
 
 const normalizeSucursalIds = (sucursalIds?: string[]) =>
@@ -37,6 +45,64 @@ const normalizeSucursalIds = (sucursalIds?: string[]) =>
   );
 
 const normalizeId = (value: any) => String(value?._id || value || "").trim();
+
+const normalizeText = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+const toMonthKey = (value: unknown) => {
+  const date = value ? new Date(value as any) : null;
+  return date && !Number.isNaN(date.getTime()) ? moment(date).format("YYYY-MM") : "";
+};
+
+const normalizeStringList = (values?: string[]) =>
+  Array.from(new Set((values || []).map((item) => String(item || "").trim()).filter(Boolean)));
+
+const toBoolean = (value: unknown, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["true", "1", "si", "sí", "yes"].includes(normalizeText(value));
+};
+
+const matchesMonths = (dateValue: unknown, months?: string[]) => {
+  const normalizedMonths = normalizeStringList(months);
+  if (!normalizedMonths.length) return true;
+  const monthKey = toMonthKey(dateValue);
+  return monthKey ? normalizedMonths.includes(monthKey) : false;
+};
+
+const getDeliveryAmount = (shipping: any, mode: "real" | "potential") => {
+  const packagePrice = Number(shipping?.precio_paquete || 0);
+  const branchRoutePrice = Number(shipping?.precio_entre_sucursal ?? shipping?.cargo_delivery ?? 0);
+  const total = Number(shipping?.precio_total || packagePrice + branchRoutePrice);
+  return mode === "potential" ? total : (Number(shipping?.cargo_delivery || 0) + Number(shipping?.monto_paga_comprador || 0) + Number(shipping?.monto_paga_vendedor || 0));
+};
+
+const getShippingBranchIds = (shipping: any) => {
+  const originId = normalizeId(shipping?.lugar_origen);
+  const destinationId = normalizeId(shipping?.destino_sucursal || shipping?.sucursal);
+
+  return { originId, destinationId };
+};
+
+const shouldCountDeliveryExpenseForBranch = (shipping: any, sucursalIds?: string[]) => {
+  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
+  if (!normalizedSucursalIds.length) return true;
+
+  const { originId, destinationId } = getShippingBranchIds(shipping);
+  if (!originId || !destinationId || originId === destinationId) return true;
+
+  const currentStatus = normalizeText(shipping?.estado_pedido);
+  const isOriginBranchSelected = normalizedSucursalIds.includes(originId);
+  const isDestinationBranchSelected = normalizedSucursalIds.includes(destinationId);
+
+  if (isOriginBranchSelected && currentStatus === IN_TRANSIT_STATUS.toLowerCase()) {
+    return true;
+  }
+
+  if (isDestinationBranchSelected && currentStatus === READY_FOR_PICKUP_STATUS.toLowerCase()) {
+    return true;
+  }
+
+  return false;
+};
 
 const getFluxAmountForSucursales = (flux: any, sucursalIds?: string[]) => {
   const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
@@ -79,6 +145,26 @@ const projectFluxesForSucursales = (fluxes: any[], sucursalIds?: string[]) => {
 const toNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const sanitizeFileName = (value: string) =>
+  String(value || "archivo")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(-100);
+
+const buildAttachmentPayload = async (file?: Express.Multer.File) => {
+  if (!file) return {};
+
+  const safeName = sanitizeFileName(file.originalname || "comprobante");
+  const key = `${awsFolderNames.comprobantes}/finance-flux/${Date.now()}-${safeName}`;
+  const url = await uploadFileToAws(file.buffer, key, file.mimetype || "application/octet-stream");
+
+  return {
+    attachment_url: url,
+    attachment_key: key,
+    attachment_name: file.originalname || safeName,
+    attachment_type: file.mimetype || "application/octet-stream",
+  };
 };
 
 const normalizeServiceDetailUpdates = (detalleServicios: any[] = []) => {
@@ -157,20 +243,28 @@ const getDailyServiceIncomeByDateAndSucursal = async (
 
 const getDebts = async () => await FinanceFluxRepository.findAllDebts();
 
-const registerFinanceFlux = async (flux: IFlujoFinanciero) => {
-  let montoFinal = flux.monto;
+const registerFinanceFlux = async (flux: IFlujoFinanciero, file?: Express.Multer.File) => {
+  let montoFinal = toNumber(flux.monto);
+  const normalizedFlux = {
+    ...flux,
+    monto: montoFinal,
+    esDeuda: toBoolean((flux as any).esDeuda),
+  };
 
-  if (flux.tipo === "INGRESO" && flux.id_vendedor) {
-    const vendedor = await SellerRepository.findById(flux.id_vendedor);
+  if (normalizedFlux.tipo === "INGRESO" && normalizedFlux.id_vendedor) {
+    const vendedor = await SellerRepository.findById(normalizedFlux.id_vendedor);
     if (vendedor && vendedor.comision_porcentual) {
-      const extra = flux.monto * (vendedor.comision_porcentual / 100);
+      const extra = montoFinal * (vendedor.comision_porcentual / 100);
       montoFinal += extra;
     }
   }
 
+  const attachment = await buildAttachmentPayload(file);
+
   await FinanceFluxRepository.registerFinanceFlux({
-    ...flux,
+    ...normalizedFlux,
     monto: montoFinal,
+    ...attachment,
   });
 };
 
@@ -225,7 +319,8 @@ const getStatsService = async () => {
 
 const updateFinanceFlux = async (
   fluxId: string,
-  updates: Partial<IFlujoFinanciero>
+  updates: Partial<IFlujoFinanciero>,
+  file?: Express.Multer.File
 ) => {
   const _id = new Types.ObjectId(fluxId);
 
@@ -233,7 +328,11 @@ const updateFinanceFlux = async (
   if (!existingFlux) throw new Error("Flujo no encontrado");
 
   const oldDeuda = existingFlux.esDeuda ? existingFlux.monto : 0;
-  const payload: Partial<IFlujoFinanciero> = { ...updates };
+  const payload: Partial<IFlujoFinanciero> = {
+    ...updates,
+    ...(Object.prototype.hasOwnProperty.call(updates, "esDeuda") ? { esDeuda: toBoolean((updates as any).esDeuda) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(updates, "monto") ? { monto: toNumber((updates as any).monto) } : {}),
+  };
 
   if (Array.isArray((updates as any).detalle_servicios)) {
     const { detail, total } = normalizeServiceDetailUpdates(
@@ -243,7 +342,11 @@ const updateFinanceFlux = async (
     payload.monto = total;
   }
 
-  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, payload);
+  const attachment = await buildAttachmentPayload(file);
+  const updatedFlux = await FinanceFluxRepository.updateById(fluxId, {
+    ...payload,
+    ...attachment,
+  });
   if (!updatedFlux) throw new Error("Error al actualizar el flujo");
 
   const newDeuda = updatedFlux.esDeuda ? updatedFlux.monto : 0;
@@ -362,8 +465,13 @@ const getMerchandiseSoldTotal = async (opts: CommissionRange) => {
   return { mercaderiaVendida: calculateSoldMerchandiseValue(sales) };
 };
 
-const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucursalIds?: string[]) => {
-  const normalizedSucursalIds = normalizeSucursalIds(sucursalIds);
+const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, opts: CommissionRange = {}) => {
+  const normalizedSucursalIds = normalizeSucursalIds(opts.sucursalIds);
+  const selectedMonths = normalizeStringList(opts.months);
+  const selectedExpenseCategories = normalizeStringList(opts.expenseCategories).map(normalizeText);
+  const includeCommissions = toBoolean(opts.includeCommissions, true);
+  const includeDeliveries = toBoolean(opts.includeDeliveries, true);
+  const deliveryMode: "real" | "potential" = opts.deliveryMode === "potential" ? "potential" : "real";
   const [
     fluxes,
     shippings,
@@ -387,7 +495,15 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   let simplePackagesNoDeliveryTotal = 0;
   let simplePackagesInterbranchTotal = 0;
 
-  for (const f of fluxes) {
+  const filteredFluxes = (fluxes || []).filter((f: any) => {
+    if (!matchesMonths(f.fecha, selectedMonths)) return false;
+    if (f.tipo === "GASTO" && selectedExpenseCategories.length > 0) {
+      return selectedExpenseCategories.includes(normalizeText(f.categoria));
+    }
+    return true;
+  });
+
+  for (const f of filteredFluxes) {
     const monto = getFluxAmountForSucursales(f, normalizedSucursalIds);
     if (f.tipo === "INGRESO") ingresosFluxes += monto;
     else if (f.tipo === "GASTO") gastos += monto;
@@ -395,32 +511,39 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
   }
 
   for (const s of shippings) {
-    montoCobradoDelivery += s.cargo_delivery || 0;
-    costoDelivery += s.costo_delivery || 0;
-
-    if (!isCompletedSimplePackageShipping(s)) continue;
-
+    if (!matchesMonths((s as any)?.fecha_pedido, selectedMonths)) continue;
+    const realDeliveryAmount = Number(s.cargo_delivery || 0);
+    const realDeliveryExpense = Number(s.costo_delivery || 0);
     const packagePrice = Number((s as any)?.precio_paquete || 0);
-    const branchShippingPrice = Number(
-      (s as any)?.precio_entre_sucursal ?? s.cargo_delivery ?? 0
-    );
+    const branchShippingPrice = Number((s as any)?.precio_entre_sucursal ?? s.cargo_delivery ?? 0);
+    const deliveryAmount = deliveryMode === "potential"
+      ? Number((s as any)?.precio_total || packagePrice + branchShippingPrice)
+      : realDeliveryAmount;
 
-    if (branchShippingPrice > 0) {
-      simplePackagesInterbranchTotal += packagePrice + branchShippingPrice;
-    } else {
-      simplePackagesNoDeliveryTotal += packagePrice;
+    if (includeDeliveries) {
+      montoCobradoDelivery += deliveryMode === "potential" ? deliveryAmount : realDeliveryAmount;
+      if (shouldCountDeliveryExpenseForBranch(s, normalizedSucursalIds)) {
+        costoDelivery += realDeliveryExpense;
+      }
+
+      if (branchShippingPrice > 0) {
+        simplePackagesInterbranchTotal += deliveryAmount || packagePrice + branchShippingPrice;
+      } else {
+        simplePackagesNoDeliveryTotal += deliveryMode === "potential" ? packagePrice : (isCompletedSimplePackageShipping(s) ? packagePrice : 0);
+      }
     }
   }
   const balanceDelivery = montoCobradoDelivery - costoDelivery;
 
   for (const v of sales) {
+    if (!matchesMonths((v as any)?.createdAt || (v as any)?.fecha || (v as any)?.id_pedido?.fecha_pedido, selectedMonths)) continue;
+    if (!includeCommissions) continue;
     comision += await calculateSaleCommission(v);
   }
 
   // Suma ingresos por entregas externas
   for (const e of externalSales) {
-    if (!isCompletedExternalSale(e)) continue;
-
+    if (!matchesMonths((e as any)?.fecha_pedido, selectedMonths)) continue;
     const subtotalQr = Number((e as any)?.subtotal_qr || 0);
     const subtotalEfectivo = Number((e as any)?.subtotal_efectivo || 0);
     const buyerIncome =
@@ -428,9 +551,14 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
         ? subtotalQr + subtotalEfectivo
         : Number((e as any)?.deuda_comprador ?? (e as any)?.monto_paga_comprador ?? (e as any)?.saldo_cobrar ?? 0);
     const sellerIncome = Number((e as any)?.monto_paga_vendedor || 0);
+    const deliveryValue = deliveryMode === "potential"
+      ? Number((e as any)?.precio_total || (e as any)?.precio_paquete || 0)
+      : (isCompletedExternalSale(e) ? Number((e as any)?.precio_paquete || 0) : 0);
 
-    ingresosEntregasExternas += buyerIncome + sellerIncome;
-    externalDeliveredPackageTotal += Number(e.precio_paquete || 0);
+    if (includeDeliveries) {
+      ingresosEntregasExternas += buyerIncome + sellerIncome;
+      externalDeliveredPackageTotal += deliveryValue;
+    }
   }
 
   const mercaderiaVendida = calculateSoldMerchandiseValue(sales);
@@ -458,13 +586,18 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, sucur
     simplePackagesInterbranchTotal,
     balanceDelivery,
     utilidad,
-    caja
+    caja,
+    monthlyPaymentsIncome: ingresosFluxes,
+    commissionIncome: comision,
+    deliveryPackagesIncome: externalDeliveredPackageTotal + simplePackagesNoDeliveryTotal + simplePackagesInterbranchTotal,
+    historicalIncome: ingresosFluxes + comision + ingresosEntregasExternas,
+    historicalExpenses: gastos,
   };
 };
 
 const getFinancialSummary = async (opts: CommissionRange = {}) => {
   const { fromDate, toDate } = parseRangeToDates(opts);
-  return await getFinancialSummaryForDates(fromDate, toDate, opts.sucursalIds);
+  return await getFinancialSummaryForDates(fromDate, toDate, opts);
 };
 
 const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
@@ -482,13 +615,13 @@ const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
     last365Summary,
     customSummary
   ] = await Promise.all([
-    getFinancialSummaryForDates(undefined, undefined, opts.sucursalIds),
-    getFinancialSummaryForDates(last7.fromDate, last7.toDate, opts.sucursalIds),
-    getFinancialSummaryForDates(last30.fromDate, last30.toDate, opts.sucursalIds),
-    getFinancialSummaryForDates(last90.fromDate, last90.toDate, opts.sucursalIds),
-    getFinancialSummaryForDates(last365.fromDate, last365.toDate, opts.sucursalIds),
+    getFinancialSummaryForDates(undefined, undefined, opts),
+    getFinancialSummaryForDates(last7.fromDate, last7.toDate, opts),
+    getFinancialSummaryForDates(last30.fromDate, last30.toDate, opts),
+    getFinancialSummaryForDates(last90.fromDate, last90.toDate, opts),
+    getFinancialSummaryForDates(last365.fromDate, last365.toDate, opts),
     custom.fromDate || custom.toDate
-      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate, opts.sucursalIds)
+      ? getFinancialSummaryForDates(custom.fromDate, custom.toDate, opts)
       : Promise.resolve(null)
   ]);
 

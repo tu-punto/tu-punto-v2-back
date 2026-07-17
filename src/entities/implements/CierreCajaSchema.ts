@@ -52,6 +52,8 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
       id_vendedor: { type: Schema.Types.ObjectId, ref: "Vendedor" },
       id_sucursal: { type: Schema.Types.ObjectId, ref: "Sucursal" },
       finance_flux_id: { type: Schema.Types.ObjectId, ref: "FlujoFinanciero" },
+      source_key: { type: String },
+      auto_generated: { type: Boolean, default: false },
     }
   ],
 

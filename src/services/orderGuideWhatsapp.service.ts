@@ -1,8 +1,9 @@
 import { IVentaExterna } from "../entities/IVentaExterna";
 import { ExternalSaleRepository } from "../repositories/external.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
+import { SucursalRepository } from "../repositories/sucursal.repository";
 import { sendTemplateMessage } from "../api/whatsapp/whatsapp";
-import { getEstimatedBranchPickupDateLabel } from "../utils/latePickupFee";
+import { READY_FOR_PICKUP_STATUS } from "../utils/branchTransferStatus";
 
 type SendAttempt = {
   type: "seller" | "buyer";
@@ -17,10 +18,15 @@ type SendAttempt = {
   response?: any;
 };
 
-const DEFAULT_BUYER_SAME_BRANCH_TEMPLATE = "pedido_recojo_sucursal";
-const DEFAULT_BUYER_TRANSFER_TEMPLATE = "pedido_listo_traslado";
+const DEFAULT_BUYER_PICKUP_TEMPLATE = "recojo_de_sucursal";
 const DEFAULT_SELLER_TEMPLATE = "paquetes_entregados_sucursal";
 const GUIDE_WHATSAPP_MESSAGES_DISABLED = process.env.W_DISABLE_GUIDE_WHATSAPP_MESSAGES !== undefined;
+
+const logGuideWhatsapp = (context: string, event: string, payload?: Record<string, any>) => {
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[${context}] ${event}`, payload || {});
+  }
+};
 
 const BRANCH_LOCATION_LINKS = [
   {
@@ -98,13 +104,6 @@ const isSameBranchDelivery = (row: any) => {
 
 const getGuide = (row: any) => toTrimmed(row?.numero_guia);
 
-const getBranchLocationLink = (branchName: string) => {
-  const normalized = normalizeName(branchName);
-  return BRANCH_LOCATION_LINKS.find((entry) =>
-    entry.matches.some((match) => normalized.includes(normalizeName(match)))
-  )?.url || "";
-};
-
 const getBranchLocationButtonValue = (branchName: string) => {
   const normalized = normalizeName(branchName);
   const matchedValue = BRANCH_LOCATION_LINKS.find((entry) =>
@@ -116,6 +115,60 @@ const getBranchLocationButtonValue = (branchName: string) => {
   return toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_BUTTON_VALUE) || BRANCH_LOCATION_LINKS[0].buttonValue;
 };
 
+const getBranchPickupSchedule = (branch: any) => {
+  const legacyWeekdaysOpen = toTrimmed(branch?.delivery_cutoff_weekdays_registration_time);
+  const legacyWeekdaysClose = toTrimmed(branch?.delivery_cutoff_weekdays_closing_time);
+  const legacySaturdayOpen = toTrimmed(branch?.delivery_cutoff_saturday_registration_time);
+  const legacySaturdayClose = toTrimmed(branch?.delivery_cutoff_saturday_closing_time);
+
+  return {
+    weekdaysOpen: toTrimmed(branch?.pickup_schedule_weekdays_open_time) || legacyWeekdaysOpen,
+    weekdaysClose: toTrimmed(branch?.pickup_schedule_weekdays_close_time) || legacyWeekdaysClose,
+    saturdayOpen: toTrimmed(branch?.pickup_schedule_saturday_open_time) || legacySaturdayOpen,
+    saturdayClose: toTrimmed(branch?.pickup_schedule_saturday_close_time) || legacySaturdayClose,
+  };
+};
+
+const formatPickupHours = (openTime: string, closeTime: string) => {
+  if (!openTime && !closeTime) return "No definido";
+  if (!openTime) return closeTime;
+  if (!closeTime) return openTime;
+  return `${openTime} - ${closeTime}`;
+};
+
+const resolvePickupBranch = async (row: any) => {
+  const branchId =
+    getBranchId(row?.destino_sucursal) ||
+    getBranchId(row?.sucursal) ||
+    getBranchId(row?.origen_sucursal);
+
+  if (branchId) {
+    try {
+      const branch = await SucursalRepository.getSucursalByID(branchId);
+      if (branch) return branch as any;
+    } catch (error) {
+      logGuideWhatsapp("guide-whatsapp", "branch-resolve:error", {
+        branchId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return row?.destino_sucursal || row?.sucursal || row?.origen_sucursal || {};
+};
+
+const buildBuyerBodyData = async (row: any) => {
+  const branch = await resolvePickupBranch(row);
+  const destinationName = getBranchName(branch, getDestinationName(row));
+  const schedule = getBranchPickupSchedule(branch);
+
+  return {
+    destinationName,
+    weekdaysHours: formatPickupHours(schedule.weekdaysOpen, schedule.weekdaysClose),
+    saturdayHours: formatPickupHours(schedule.saturdayOpen, schedule.saturdayClose),
+  };
+};
+
 const compactGuideList = (rows: any[]) =>
   rows
     .map((row, index) => `${index + 1}. ${getGuide(row)}`)
@@ -125,15 +178,25 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
   const phone = normalizeWhatsAppPhone(row?.telefono_comprador);
   const guide = getGuide(row);
   const buyerName = toTrimmed(row?.comprador) || "cliente";
-  const destinationName = getDestinationName(row);
-  const locationButtonValue = getBranchLocationButtonValue(destinationName);
-  const sameBranch = isSameBranchDelivery(row);
-  const templateName = sameBranch
-    ? toTrimmed(process.env.W_BUYER_SAME_BRANCH_TEMPLATE_NAME) || DEFAULT_BUYER_SAME_BRANCH_TEMPLATE
-    : toTrimmed(process.env.W_BUYER_TRANSFER_TEMPLATE_NAME) || DEFAULT_BUYER_TRANSFER_TEMPLATE;
+  const templateName = toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE;
   const languageCode = toTrimmed(process.env.W_GUIDE_TEMPLATE_LANGUAGE) || "es";
+  const bodyData = await buildBuyerBodyData(row);
+  const locationButtonValue = getBranchLocationButtonValue(bodyData.destinationName);
+
+  logGuideWhatsapp("guide-whatsapp", "buyer-template:prepare", {
+    orderId: String(row?._id || ""),
+    guide,
+    phone,
+    templateName,
+    destinationName: bodyData.destinationName,
+  });
 
   if (!phone) {
+    logGuideWhatsapp("guide-whatsapp", "buyer-template:skip", {
+      orderId: String(row?._id || ""),
+      guide,
+      reason: "Telefono del comprador no registrado",
+    });
     return {
       type: "buyer",
       template: templateName,
@@ -147,21 +210,36 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
   }
 
   try {
-    const bodyParameters = sameBranch
-      ? [templateParam(buyerName), templateParam(destinationName), templateParam(guide)]
-      : [
-          templateParam(buyerName),
-          templateParam(getOriginName(row)),
-          templateParam(destinationName),
-          templateParam(guide),
-          templateParam(getEstimatedBranchPickupDateLabel(row?.fecha_pedido)),
-        ];
+    const bodyParameters = [
+      templateParam(buyerName),
+      templateParam(bodyData.destinationName),
+      templateParam(bodyData.weekdaysHours),
+      templateParam(bodyData.saturdayHours),
+      templateParam(guide),
+    ];
     const response = await sendTemplateMessage({
       phone,
       templateName,
       languageCode,
-      bodyParameters,
-      buttonUrlParameters: locationButtonValue ? [templateParam(locationButtonValue)] : undefined,
+      components: [
+        { type: "body", parameters: bodyParameters },
+        ...(locationButtonValue
+          ? [{ type: "button" as const, sub_type: "url" as const, index: "0", parameters: [templateParam(locationButtonValue)] }]
+          : []),
+        ...(guide
+          ? [{ type: "button" as const, sub_type: "url" as const, index: "1", parameters: [templateParam(guide)] }]
+          : []),
+      ],
+    });
+
+    logGuideWhatsapp("guide-whatsapp", "buyer-template:result", {
+      orderId: String(row?._id || ""),
+      guide,
+      phone,
+      templateName,
+      success: response.success,
+      status: response.status,
+      response: response.data,
     });
 
     return {
@@ -176,6 +254,13 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
       reason: response.success ? undefined : "WhatsApp API rechazo el mensaje",
     };
   } catch (error: any) {
+    logGuideWhatsapp("guide-whatsapp", "buyer-template:error", {
+      orderId: String(row?._id || ""),
+      guide,
+      phone,
+      templateName,
+      error: error?.message || String(error),
+    });
     return {
       type: "buyer",
       template: templateName,
@@ -197,7 +282,18 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
   const languageCode = toTrimmed(process.env.W_GUIDE_TEMPLATE_LANGUAGE) || "es";
   const guideList = compactGuideList(rows);
 
+  logGuideWhatsapp("guide-whatsapp", "seller-template:prepare", {
+    rowsCount: rows.length,
+    phone,
+    templateName,
+    guideList,
+  });
+
   if (!phone) {
+    logGuideWhatsapp("guide-whatsapp", "seller-template:skip", {
+      rowsCount: rows.length,
+      reason: "Telefono del vendedor no registrado",
+    });
     return {
       type: "seller",
       template: templateName,
@@ -222,6 +318,15 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
       bodyParameters,
     });
 
+    logGuideWhatsapp("guide-whatsapp", "seller-template:result", {
+      rowsCount: rows.length,
+      phone,
+      templateName,
+      success: response.success,
+      status: response.status,
+      response: response.data,
+    });
+
     return {
       type: "seller",
       template: templateName,
@@ -232,6 +337,12 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
       reason: response.success ? undefined : "WhatsApp API rechazo el mensaje",
     };
   } catch (error: any) {
+    logGuideWhatsapp("guide-whatsapp", "seller-template:error", {
+      rowsCount: rows.length,
+      phone,
+      templateName,
+      error: error?.message || String(error),
+    });
     return {
       type: "seller",
       template: templateName,
@@ -242,6 +353,11 @@ const sendSellerTemplate = async (rows: any[]): Promise<SendAttempt> => {
   }
 };
 
+const canSendBuyerNow = (row: any) => {
+  if (isSameBranchDelivery(row)) return true;
+  return toTrimmed(row?.estado_pedido) === READY_FOR_PICKUP_STATUS;
+};
+
 const ensureGuides = (rows: any[]) => {
   const missingGuide = rows.filter((row) => !getGuide(row));
   if (missingGuide.length) {
@@ -249,17 +365,37 @@ const ensureGuides = (rows: any[]) => {
   }
 };
 
-const sendForRows = async (rows: any[]) => {
+const sendForRows = async (
+  rows: any[],
+  options: { includeSeller?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
+) => {
+  const includeSeller = options.includeSeller !== false;
+  const buyerMode = options.buyerMode || "auto";
+  const sellerRows = includeSeller
+    ? (Array.isArray(options.sellerRows) ? options.sellerRows : rows).filter(Boolean)
+    : [];
+  logGuideWhatsapp("guide-whatsapp", "sendForRows:start", {
+    rowsCount: rows.length,
+    disabled: GUIDE_WHATSAPP_MESSAGES_DISABLED,
+    orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
+    includeSeller,
+    sellerRowsCount: sellerRows.length,
+    buyerMode,
+  });
   ensureGuides(rows);
 
   const attempts: SendAttempt[] = [];
 
   if (GUIDE_WHATSAPP_MESSAGES_DISABLED) {
-    if (rows.length) {
+    logGuideWhatsapp("guide-whatsapp", "sendForRows:disabled", {
+      rowsCount: rows.length,
+      reason: "Envios de WhatsApp deshabilitados por configuracion",
+    });
+    if (sellerRows.length) {
       attempts.push({
         type: "seller",
         template: toTrimmed(process.env.W_SELLER_PACKAGES_TEMPLATE_NAME) || DEFAULT_SELLER_TEMPLATE,
-        phone: rows[0]?.telefono_vendedor,
+        phone: sellerRows[0]?.telefono_vendedor,
         success: false,
         skipped: true,
         reason: "Envios de WhatsApp deshabilitados por configuracion",
@@ -267,12 +403,9 @@ const sendForRows = async (rows: any[]) => {
     }
 
     for (const row of rows) {
-      const templateName = isSameBranchDelivery(row)
-        ? toTrimmed(process.env.W_BUYER_SAME_BRANCH_TEMPLATE_NAME) || DEFAULT_BUYER_SAME_BRANCH_TEMPLATE
-        : toTrimmed(process.env.W_BUYER_TRANSFER_TEMPLATE_NAME) || DEFAULT_BUYER_TRANSFER_TEMPLATE;
       attempts.push({
         type: "buyer",
-        template: templateName,
+        template: toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE,
         orderId: String(row?._id || ""),
         guide: getGuide(row),
         phone: row?.telefono_comprador,
@@ -282,14 +415,36 @@ const sendForRows = async (rows: any[]) => {
       });
     }
   } else {
-    if (rows.length) {
-      attempts.push(await sendSellerTemplate(rows));
+    if (sellerRows.length) {
+      const sellerAttempt = await sendSellerTemplate(sellerRows);
+      attempts.push(sellerAttempt);
     }
 
     for (const row of rows) {
-      attempts.push(await sendBuyerTemplate(row));
+      if (buyerMode === "force" || canSendBuyerNow(row)) {
+        const buyerAttempt = await sendBuyerTemplate(row);
+        attempts.push(buyerAttempt);
+      } else {
+        attempts.push({
+          type: "buyer",
+          template: toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE,
+          orderId: String(row?._id || ""),
+          guide: getGuide(row),
+          phone: row?.telefono_comprador,
+          success: false,
+          skipped: true,
+          reason: "Se enviara cuando el pedido quede listo para recoger",
+        });
+      }
     }
   }
+
+  logGuideWhatsapp("guide-whatsapp", "sendForRows:done", {
+    rowsCount: rows.length,
+    successCount: attempts.filter((attempt) => attempt.success).length,
+    skippedCount: attempts.filter((attempt) => attempt.skipped).length,
+    failedCount: attempts.filter((attempt) => !attempt.success && !attempt.skipped).length,
+  });
 
   return {
     success: attempts.some((attempt) => attempt.success),
@@ -300,12 +455,21 @@ const sendForRows = async (rows: any[]) => {
   };
 };
 
-const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsapp") => {
+const sendForRowsBestEffort = async (
+  rows: any[],
+  context = "order-guide-whatsapp",
+  options: { includeSeller?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
+) => {
   try {
-    const result = await sendForRows(rows);
+    logGuideWhatsapp(context, "bestEffort:start", {
+      rowsCount: rows.length,
+      orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
+    });
+    const result = await sendForRows(rows, options);
+    logGuideWhatsapp(context, "bestEffort:result", result as any);
     return result;
   } catch (error) {
-    console.error(`[${context}] Error enviando WhatsApp`, error);
+    console.error(`[${context}] bestEffort:error`, error);
     return {
       success: false,
       sentCount: 0,
@@ -317,13 +481,20 @@ const sendForRowsBestEffort = async (rows: any[], context = "order-guide-whatsap
 };
 
 const sendExternalGuideMessages = async (id: string) => {
+  logGuideWhatsapp("external-guide-whatsapp", "manual-send:start", { id });
   const row = await ExternalSaleRepository.getExternalSaleByID(id);
-  if (!row) throw new Error("Pedido externo no encontrado");
-  return sendForRows([row as IVentaExterna]);
+  if (!row) {
+    logGuideWhatsapp("external-guide-whatsapp", "manual-send:missing-order", { id });
+    throw new Error("Pedido externo no encontrado");
+  }
+  return sendForRows([row as IVentaExterna], { includeSeller: true, buyerMode: "auto" });
 };
 
 const sendExternalRowsBestEffort = async (rows: any[]) =>
-  sendForRowsBestEffort(rows, "external-guide-whatsapp");
+  sendForRowsBestEffort(rows, "external-guide-whatsapp", {
+    includeSeller: true,
+    sellerRows: rows.filter((row: any) => !isSameBranchDelivery(row)),
+  });
 
 const sendSimplePackageGuideMessages = async (params: {
   packageIds: string[];
@@ -332,17 +503,30 @@ const sendSimplePackageGuideMessages = async (params: {
   currentBranchId?: string;
 }) => {
   const packageIds = (params.packageIds || []).map((id) => toTrimmed(id)).filter(Boolean);
+  logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:start", {
+    packageIds,
+    role: params.role,
+    authSellerId: params.authSellerId,
+    currentBranchId: params.currentBranchId,
+  });
   if (!packageIds.length) throw new Error("Debe seleccionar al menos un paquete");
 
   const role = toTrimmed(params.role).toLowerCase();
   const rows = await SimplePackageRepository.getSimplePackagesByIDs(packageIds);
   const pendingRows = rows.filter((row: any) => !row?.is_external);
-  if (!pendingRows.length) throw new Error("No hay paquetes simples pendientes para notificar");
+  if (!pendingRows.length) {
+    logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:no-pending-rows", { packageIds });
+    throw new Error("No hay paquetes simples pendientes para notificar");
+  }
 
   if (
     role === "seller" &&
     pendingRows.some((row: any) => String(row?.id_vendedor || "") !== String(params.authSellerId || ""))
   ) {
+    logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:unauthorized-seller", {
+      packageIds,
+      authSellerId: params.authSellerId,
+    });
     throw new Error("No autorizado para enviar estos paquetes");
   }
 
@@ -351,10 +535,22 @@ const sendSimplePackageGuideMessages = async (params: {
     params.currentBranchId &&
     pendingRows.some((row: any) => String((row?.origen_sucursal as any)?._id || row?.origen_sucursal || "") !== String(params.currentBranchId))
   ) {
+    logGuideWhatsapp("simple-package-guide-whatsapp", "manual-send:unauthorized-branch", {
+      packageIds,
+      currentBranchId: params.currentBranchId,
+    });
     throw new Error("Solo puedes enviar WhatsApp de paquetes de tu sucursal actual");
   }
 
-  return sendForRows(pendingRows);
+  return sendForRows(pendingRows, { includeSeller: true, buyerMode: "force" });
+};
+
+const sendPickupReadyMessage = async (row: any) => {
+  return sendForRows([row], {
+    includeSeller: isSameBranchDelivery(row),
+    sellerRows: isSameBranchDelivery(row) ? [row] : [],
+    buyerMode: "force",
+  });
 };
 
 export const OrderGuideWhatsappService = {
@@ -362,4 +558,5 @@ export const OrderGuideWhatsappService = {
   sendExternalRowsBestEffort,
   sendSimplePackageGuideMessages,
   sendForRowsBestEffort,
+  sendPickupReadyMessage,
 };

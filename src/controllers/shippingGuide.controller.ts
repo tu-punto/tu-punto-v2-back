@@ -27,8 +27,9 @@ export const getSellerShippings = async (req: Request, res: Response) => {
 
 export const getBranchShippings = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
-        const shippingGuides = await ShippingGuideService.getBranchShippings(id);
+        const auth = res.locals.auth as { sucursalId?: string } | undefined;
+        const branchId = String(auth?.sucursalId || req.params.id || "").trim();
+        const shippingGuides = await ShippingGuideService.getBranchShippings(branchId);
         res.json(shippingGuides);
     } catch (error) {
         console.error(error);

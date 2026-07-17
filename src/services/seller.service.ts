@@ -16,6 +16,7 @@ import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el
 import dayjs from "dayjs";
 import moment from "moment-timezone";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { UserModel } from "../entities/implements/UserSchema";
 import { SaleService } from "./sale.service";
 import { calcPagoPendiente } from "../utils/seller.utils";
@@ -43,6 +44,80 @@ const applyDiscount = (amount: number, discountPercent: number) =>
 
 const getRawId = (value: any) => String(value?._id || value || "").trim();
 
+const isMeaningfulText = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  return text.length > 0 && text !== "0" && text.toLowerCase() !== "null" && text.toLowerCase() !== "undefined";
+};
+
+const resolveSellerBranches = async (
+  branches: any[] = [],
+  strict = false
+) => {
+  const branchIds = Array.from(
+    new Set(
+      branches
+        .map((branch) => getRawId(branch?.id_sucursal))
+        .filter((id) => Types.ObjectId.isValid(id))
+    )
+  );
+
+  const branchDocs = branchIds.length
+    ? await SucursalModel.find({ _id: { $in: branchIds } }).select("_id nombre").lean()
+    : [];
+  const branchNameById = new Map(
+    branchDocs.map((branch: any) => [String(branch?._id || ""), String(branch?.nombre || "").trim()])
+  );
+
+  return branches.map((branch) => {
+    const idSucursal = getRawId(branch?.id_sucursal);
+    if (!idSucursal) {
+      if (strict) {
+        throw new Error("Cada sucursal debe tener una sucursal valida");
+      }
+
+      return {
+        ...branch,
+        id_sucursal: branch?.id_sucursal || "",
+        sucursalName: isMeaningfulText(branch?.sucursalName) ? String(branch?.sucursalName).trim() : "Sucursal",
+        alquiler: toNumber(branch?.alquiler),
+        exhibicion: toNumber(branch?.exhibicion),
+        delivery: toNumber(branch?.delivery),
+        entrega_simple: toNumber(branch?.entrega_simple),
+        activo: branch?.activo !== false,
+      };
+    }
+
+    const resolvedName =
+      [branch?.sucursalName, branch?.id_sucursal?.nombre, branchNameById.get(idSucursal)]
+        .map((value) => String(value ?? "").trim())
+        .find(isMeaningfulText) || "Sucursal";
+
+    return {
+      ...branch,
+      id_sucursal: idSucursal,
+      sucursalName: resolvedName,
+      alquiler: toNumber(branch?.alquiler),
+      exhibicion: toNumber(branch?.exhibicion),
+      delivery: toNumber(branch?.delivery),
+      entrega_simple: toNumber(branch?.entrega_simple),
+      activo: branch?.activo !== false,
+    };
+  });
+};
+
+const normalizeSellerBranchesForInput = async (seller: any) => {
+  if (!seller || !Object.prototype.hasOwnProperty.call(seller, "pago_sucursales")) {
+    return seller;
+  }
+
+  return {
+    ...seller,
+    pago_sucursales: Array.isArray(seller.pago_sucursales)
+      ? await resolveSellerBranches(seller.pago_sucursales, true)
+      : [],
+  };
+};
+
 const buildServiceIncomeDetail = (pagoSucursales: any[] = [], discountPercent = 0) =>
   pagoSucursales
     .filter((pago) => pago?.activo !== false)
@@ -58,7 +133,7 @@ const buildServiceIncomeDetail = (pagoSucursales: any[] = [], discountPercent = 
         id_sucursal: Types.ObjectId.isValid(sucursalId)
           ? new Types.ObjectId(sucursalId)
           : undefined,
-        sucursalName: String(pago?.sucursalName || ""),
+        sucursalName: isMeaningfulText(pago?.sucursalName) ? String(pago?.sucursalName).trim() : "Sucursal",
         alquiler,
         exhibicion,
         entrega_simple: entregaSimple,
@@ -131,7 +206,18 @@ const matchesSellerFullName = (sellerData: any, q?: string) => {
 
 const getAllSellers = async (params?: SellerListFilters) => {
   if (params?.page || params?.pageSize) {
-    return await SellerRepository.findWithDebtsAndSalesPage(params);
+    const paged = await SellerRepository.findWithDebtsAndSalesPage(params);
+    return {
+      ...paged,
+      data: await Promise.all(
+        (paged.data || []).map(async (seller: any) => ({
+          ...seller,
+          pago_sucursales: Array.isArray(seller?.pago_sucursales)
+            ? await resolveSellerBranches(seller.pago_sucursales)
+            : seller?.pago_sucursales,
+        }))
+      ),
+    };
   }
 
   const sellersWithData = await SellerRepository.findWithDebtsAndSales({
@@ -154,7 +240,16 @@ const getAllSellers = async (params?: SellerListFilters) => {
     };
   });
 
-  return processedSellers.filter((sellerData: any) => {
+  const sellersWithNormalizedBranches = await Promise.all(
+    processedSellers.map(async (sellerData: any) => ({
+      ...sellerData,
+      pago_sucursales: Array.isArray(sellerData?.pago_sucursales)
+        ? await resolveSellerBranches(sellerData.pago_sucursales)
+        : sellerData?.pago_sucursales,
+    }))
+  );
+
+  return sellersWithNormalizedBranches.filter((sellerData: any) => {
     if (!matchesSellerFullName(sellerData, params?.q)) {
       return false;
     }
@@ -225,7 +320,14 @@ const getAllSellersBasic = async (params?: {
       });
 
   if (!params?.includeProductInfoStatus) {
-    return filteredSellers;
+    return await Promise.all(
+      filteredSellers.map(async (seller: any) => ({
+        ...seller,
+        pago_sucursales: Array.isArray(seller?.pago_sucursales)
+          ? await resolveSellerBranches(seller.pago_sucursales)
+          : seller?.pago_sucursales,
+      }))
+    );
   }
 
   const sellerIds = filteredSellers.map((seller: any) => String(seller?._id || "")).filter(Boolean);
@@ -234,7 +336,8 @@ const getAllSellersBasic = async (params?: {
     statusRows.map((row) => [row.sellerId, row])
   );
 
-  return filteredSellers.map((seller: any) => {
+  return Promise.all(
+    filteredSellers.map(async (seller: any) => {
     const sellerId = String(seller?._id || "");
     const summary = statusBySellerId.get(sellerId) || {
       sellerId,
@@ -247,13 +350,17 @@ const getAllSellersBasic = async (params?: {
 
     return {
       ...seller,
+      pago_sucursales: Array.isArray(seller?.pago_sucursales)
+        ? await resolveSellerBranches(seller.pago_sucursales)
+        : seller?.pago_sucursales,
       product_info_status: summary.productInfoStatus,
       product_info_summary: summary,
     };
-  });
+    })
+  );
 };
 
-const normalizeSellerServiceValues = (seller: any) => {
+const normalizeSellerServiceValues = async (seller: any) => {
   const hasCommissionService = hasConfiguredCommissionService({
     pago_sucursales: Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [],
   });
@@ -284,8 +391,10 @@ const normalizeSellerServiceValues = (seller: any) => {
     throw new Error("La amortizacion no puede ser mayor al precio por paquete");
   }
 
+  const normalizedSeller = await normalizeSellerBranchesForInput(seller);
+
   return {
-    ...seller,
+    ...normalizedSeller,
     comision_porcentual: hasCommissionService ? Number(seller?.comision_porcentual ?? 0) : 0,
     comision_fija: hasCommissionService ? Number(seller?.comision_fija ?? 0) : 0,
     amortizacion,
@@ -320,8 +429,9 @@ const getSeller = async (sellerId: string) => {
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
   const debts = fluxes.filter((f) => f.esDeuda);
   const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[]);
+  const normalizedSeller = await normalizeSellerBranchesForInput(seller);
 
-  return { ...seller, pago_mensual: calcPagoMensual(seller), ...metrics };
+  return { ...normalizedSeller, pago_mensual: calcPagoMensual(normalizedSeller), ...metrics };
 };
 
 const buildInitialSellerPassword = (seller: any) => {
@@ -371,7 +481,7 @@ const createOrLinkSellerUser = async (seller: any) => {
 };
 
 const registerSeller = async (seller: any & { esDeuda: boolean }) => {
-  const normalizedSeller = normalizeSellerServiceValues(seller);
+  const normalizedSeller = await normalizeSellerServiceValues(seller);
   const montoTotal = calcSellerDebt(normalizedSeller);
   const discountPercent = normalizeDiscountPercent(normalizedSeller.descuento_porcentaje);
   const montoConDescuento = buildServiceIncomeDetail(
@@ -413,7 +523,25 @@ const registerSeller = async (seller: any & { esDeuda: boolean }) => {
 };
 
 const updateSeller = async (id: string, data: any) => {
-  return await SellerRepository.updateSeller(id, normalizeSellerServiceValues(data.newData));
+  const vendedor = await SellerRepository.findById(id);
+  if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
+
+  const normalizedData = await normalizeSellerServiceValues(data.newData);
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = normalizedData.pago_sucursales || [];
+
+  if (normalizedData.pago_sucursales) {
+    await handleSucursalRemovals(id, previousBranches, nextBranches);
+  }
+
+  const actualizado = await SellerRepository.updateSeller(id, normalizedData);
+
+  const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
+  if (nuevasSucursales.length > 0) {
+    await syncSellerProductBranches(id, nuevasSucursales);
+  }
+
+  return actualizado;
 };
 const syncSellerProductBranches = async (
   sellerId: string,
@@ -436,17 +564,9 @@ const syncSellerProductBranches = async (
 
       if (sucursalesExistentes.includes(nuevaId)) continue; // ya existe, skip
 
-      const nuevasCombinaciones = (sucursalReferencia.combinaciones || []).map(
-        (c) => ({
-          variantes: c.variantes,
-          stock: 0,
-          precio: c.precio, // podrías poner 0 si querés obligar a definirlo por sucursal
-        })
-      );
-
       producto.sucursales.push({
         id_sucursal: nuevaSucursal.id_sucursal,
-        combinaciones: nuevasCombinaciones,
+        combinaciones: [],
       });
     }
 
@@ -516,6 +636,14 @@ const handleSucursalRemovals = async (
   }
 };
 
+const getNewSellerBranches = (anteriores: any[] = [], actuales: any[] = []) =>
+  actuales.filter(
+    (curr: any) =>
+      !anteriores.some(
+        (prev: any) => prev.id_sucursal.toString() === curr.id_sucursal.toString()
+      )
+  );
+
 const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
   const vendedor = await SellerRepository.findById(id);
   if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
@@ -524,16 +652,18 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
   let montoNuevo = 0;
 
   if (data.pago_sucursales) {
+    data.pago_sucursales = await resolveSellerBranches(data.pago_sucursales);
     montoNuevo = calcSellerDebt(data);
     nuevaDeuda = data.esDeuda ? nuevaDeuda + montoNuevo : nuevaDeuda;
     data.deuda = nuevaDeuda;
   }
 
-  await handleSucursalRemovals(
-    id,
-    vendedor.pago_sucursales || [],
-    data.pago_sucursales || []
-  );
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = data.pago_sucursales || [];
+
+  if (data.pago_sucursales) {
+    await handleSucursalRemovals(id, previousBranches, nextBranches);
+  }
 
   const actualizado = await SellerRepository.updateSeller(id, data);
 
@@ -549,16 +679,9 @@ const renewSeller = async (id: string, data: any & { esDeuda?: boolean }) => {
       detalle_servicios: buildServiceIncomeDetail(data.pago_sucursales),
     });
   }
-  if (data.pago_sucursales?.length) {
-    const nuevasSucursales = data.pago_sucursales.filter((s: any) => {
-      return !vendedor.pago_sucursales?.some(
-        (ps: any) => ps.id_sucursal.toString() === s.id_sucursal.toString()
-      );
-    });
-
-    if (nuevasSucursales.length > 0) {
-      await syncSellerProductBranches(id, nuevasSucursales);
-    }
+  const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
+  if (nuevasSucursales.length > 0) {
+    await syncSellerProductBranches(id, nuevasSucursales);
   }
 
   return actualizado;
@@ -595,11 +718,12 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     data.deuda = nuevaDeuda;
   }
 
-  await handleSucursalRemovals(
-    id,
-    vendedor.pago_sucursales || [],
-    data.pago_sucursales || []
-  );
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = data.pago_sucursales || [];
+
+  if (data.pago_sucursales) {
+    await handleSucursalRemovals(id, previousBranches, nextBranches);
+  }
 
   const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
   const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
@@ -636,16 +760,9 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     }
   }
 
-  if (data.pago_sucursales?.length) {
-    const nuevasSucursales = data.pago_sucursales.filter((s: any) => {
-      return !vendedor.pago_sucursales?.some(
-        (ps: any) => ps.id_sucursal.toString() === s.id_sucursal.toString()
-      );
-    });
-
-    if (nuevasSucursales.length > 0) {
-      await syncSellerProductBranches(id, nuevasSucursales);
-    }
+  const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
+  if (nuevasSucursales.length > 0) {
+    await syncSellerProductBranches(id, nuevasSucursales);
   }
 
   return actualizado;
@@ -799,7 +916,19 @@ const requestSellerPayment = async (
   };
 };
 
-const declineSellerService = async (id: string) => {
+const declineSellerService = async (
+  id: string,
+  options?: {
+    ignoreDeadline?: boolean;
+    reason?: string;
+    origin?: "seller" | "admin";
+    motivo_principal?: string;
+    motivo_principal_otro?: string;
+    probabilidad_retorno?: string;
+    omitir_motivo_principal?: boolean;
+    omitir_probabilidad_retorno?: boolean;
+  }
+) => {
   const seller = await SellerRepository.findById(id);
   if (!seller) {
     const error: any = new Error("Vendedor no encontrado");
@@ -818,17 +947,25 @@ const declineSellerService = async (id: string) => {
     throw error;
   }
 
-  const today = dayjs().startOf("day");
-  const deadline = vigencia.subtract(5, "day").endOf("day");
-  if (today.isAfter(deadline)) {
-    const error: any = new Error("La declinacion solo esta habilitada hasta 5 dias antes de la vigencia");
-    error.status = 400;
-    throw error;
+  if (!options?.ignoreDeadline) {
+    const today = dayjs().startOf("day");
+    const deadline = vigencia.subtract(5, "day").endOf("day");
+    if (today.isAfter(deadline)) {
+      const error: any = new Error("La declinacion solo esta habilitada hasta 5 dias antes de la vigencia");
+      error.status = 400;
+      throw error;
+    }
   }
 
   return await SellerRepository.updateSeller(id, {
     declinacion_servicio_fecha: new Date(),
     declinacion_servicio_fecha_limite_retiro: vigencia.add(5, "day").toDate(),
+    declinacion_servicio_origen: options?.origin || undefined,
+    declinacion_servicio_motivo_principal: String(options?.motivo_principal || options?.reason || "").trim() || undefined,
+    declinacion_servicio_motivo_principal_otro: String(options?.motivo_principal_otro || "").trim() || undefined,
+    declinacion_servicio_probabilidad_retorno: String(options?.probabilidad_retorno || "").trim() || undefined,
+    declinacion_servicio_omitir_motivo_principal: options?.omitir_motivo_principal === true,
+    declinacion_servicio_omitir_probabilidad_retorno: options?.omitir_probabilidad_retorno === true,
   } as any);
 };
 
@@ -844,6 +981,12 @@ const cancelSellerServiceDecline = async (id: string) => {
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
+      declinacion_servicio_origen: "",
+      declinacion_servicio_motivo_principal: "",
+      declinacion_servicio_motivo_principal_otro: "",
+      declinacion_servicio_probabilidad_retorno: "",
+      declinacion_servicio_omitir_motivo_principal: "",
+      declinacion_servicio_omitir_probabilidad_retorno: "",
     },
   } as any);
 };
@@ -935,7 +1078,9 @@ const getServicesSummary = async () => {
 
       if (pago.activo === false || fueraDeRango) continue;
 
-      const sucursal = pago.sucursalName || "Sin sucursal";
+      const sucursal = isMeaningfulText(pago.sucursalName)
+        ? String(pago.sucursalName).trim()
+        : "Sin sucursal";
 
       if (!resumen[sucursal]) {
         resumen[sucursal] = {
@@ -1034,7 +1179,7 @@ const getClientsStatusList = async () => {
         telefono: seller.telefono || "",
         fecha_vigencia: seller.fecha_vigencia || null,
         id_sucursal: pago?.id_sucursal ? String(pago.id_sucursal) : "",
-        sucursal: pago?.sucursalName || "",
+        sucursal: isMeaningfulText(pago?.sucursalName) ? String(pago.sucursalName).trim() : "",
         fecha_ingreso: pago?.fecha_ingreso || null,
         fecha_salida: pago?.fecha_salida || null,
         activo: !!activoSucursal,

@@ -30,6 +30,8 @@ const BUYER_STATUSES = {
   DELIVERED: "Entregado",
 } as const;
 
+const READY_FOR_PICKUP_STATUSES = new Set(["En Espera", "LISTO PARA RECOGER"]);
+
 type InternalRole = (typeof INTERNAL_NOTIFICATION_ROLES)[number];
 type InternalRecipientRole = (typeof INTERNAL_RECIPIENT_ROLES)[number];
 
@@ -50,6 +52,7 @@ type ShippingLike = {
   public_tracking_received_at?: unknown;
   hora_entrega_acordada?: unknown;
   hora_entrega_real?: unknown;
+  public_tracking_ready_for_pickup_at?: unknown;
   lugar_entrega?: unknown;
   buyer_tracking_code?: unknown;
   shipping_qr_code?: unknown;
@@ -79,7 +82,7 @@ const PUSH_VAPID_PUBLIC_KEY = String(process.env.PUSH_VAPID_PUBLIC_KEY || "").tr
 const PUSH_VAPID_PRIVATE_KEY = String(process.env.PUSH_VAPID_PRIVATE_KEY || "").trim();
 const PUSH_VAPID_SUBJECT = String(process.env.PUSH_VAPID_SUBJECT || "mailto:admin@example.com").trim();
 const CLIENT_URL = String(
-  process.env.CLIENT_URL || process.env.CLIENT_URL_2 || "http://localhost:5173"
+  process.env.CLIENT_URL_2 || process.env.CLIENT_URL || "http://localhost:5173"
 ).trim();
 
 let reminderTimer: NodeJS.Timeout | null = null;
@@ -449,7 +452,8 @@ const handleShippingCreated = async (shipping: ShippingLike) => {
     if (!shippingId) return;
 
     const trackingCode = await ensureBuyerTrackingCode(shipping);
-    if (toStringValue(shipping?.estado_pedido) !== BUYER_STATUSES.CONFIRMED) return;
+    const currentStatus = toStringValue(shipping?.estado_pedido);
+    if (![BUYER_STATUSES.CONFIRMED, "LISTO PARA RECOGER"].includes(currentStatus)) return;
 
     await sendBuyerPush({
       shippingId,
@@ -496,13 +500,29 @@ const handleShippingStatusChange = async (params: {
       return;
     }
 
-    if (toStatus === BUYER_STATUSES.DELIVERED) {
+    if (toStatus === BUYER_STATUSES.DELIVERED && !params.after?.public_tracking_ready_for_pickup_at) {
       await sendBuyerPush({
         shippingId,
         trackingCode,
         title: "Pedido entregado",
         body: "Tu pedido ya fue marcado como entregado.",
         tag: `buyer-delivered-${shippingId}`,
+        data: {
+          shippingId,
+          fromStatus,
+          toStatus,
+        },
+      });
+      return;
+    }
+
+    if (READY_FOR_PICKUP_STATUSES.has(toStatus) && params.after?.public_tracking_ready_for_pickup_at) {
+      await sendBuyerPush({
+        shippingId,
+        trackingCode,
+        title: "Tu pedido ya llego a la sucursal",
+        body: "Tu pedido ya llego a la sucursal de destino. Puedes pasar a recogerlo.",
+        tag: `buyer-ready-for-pickup-${shippingId}`,
         data: {
           shippingId,
           fromStatus,

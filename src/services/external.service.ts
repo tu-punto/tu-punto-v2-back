@@ -11,6 +11,8 @@ import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { TrackingFreezeService } from "./trackingFreeze.service";
+import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
+import { READY_FOR_PICKUP_STATUS, resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -485,8 +487,14 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
-  const initialDelivered = input.delivered === true || input.estado_pedido === "Entregado";
-  const estadoPedido = normalizeOrderStatus(input.estado_pedido, initialDelivered);
+  const defaultStatus = resolveBranchTransferInitialStatus(branchRoute.originBranchId, branchRoute.destinationBranchId);
+  const requestedStatus = String(input.estado_pedido ?? "").trim();
+  const estadoPedido =
+    requestedStatus && requestedStatus !== "En Espera"
+      ? requestedStatus
+      : input.delivered === true
+        ? "Entregado"
+        : defaultStatus;
   const delivered = estadoPedido === "Entregado";
   const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
     paid,
@@ -573,7 +581,14 @@ const registerExternalSale = async (externalSale: any) => {
   const created = await ExternalSaleRepository.registerExternalSale(record);
   await applyExternalMixedIncomeFromRecords([record]);
   const populatedCreated = await ExternalSaleRepository.getExternalSaleByID(String(created._id));
-  void OrderGuideWhatsappService.sendExternalRowsBestEffort([populatedCreated || created]);
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort([populatedCreated || created])
+    .then(() => undefined)
+    .catch((error) => {
+      console.error("[external-service] whatsapp-dispatch:error", {
+        externalSaleId: String(created._id),
+        error: error?.message || String(error),
+      });
+    });
   return created;
 };
 
@@ -626,22 +641,29 @@ const registerExternalSalesByPackages = async (payload: any) => {
 
   const created = await ExternalSaleRepository.registerExternalSales(toCreate);
   await applyExternalMixedIncomeFromRecords(toCreate);
-  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created);
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created)
+    .then(() => undefined)
+    .catch((error) => {
+      console.error("[external-service] whatsapp-dispatch:error", {
+        externalSaleIds: created.map((row) => String(row?._id || "")).filter(Boolean),
+        error: error?.message || String(error),
+      });
+    });
   return created;
 };
 
 const deleteExternalSaleByID = async (id: string) => {
+  const existing = await ExternalSaleRepository.getExternalSaleByID(id);
+  if (!existing) return null;
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
   return await ExternalSaleRepository.deleteExternalSaleByID(id);
 };
 
 const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
   const existingDelivered = existing.estado_pedido === "Entregado" || existing.delivered === true;
-
-  if (existingDelivered) {
-    throw new Error("No se puede editar una entrega que ya fue entregada");
-  }
 
   const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
     | "external"
@@ -739,20 +761,27 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.delivered === true || existing.delivered === true
   );
   const delivered = status === "Entregado";
+  const hasPaymentAllocationUpdate =
+    paymentEditRequested ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador") ||
+    shouldRecalculateRoutePricing;
 
-  const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = resolvePaymentSplit(
-    paid,
-    amountToCharge,
-    externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
-    externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
-  );
+  const { montoPagaVendedor, montoPagaComprador, saldoCobrar } = hasPaymentAllocationUpdate
+    ? resolvePaymentSplit(
+        paid,
+        amountToCharge,
+        externalSale.monto_paga_vendedor ?? existing.monto_paga_vendedor,
+        externalSale.monto_paga_comprador ?? existing.monto_paga_comprador
+      )
+    : {
+        montoPagaVendedor: roundCurrency(Number(existing.monto_paga_vendedor || 0)),
+        montoPagaComprador: roundCurrency(Number(existing.monto_paga_comprador || 0)),
+        saldoCobrar: roundCurrency(Number(existing.saldo_cobrar || 0)),
+      };
   const hasPaymentStatusUpdate = Object.prototype.hasOwnProperty.call(externalSale, "esta_pagado");
   const hasSellerMethodUpdate = Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
-  const hasSellerAmountUpdate =
-    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_vendedor") ||
-    Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador");
-  const shouldRecalculateExternalBuyerDebt =
-    hasPaymentStatusUpdate || hasSellerAmountUpdate || shouldRecalculateRoutePricing;
+  const shouldRecalculateExternalBuyerDebt = hasPaymentStatusUpdate || hasPaymentAllocationUpdate;
   const buyerDebtAmount =
     serviceOrigin === "simple_package"
       ? toNumber(existing.deuda_comprador ?? externalSale.deuda_comprador, 0)
@@ -787,7 +816,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     !existingSellerPaymentMethod &&
     !hasPaymentStatusUpdate &&
     !hasSellerMethodUpdate &&
-    !hasSellerAmountUpdate;
+    !hasPaymentAllocationUpdate;
   const sellerPaymentMethod = montoPagaVendedor > 0
     ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago) || (paymentEditRequested ? "efectivo" : "")
     : "";
@@ -848,7 +877,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.lugar_entrega = nextBranchRoute.destinationBranchName || existing.lugar_entrega;
   }
 
-  if (serviceOrigin === "simple_package") {
+  if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
     updatePayload.costo_delivery = toNumber(externalSale.costo_delivery ?? existing.costo_delivery, 0);
     updatePayload.seller_debt_applied = !(sellerPaymentMethod && montoPagaVendedor > 0);
   }
@@ -907,6 +936,15 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const previousSellerMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
   const previousSellerAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
   const updated = await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
+
+  if (updated && status === READY_FOR_PICKUP_STATUS && status !== existing.estado_pedido) {
+    void OrderGuideWhatsappService.sendPickupReadyMessage(updated).catch((error) => {
+      console.error("[external-service] pickup-whatsapp:error", {
+        externalSaleId: id,
+        error: error?.message || String(error),
+      });
+    });
+  }
 
   if (serviceOrigin === "external" && paymentEditRequested && updated) {
     const branchId = String((existing.sucursal as any)?._id || existing.sucursal || "");

@@ -1,6 +1,7 @@
 import { CookieOptions, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import moment from "moment-timezone";
 import { CategoryService } from "../services/category.service";
 import { assertPasswordStrength, comparePassword, hashPassword } from "../helpers/auth";
 import { UserService } from "../services/user.service";
@@ -36,6 +37,19 @@ const isSecure = process.env.NODE_ENV === "production";
 const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.MAX_FAILED_LOGIN_ATTEMPTS || 5);
 const LOGIN_LOCK_MINUTES = Number(process.env.LOGIN_LOCK_MINUTES || 15);
 const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS || 24);
+const ACCESS_TIMEZONE = "America/La_Paz";
+
+type AccessWindow = {
+  enabled?: boolean;
+  start?: string;
+  end?: string;
+};
+
+type AccessHours = {
+  weekdays?: AccessWindow;
+  saturday?: AccessWindow;
+  sunday?: AccessWindow;
+};
 
 const clearAuthCookie = (res: Response) =>
   res.clearCookie("token", {
@@ -101,6 +115,59 @@ const resolveIdString = (value: unknown): string => {
   return String(value);
 };
 
+const normalizeTimeString = (value: unknown): string => String(value || "").trim();
+
+const normalizeAccessWindow = (window?: AccessWindow | null): AccessWindow | undefined => {
+  if (!window) return undefined;
+
+  return {
+    enabled: window.enabled === true,
+    start: normalizeTimeString(window.start),
+    end: normalizeTimeString(window.end),
+  };
+};
+
+const normalizeAccessHours = (hours?: AccessHours | null): AccessHours | undefined => {
+  if (!hours) return undefined;
+
+  const normalized = {
+    weekdays: normalizeAccessWindow(hours.weekdays),
+    saturday: normalizeAccessWindow(hours.saturday),
+    sunday: normalizeAccessWindow(hours.sunday),
+  };
+
+  if (!normalized.weekdays && !normalized.saturday && !normalized.sunday) {
+    return undefined;
+  }
+
+  return normalized;
+};
+
+const isValidTimeString = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
+const isNowWithinWindow = (window?: AccessWindow | null): boolean => {
+  if (!window?.enabled) return false;
+
+  const start = normalizeTimeString(window.start);
+  const end = normalizeTimeString(window.end);
+  if (!isValidTimeString(start) || !isValidTimeString(end)) return false;
+
+  const now = moment().tz(ACCESS_TIMEZONE);
+  const startMoment = moment.tz(`${now.format("YYYY-MM-DD")} ${start}`, "YYYY-MM-DD HH:mm", ACCESS_TIMEZONE);
+  const endMoment = moment.tz(`${now.format("YYYY-MM-DD")} ${end}`, "YYYY-MM-DD HH:mm", ACCESS_TIMEZONE);
+
+  return now.isSameOrAfter(startMoment) && now.isSameOrBefore(endMoment);
+};
+
+const canOperatorLogin = (hours?: AccessHours | null): boolean => {
+  if (!hours) return true;
+
+  const day = moment().tz(ACCESS_TIMEZONE).day();
+  if (day >= 1 && day <= 5) return isNowWithinWindow(hours.weekdays);
+  if (day === 6) return isNowWithinWindow(hours.saturday);
+  return isNowWithinWindow(hours.sunday);
+};
+
 export const registerUserController = async (req: Request, res: Response) => {
   const user = req.body;
   console.log("User:",user)
@@ -126,6 +193,7 @@ export const registerUserController = async (req: Request, res: Response) => {
       role: normalizedRole,
       password: encryptPassword,
       sucursal: resolveUserBranchForRole(normalizedRole, user.sucursal ?? user.sucursalId),
+      system_access_hours: normalizedRole === "operator" ? normalizeAccessHours(user.system_access_hours) : undefined,
       must_change_password: true,
     });
     res.json({
@@ -201,6 +269,13 @@ export const loginUserController = async (req: Request, res: Response) => {
         return res.status(403).json({
           success: false,
           msg: "El operador solo puede ingresar a su sucursal asignada",
+        });
+      }
+
+      if (!canOperatorLogin(user.system_access_hours as AccessHours | undefined)) {
+        return res.status(403).json({
+          success: false,
+          msg: "El acceso al sistema no esta habilitado en este horario",
         });
       }
     }
@@ -503,7 +578,7 @@ export const getAdminsController = async (req: Request, res: Response) => {
 export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, role, password, sucursal, sucursalId } = req.body;
+    const { email, role, password, sucursal, sucursalId, system_access_hours } = req.body;
     const authRole = normalizeUserRole(res.locals.auth?.role);
     const existingUser = await UserService.getUserByIdService(id);
 
@@ -525,11 +600,21 @@ export const updateUserController = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, msg: "Solo superadmin puede asignar roles" });
     }
 
+    if (system_access_hours && authRole !== "superadmin") {
+      return res.status(403).json({ success: false, msg: "Solo superadmin puede definir horarios de acceso" });
+    }
+
     const updateData: any = {
       email,
       role: existingRole === "superadmin" ? "superadmin" : normalizedRole,
       sucursal: resolveUserBranchForRole(normalizedRole, sucursal ?? sucursalId),
     };
+
+    if (normalizedRole === "operator") {
+      updateData.system_access_hours = normalizeAccessHours(system_access_hours) ?? existingUser.system_access_hours;
+    } else {
+      updateData.system_access_hours = null;
+    }
     
     if (password) {
       updateData.password = await hashPassword(password);

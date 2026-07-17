@@ -2,6 +2,24 @@ import { Schema, model, Types } from 'mongoose';
 import { IUserDocument } from '../documents/IUserDocument';
 import { USER_ROLES } from '../../constants/roles';
 
+const accessWindowSchema = new Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    start: { type: String, default: "08:00" },
+    end: { type: String, default: "18:00" },
+  },
+  { _id: false }
+);
+
+const accessHoursSchema = new Schema(
+  {
+    weekdays: { type: accessWindowSchema, default: undefined },
+    saturday: { type: accessWindowSchema, default: undefined },
+    sunday: { type: accessWindowSchema, default: undefined },
+  },
+  { _id: false }
+);
+
 const UserSchema = new Schema<IUserDocument>({
   email: {
     type: String,
@@ -46,6 +64,10 @@ const UserSchema = new Schema<IUserDocument>({
   login_locked_until: {
     type: Date,
     required: false
+  },
+  system_access_hours: {
+    type: accessHoursSchema,
+    required: false,
   }
 }, {
   collection: 'User',

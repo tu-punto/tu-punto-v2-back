@@ -28,6 +28,7 @@ import simplePackageRouter from "./routes/simplePackage.routes";
 import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
 import trackingFreezeRouter from "./routes/trackingFreeze.routes";
 import catalogIntegrationRouter from "./routes/catalogIntegration.routes";
+import attendanceRouter from "./routes/attendance.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -75,6 +76,7 @@ router.use("/external", requireAuth, requireRole("admin", "operator"), externalS
 router.use("/simple-packages", requireAuth, requireRole("admin", "operator", "seller"), simplePackageRouter)
 router.use("/tracking-freeze", requireAuth, requireRole("superadmin"), trackingFreezeRouter)
 router.use("/stock-withdrawals", requireAuth, stockWithdrawalRouter)
+router.use("/attendance", requireAuth, requireRole("admin", "operator"), attendanceRouter)
 
 router.use("/qr", qr);
 

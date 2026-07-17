@@ -2,11 +2,15 @@ import { CierreCajaModel } from "../entities/implements/CierreCajaSchema";
 import { ICierreCaja } from "../entities/ICierreCaja";
 import { Types } from "mongoose";
 
-const findAll = async (sucursalId?: string): Promise<ICierreCaja[]> => {
+const findAll = async (sucursalIds?: string[]): Promise<ICierreCaja[]> => {
   const filter: Record<string, unknown> = {};
 
-  if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
-    filter.id_sucursal = new Types.ObjectId(sucursalId);
+  const validSucursalIds = Array.isArray(sucursalIds)
+    ? sucursalIds.filter((id) => Types.ObjectId.isValid(id))
+    : [];
+
+  if (validSucursalIds.length > 0) {
+    filter.id_sucursal = { $in: validSucursalIds.map((id) => new Types.ObjectId(id)) };
   }
 
   return await CierreCajaModel.find(filter)
@@ -28,6 +32,27 @@ const getBoxCloseById = async (id: string): Promise<ICierreCaja | null> => {
 };
 const updateBoxClose = async (id: string, updates: Partial<ICierreCaja>) => {
   return await CierreCajaModel.findByIdAndUpdate(id, updates, { new: true });
+};
+
+const findLatestBySucursalOnDay = async (
+  sucursalId: string,
+  dayStart: Date,
+  dayEnd: Date
+): Promise<ICierreCaja | null> => {
+  if (!Types.ObjectId.isValid(sucursalId)) return null;
+
+  return await CierreCajaModel.findOne({
+    id_sucursal: new Types.ObjectId(sucursalId),
+    $or: [
+      { closed_at: { $gte: dayStart, $lte: dayEnd } },
+      {
+        closed_at: { $exists: false },
+        created_at: { $gte: dayStart, $lte: dayEnd },
+      },
+    ],
+  })
+    .sort({ closed_at: -1, created_at: -1 })
+    .exec();
 };
 
 const findLatestBySucursalBefore = async (
@@ -54,4 +79,5 @@ export const BoxCloseRepository = {
   getBoxCloseById,
   updateBoxClose,
   findLatestBySucursalBefore,
+  findLatestBySucursalOnDay,
 };

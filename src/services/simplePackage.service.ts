@@ -12,6 +12,8 @@ import { OrderGuideService } from "./orderGuide.service";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 import { TrackingFreezeService } from "./trackingFreeze.service";
+import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
+import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -330,7 +332,7 @@ const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) =
     ubicacion_link: "",
     costo_delivery: 0,
     cargo_delivery: roundCurrency(Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0)),
-    estado_pedido: "En Espera",
+    estado_pedido: resolveBranchTransferInitialStatus(originBranchId, destinationBranchId),
     public_tracking_received_at: new Date(),
     adelanto_cliente: 0,
     esta_pagado: paymentData.esta_pagado,
@@ -576,7 +578,7 @@ const createSimplePackageOrders = async (params: {
     throw new Error("Solo puedes crear pedidos de paquetes de tu sucursal actual");
   }
 
-  const shippingResults = [];
+  const shippingResults: any[] = [];
   let debtAmount = 0;
   let debtCount = 0;
   let effectivoAmount = 0;
@@ -627,6 +629,10 @@ const createSimplePackageOrders = async (params: {
         estado_pedido: createdShipping.estado_pedido,
         delivered: createdShipping.estado_pedido === "Entregado",
         seller_balance_applied: createdShipping.estado_pedido === "Entregado",
+        public_tracking_ready_for_pickup_at:
+          String(createdShipping.estado_pedido || "").trim() === "LISTO PARA RECOGER"
+            ? orderCreatedAt
+            : (row as any)?.public_tracking_ready_for_pickup_at,
         seller_debt_applied: !paymentMethod,
         esta_pagado: "no",
         metodo_pago: paymentMethod,
@@ -636,7 +642,7 @@ const createSimplePackageOrders = async (params: {
         shipping_qr_code: (createdShipping as any).shipping_qr_code || row?.shipping_qr_code || "",
         shipping_qr_payload: (createdShipping as any).shipping_qr_payload || row?.shipping_qr_payload || "",
         shipping_qr_image_path: (createdShipping as any).shipping_qr_image_path || row?.shipping_qr_image_path || "",
-      });
+      } as any);
 
       shippingResults.push({
         packageId: row._id,
@@ -681,7 +687,14 @@ const createSimplePackageOrders = async (params: {
 
   if (!skipGuideNotification) {
     const rowsToNotify = shippingResults.map((result: any) => result.row).filter(Boolean);
-    void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp");
+    void OrderGuideWhatsappService.sendForRowsBestEffort(rowsToNotify, "simple-package-guide-whatsapp")
+      .then(() => undefined)
+      .catch((error) => {
+        console.error("[simple-package-service] whatsapp-dispatch:error", {
+          packageIds: shippingResults.map((result: any) => String(result?.packageId || "")).filter(Boolean),
+          error: error?.message || String(error),
+        });
+      });
   }
 
   return shippingResults;
@@ -798,8 +811,9 @@ const updateSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
-    throw new Error("No se puede modificar un paquete que ya fue convertido o entregado");
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
+  if ((existing as any).is_external) {
+    throw new Error("No se puede modificar un paquete que ya fue convertido");
   }
 
   const role = String(params.role || "").toLowerCase();
@@ -974,8 +988,9 @@ const deleteSimplePackageByID = async (params: {
 }) => {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
-  if ((existing as any).is_external || (existing as any).delivered || existing.estado_pedido === "Entregado") {
-    throw new Error("No se puede eliminar un paquete que ya fue convertido o entregado");
+  assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
+  if ((existing as any).is_external) {
+    throw new Error("No se puede eliminar un paquete que ya fue convertido");
   }
 
   const role = String(params.role || "").toLowerCase();

@@ -385,6 +385,22 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
     match.id_categoria = new Types.ObjectId(categoryId);
   }
 
+  const variantLabelExpression = {
+    $reduce: {
+      input: {
+        $objectToArray: { $ifNull: ["$sucursales.combinaciones.variantes", {}] }
+      },
+      initialValue: "",
+      in: {
+        $cond: [
+          { $eq: ["$$value", ""] },
+          "$$this.v",
+          { $concat: ["$$value", " / ", "$$this.v"] }
+        ]
+      }
+    }
+  };
+
   const pipeline: any[] = [{ $match: match }, { $unwind: "$sucursales" }];
 
   if (sucursalId && Types.ObjectId.isValid(sucursalId)) {
@@ -398,7 +414,7 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
   }
 
   pipeline.push(
-    { $unwind: "$sucursales.combinaciones" },
+    { $unwind: { path: "$sucursales.combinaciones", preserveNullAndEmptyArrays: true } },
     ...(inStock ? [{ $match: { "sucursales.combinaciones.stock": { $gt: 0 } } }] : []),
     {
       $lookup: {
@@ -420,22 +436,10 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
       $project: {
         _id: 1,
         nombre_producto: 1,
-        variante: {
-          $reduce: {
-            input: { $objectToArray: "$sucursales.combinaciones.variantes" },
-            initialValue: "",
-            in: {
-              $cond: [
-                { $eq: ["$$value", ""] },
-                "$$this.v",
-                { $concat: ["$$value", " / ", "$$this.v"] }
-              ]
-            }
-          }
-        },
-        variantes_obj: "$sucursales.combinaciones.variantes",
+        variante: variantLabelExpression,
+        variantes_obj: { $ifNull: ["$sucursales.combinaciones.variantes", {}] },
         precio: "$sucursales.combinaciones.precio",
-        stock: "$sucursales.combinaciones.stock",
+        stock: { $ifNull: ["$sucursales.combinaciones.stock", 0] },
         sucursalId: "$sucursales.id_sucursal",
         categoria: { $arrayElemAt: ["$categoria_info.categoria", 0] },
         id_categoria: "$id_categoria",
@@ -808,7 +812,7 @@ const findSuperadminVariantInventoryPage = async (params: SuperadminVariantInven
       }
     },
     { $unwind: "$sucursales" },
-    { $unwind: "$sucursales.combinaciones" },
+    { $unwind: { path: "$sucursales.combinaciones", preserveNullAndEmptyArrays: true } },
     {
       $addFields: {
         _variantLabel: variantLabelExpression,

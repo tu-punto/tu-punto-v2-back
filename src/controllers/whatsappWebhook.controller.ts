@@ -14,6 +14,20 @@ export const verifyWhatsappWebhook = (req: Request, res: Response) => {
 };
 
 export const receiveWhatsappWebhook = (req: Request, res: Response) => {
-  console.log("[whatsapp-webhook]", JSON.stringify(req.body));
+  const body = req.body as any;
+  const statuses = body?.entry
+    ?.flatMap((entry: any) => entry?.changes || [])
+    ?.flatMap((change: any) => change?.value?.statuses || []) || [];
+
+  console.log("[whatsapp-webhook]", JSON.stringify({
+    body,
+    statuses: statuses.map((status: any) => ({
+      id: status?.id,
+      status: status?.status,
+      recipient_id: status?.recipient_id,
+      timestamp: status?.timestamp,
+      errors: status?.errors,
+    })),
+  }));
   return res.sendStatus(200);
 };

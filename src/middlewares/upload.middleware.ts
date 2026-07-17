@@ -49,3 +49,16 @@ export const uploadAnnouncementFiles = multer({
     cb(null, true);
   }
 });
+
+export const uploadFinanceFluxAttachment = multer({
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!announcementAttachmentMimeTypes.has(file.mimetype)) {
+      return cb(new Error("Solo se permiten PDF, documentos Office, texto, CSV o imagenes"));
+    }
+    cb(null, true);
+  },
+});

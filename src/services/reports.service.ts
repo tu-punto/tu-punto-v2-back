@@ -2161,6 +2161,59 @@ export const ReportsService = {
     };
   },
 
+  async exportRiesgoClientesPorVentasXlsx({ mes, meses, mesFin }: ExportVentasVendedoresParams) {
+    const data = await this.getRiesgoClientesPorVentas({ mes, meses, mesFin });
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "TuPunto Reports";
+    wb.created = new Date();
+
+    const wsResumen = wb.addWorksheet("Resumen");
+    wsResumen.columns = [
+      { header: "Campo", key: "campo", width: 24 },
+      { header: "Valor", key: "valor", width: 40 },
+    ];
+    wsResumen.getRow(1).font = { bold: true };
+    wsResumen.addRow({ campo: "Mes actual", valor: data.mes });
+    wsResumen.addRow({ campo: "Meses analisis", valor: data.mesesAnalisis.join(", ") });
+    wsResumen.addRow({ campo: "Clientes evaluados", valor: data.resumen.clientes });
+    wsResumen.addRow({ campo: "Alertas", valor: data.resumen.alertas });
+
+    const wsDetalle = wb.addWorksheet("Comparacion_Historica");
+    if (data.rows.length) {
+      const headers = Object.keys(data.rows[0]);
+      wsDetalle.addRow(headers);
+      wsDetalle.getRow(1).font = { bold: true };
+      data.rows.forEach((row) => wsDetalle.addRow(headers.map((header) => (row as any)[header] ?? "")));
+      wsDetalle.columns.forEach((column) => {
+        column.width = Math.max(14, Math.min(28, String(column.header || "").length + 4));
+      });
+    }
+
+    const wsLeyenda = wb.addWorksheet("Leyenda");
+    wsLeyenda.columns = [
+      { header: "Campo", key: "campo", width: 28 },
+      { header: "Descripcion", key: "descripcion", width: 60 },
+    ];
+    wsLeyenda.getRow(1).font = { bold: true };
+    [
+      ["ventas_mes_actual_bs", "Ventas del mes seleccionado"],
+      ["ventas_mes_anterior_bs", "Ventas del mes anterior"],
+      ["variacion_mes_anterior_pct", "Variacion porcentual vs mes anterior"],
+      ["promedio_3m_bs", "Promedio de los 3 meses previos"],
+      ["promedio_6m_bs", "Promedio de los 6 meses previos"],
+      ["peor_caida_pct", "Peor caida detectada"],
+      ["alerta", "Marca SI cuando el vendedor cae por debajo de sus comparaciones"],
+    ].forEach(([campo, descripcion]) => wsLeyenda.addRow({ campo, descripcion }));
+
+    const filename = `riesgo_clientes_ventas_${data.mes}.xlsx`;
+    const outDir = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const filePath = path.join(outDir, filename);
+
+    await wb.xlsx.writeFile(filePath);
+    return { filePath, filename };
+  },
+
   async exportClientesStatusXlsx(_: ExportClientesStatusParams) {
     const vendedores = await ReportsRepository.fetchVendedoresConPagoSucursales();
     const today = moment.tz(TZ).startOf("day");

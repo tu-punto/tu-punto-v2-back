@@ -47,6 +47,12 @@ export interface IVendedor {
     fecha_pago_asignada?: Date;
     declinacion_servicio_fecha?: Date;
     declinacion_servicio_fecha_limite_retiro?: Date;
+    declinacion_servicio_origen?: "seller" | "admin";
+    declinacion_servicio_motivo_principal?: string;
+    declinacion_servicio_motivo_principal_otro?: string;
+    declinacion_servicio_probabilidad_retorno?: string;
+    declinacion_servicio_omitir_motivo_principal?: boolean;
+    declinacion_servicio_omitir_probabilidad_retorno?: boolean;
 
     saldo_pendiente: number;
     user: Types.ObjectId;

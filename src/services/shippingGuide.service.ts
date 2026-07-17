@@ -11,6 +11,9 @@ const getSellerShippings = async (sellerID: string) => {
 }
 
 const getBranchShippings = async (branchID: string) => {
+    if (!branchID) {
+        return [];
+    }
     return await ShippingGuideRepository.getBranchShippings(branchID);
 }
 

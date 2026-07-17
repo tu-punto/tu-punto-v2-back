@@ -44,6 +44,22 @@ const FlujoFinancieroSchema = new Schema({
     type: Number,
     default: 0
   },
+  attachment_url: {
+    type: String,
+    default: ""
+  },
+  attachment_key: {
+    type: String,
+    default: ""
+  },
+  attachment_name: {
+    type: String,
+    default: ""
+  },
+  attachment_type: {
+    type: String,
+    default: ""
+  },
   detalle_servicios: [{
     _id: false,
     id_sucursal: {
