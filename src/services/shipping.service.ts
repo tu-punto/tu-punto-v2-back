@@ -803,7 +803,15 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     estado_pedido: { $ne: INTERNAL_SALE_STATUS },
   };
   const externalFilter: any = {
-    $or: [{ service_origin: { $exists: false } }, { service_origin: "external" }, { service_origin: "simple_package" }],
+    $or: [
+      { service_origin: { $exists: false } },
+      { service_origin: "external" },
+      {
+        service_origin: "simple_package",
+        pedido_ref: { $exists: true, $ne: null },
+        numero_guia: { $exists: true, $nin: ["", null] },
+      },
+    ],
   };
 
   if (params.from || params.to) {
