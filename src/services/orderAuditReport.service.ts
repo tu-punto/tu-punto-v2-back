@@ -648,7 +648,9 @@ const exportOrderAuditReportXlsx = async (params: OrderAuditParams) => {
     ["filtro_branch_id", report.filters.branchId || ""],
     ["filtro_current_branch_id", report.filters.currentBranchId || ""],
     ["suspicious_only", report.filters.suspiciousOnly ? "si" : "no"],
-    ...Object.entries(report.totals).map(([key, value]) => [key, value]),
+    ...Object.entries(report.totals).map(
+      ([key, value]): [string, string | number] => [key, value]
+    ),
   ];
 
   return buildWorkbook(summaryRows, report.rows, report.distributions);

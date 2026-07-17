@@ -1,7 +1,10 @@
 import moment from "moment-timezone";
-import { SEND_TO_BRANCH_STATUS } from "../utils/branchTransferStatus";
+import { IN_TRANSIT_STATUS, READY_FOR_PICKUP_STATUS, SEND_TO_BRANCH_STATUS } from "../utils/branchTransferStatus";
 
 const TZ = "America/La_Paz";
+const WAITING_RAW_STATUS = "En Espera";
+const INTERNAL_SALE_STATUS = "interno";
+const VISUAL_IN_TRANSIT_THRESHOLD_MINUTES = 30;
 
 export type PublicTrackingStatus =
   | "RECEPTION"
@@ -28,10 +31,14 @@ type TrackingOrderLike = {
   public_tracking_frozen?: unknown;
   public_tracking_frozen_status?: unknown;
   hora_entrega_real?: unknown;
+  hora_entrega_acordada?: unknown;
   lugar_origen?: BranchLike;
   origen_sucursal?: BranchLike;
   destino_sucursal?: BranchLike;
   sucursal?: BranchLike;
+  simple_package_order?: unknown;
+  simple_package_source_id?: unknown;
+  service_origin?: unknown;
 };
 
 const TRACKING_LABELS: Record<PublicTrackingStatus, string> = {
@@ -67,82 +74,68 @@ const getReceptionDate = (order: TrackingOrderLike): Date => {
   );
 };
 
-const getScheduleBaseDate = (order: TrackingOrderLike, fallback: Date): Date => {
-  return toDateOrNull(order.public_tracking_schedule_base_at) || fallback;
-};
-
 const isDelivered = (order: TrackingOrderLike) =>
-  toTrimmed(order.estado_pedido).toLowerCase() === "entregado" && !order.public_tracking_ready_for_pickup_at;
+  toTrimmed(order.estado_pedido).toLowerCase() === "entregado";
 
 const isPendingBranchSend = (order: TrackingOrderLike) =>
   toTrimmed(order.estado_pedido) === SEND_TO_BRANCH_STATUS;
 
-const isFrozen = (order: TrackingOrderLike) => order.public_tracking_frozen === true;
-
-const normalizeFrozenStatus = (value: unknown): PublicTrackingStatus | null => {
-  const normalized = toTrimmed(value).toUpperCase();
-  if (
-    normalized === "RECEPTION" ||
-    normalized === "IN_TRANSIT" ||
-    normalized === "READY_FOR_PICKUP" ||
-    normalized === "DELIVERED"
-  ) {
-    return normalized as PublicTrackingStatus;
-  }
-  return null;
+const isDeliveryOrder = (order: TrackingOrderLike): boolean => {
+  return isBranchTransferManagedOrder(order) || isRegularScheduledOrder(order);
 };
 
-const isDeliveryOrder = (order: TrackingOrderLike): boolean => {
+const getRawStatus = (order: TrackingOrderLike) => toTrimmed(order.estado_pedido);
+
+const isInternalSaleOrder = (order: TrackingOrderLike) =>
+  getRawStatus(order).toLowerCase() === INTERNAL_SALE_STATUS;
+
+const isSimplePackageOrder = (order: TrackingOrderLike) =>
+  order.simple_package_order === true || Boolean(order.simple_package_source_id);
+
+const isExternalOrder = (order: TrackingOrderLike) => {
+  const origin = toTrimmed(order.service_origin).toLowerCase();
+  return origin === "external" || origin === "simple_package";
+};
+
+const isRegularScheduledOrder = (order: TrackingOrderLike) =>
+  !isInternalSaleOrder(order) && !isSimplePackageOrder(order) && !isExternalOrder(order);
+
+const isBranchTransferManagedOrder = (order: TrackingOrderLike) => {
+  if (!isSimplePackageOrder(order) && !isExternalOrder(order)) {
+    return false;
+  }
+
   const originId =
     resolveBranchId(order.lugar_origen) ||
     resolveBranchId(order.origen_sucursal) ||
     resolveBranchId(order.sucursal);
   const destinationId =
     resolveBranchId(order.destino_sucursal) ||
-    resolveBranchId(order.sucursal) ||
-    resolveBranchId(order.lugar_origen) ||
-    resolveBranchId(order.origen_sucursal);
+    resolveBranchId(order.sucursal);
 
-  if (!originId || !destinationId) return false;
-  return originId !== destinationId;
+  return Boolean(originId && destinationId && originId !== destinationId);
 };
 
-const nextTransferDayBase = (receivedAt: Date) => {
-  const base = moment.tz(receivedAt, TZ);
-  if (!base.isValid()) return moment.tz(TZ);
+const getScheduledDate = (order: TrackingOrderLike, fallback: Date) =>
+  toDateOrNull(order.hora_entrega_acordada) ||
+  toDateOrNull(order.public_tracking_schedule_base_at) ||
+  fallback;
 
-  for (let daysToAdd = 0; daysToAdd <= 7; daysToAdd += 1) {
-    const candidate = base.clone().add(daysToAdd, "days");
-    const weekday = candidate.isoWeekday();
-    if (weekday !== 2 && weekday !== 4) continue;
+const getRegularInTransitAt = (order: TrackingOrderLike, fallback: Date) => {
+  if (!isRegularScheduledOrder(order)) return null;
 
-    const noon = candidate.clone().hour(12).minute(0).second(0).millisecond(0);
-    if (noon.isSameOrAfter(base)) return candidate;
-  }
-
-  return base.clone().add(1, "week").isoWeekday(2);
+  const scheduledAt = getScheduledDate(order, fallback);
+  return moment
+    .tz(scheduledAt, TZ)
+    .subtract(VISUAL_IN_TRANSIT_THRESHOLD_MINUTES, "minutes")
+    .toDate();
 };
 
-const getTransferTimes = (receivedAt: Date) => {
-  const transferDay = nextTransferDayBase(receivedAt);
-  return {
-    inTransitAt: transferDay.clone().hour(12).minute(0).second(0).millisecond(0).toDate(),
-    readyAt: transferDay.clone().hour(15).minute(0).second(0).millisecond(0).toDate(),
-  };
-};
+const shouldDisplayRegularInTransit = (order: TrackingOrderLike, now: Date, receptionAt: Date) => {
+  if (getRawStatus(order) !== WAITING_RAW_STATUS) return false;
 
-const pickCurrentStatus = (params: {
-  delivered: boolean;
-  delivery: boolean;
-  now: Date;
-  inTransitAt?: Date;
-  readyAt: Date;
-}): PublicTrackingStatus => {
-  if (params.delivered) return "DELIVERED";
-  if (!params.delivery) return "READY_FOR_PICKUP";
-  if (params.now >= params.readyAt) return "READY_FOR_PICKUP";
-  if (params.inTransitAt && params.now >= params.inTransitAt) return "IN_TRANSIT";
-  return "RECEPTION";
+  const inTransitAt = getRegularInTransitAt(order, receptionAt);
+  return Boolean(inTransitAt && now >= inTransitAt);
 };
 
 const buildSteps = (params: {
@@ -180,44 +173,50 @@ const buildSteps = (params: {
 
 const buildPublicTracking = (order: TrackingOrderLike, now = new Date()) => {
   const receptionAt = getReceptionDate(order);
-  const scheduleBaseAt = getScheduleBaseDate(order, receptionAt);
+  const scheduleBaseAt = getScheduledDate(order, receptionAt);
   const delivery = isDeliveryOrder(order);
   const delivered = isDelivered(order);
   const readyForPickupAt = toDateOrNull(order.public_tracking_ready_for_pickup_at);
   const deliveredAt = delivered ? toDateOrNull(order.hora_entrega_real) || now : null;
   const pendingBranchSend = isPendingBranchSend(order);
-  const transferTimes = delivery
-    ? getTransferTimes(scheduleBaseAt)
-    : { inTransitAt: undefined, readyAt: receptionAt };
+  const rawStatus = getRawStatus(order);
+  const visualInTransit = shouldDisplayRegularInTransit(order, now, receptionAt);
+  const inTransitAt =
+    rawStatus === IN_TRANSIT_STATUS || visualInTransit
+      ? getRegularInTransitAt(order, receptionAt) ||
+        toDateOrNull(order.public_tracking_schedule_base_at) ||
+        receptionAt
+      : delivery
+      ? toDateOrNull(order.public_tracking_schedule_base_at) || receptionAt
+      : null;
+  const readyAt = readyForPickupAt || scheduleBaseAt;
   const status =
-    readyForPickupAt
+    delivered
+      ? "DELIVERED"
+      : readyForPickupAt || rawStatus === READY_FOR_PICKUP_STATUS
       ? "READY_FOR_PICKUP"
+      : rawStatus === IN_TRANSIT_STATUS || visualInTransit
+      ? "IN_TRANSIT"
       : pendingBranchSend
       ? "RECEPTION"
-      : isFrozen(order) && delivery && !delivered
-      ? normalizeFrozenStatus(order.public_tracking_frozen_status) || "RECEPTION"
-      : pickCurrentStatus({
-          delivered,
-          delivery,
-          now,
-          inTransitAt: transferTimes.inTransitAt,
-          readyAt: transferTimes.readyAt,
-        });
+      : rawStatus === WAITING_RAW_STATUS || !rawStatus
+      ? "RECEPTION"
+      : "RECEPTION";
 
   return {
     status,
     statusLabel: TRACKING_LABELS[status],
     hasDelivery: delivery,
     receptionAt,
-    inTransitAt: transferTimes.inTransitAt || null,
-    readyForPickupAt: readyForPickupAt || transferTimes.readyAt,
+    inTransitAt,
+    readyForPickupAt: readyAt,
     deliveredAt,
     steps: buildSteps({
       status,
       delivery,
       receptionAt,
-      inTransitAt: transferTimes.inTransitAt,
-      readyAt: transferTimes.readyAt,
+      inTransitAt: inTransitAt || undefined,
+      readyAt,
       deliveredAt,
     }),
   };
