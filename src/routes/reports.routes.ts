@@ -30,6 +30,10 @@ import {
   getRiesgoClientesVentas,
   exportRiesgoClientesVentasXlsx,
 } from "../controllers/reports.controller";
+import {
+  exportOrderAuditReportXlsx,
+  getOrderAuditReport,
+} from "../controllers/orderAuditReport.controller";
 
 const reportsRouter = Router();
 
@@ -63,5 +67,7 @@ reportsRouter.get("/reporte-entregas-simples-externas", getReporteEntregasSimple
 reportsRouter.get("/reporte-entregas-simples-externas/xlsx", exportReporteEntregasSimplesExternasXlsx);
 reportsRouter.get("/ventas-temporales-vendedor", getVentasTemporalesPorVendedor);
 reportsRouter.get("/ventas-temporales-vendedor/xlsx", exportVentasTemporalesPorVendedorXlsx);
+reportsRouter.get("/auditoria-pedidos", getOrderAuditReport);
+reportsRouter.get("/auditoria-pedidos/xlsx", exportOrderAuditReportXlsx);
 
 export default reportsRouter;
