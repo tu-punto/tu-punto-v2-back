@@ -547,7 +547,7 @@ const isSimplePackageLike = (row: any) =>
 const isRegularInternalOrderLike = (row: any) => !isInternalSaleLike(row) && !isSimplePackageLike(row);
 
 const getScheduledMomentLike = (row: any) => {
-  const value = row?.hora_entrega_acordada || row?.fecha_pedido;
+  const value = row?.hora_entrega_acordada;
   if (!value) return null;
   const parsed = moment.parseZone(value);
   return parsed.isValid() ? parsed : null;
@@ -920,8 +920,13 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
 
   const rowMap = new Map<string, any>();
   internalFullRows.forEach((row: any) => {
+    const base =
+      typeof row?.toObject === "function"
+        ? row.toObject()
+        : { ...row };
+
     rowMap.set(`shipping:${String(row?._id)}`, {
-      ...row,
+      ...base,
       key: String(row?._id || ""),
       is_external: false,
     });
