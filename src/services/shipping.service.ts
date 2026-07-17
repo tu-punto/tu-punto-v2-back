@@ -553,6 +553,9 @@ const matchesDashboardCategory = (
   category: ShippingDashboardCategory
 ) => {
   if (category === "all") return true;
+  if (source === "external") {
+    return category === "externos";
+  }
   const isPackage = isSimplePackageLike(row);
   if (category === "paquetes") return isPackage;
   return !isPackage;
