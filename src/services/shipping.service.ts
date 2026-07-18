@@ -600,6 +600,25 @@ const matchesDestinationFilter = (row: any, params: ShippingDashboardParams, kno
   return normalizedDestination.includes(query);
 };
 
+const collectSellerIdsFromShippingLike = (row: any): string[] => {
+  const ids = new Set<string>();
+
+  (Array.isArray(row?.venta) ? row.venta : []).forEach((sale: any) => {
+    const sellerId =
+      sale?.id_vendedor ||
+      (typeof sale?.vendedor === "object" ? sale?.vendedor?._id : sale?.vendedor);
+    const normalized = normalizeTextValue(sellerId);
+    if (normalized) ids.add(normalized);
+  });
+
+  (Array.isArray(row?.productos_temporales) ? row.productos_temporales : []).forEach((item: any) => {
+    const normalized = normalizeTextValue(item?.id_vendedor);
+    if (normalized) ids.add(normalized);
+  });
+
+  return Array.from(ids);
+};
+
 const classifyDashboardRow = (
   row: any,
   source: "shipping" | "external",
@@ -802,6 +821,9 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   const internalFilter: any = {
     estado_pedido: { $ne: INTERNAL_SALE_STATUS },
   };
+  const vendorOptionsInternalFilter: any = {
+    estado_pedido: { $ne: INTERNAL_SALE_STATUS },
+  };
   const externalFilter: any = {
     $or: [
       { service_origin: { $exists: false } },
@@ -811,13 +833,16 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
 
   if (params.from || params.to) {
     internalFilter.hora_entrega_acordada = {};
+    vendorOptionsInternalFilter.hora_entrega_acordada = {};
     externalFilter.fecha_pedido = {};
     if (params.from) {
       internalFilter.hora_entrega_acordada.$gte = params.from;
+      vendorOptionsInternalFilter.hora_entrega_acordada.$gte = params.from;
       externalFilter.fecha_pedido.$gte = params.from;
     }
     if (params.to) {
       internalFilter.hora_entrega_acordada.$lte = params.to;
+      vendorOptionsInternalFilter.hora_entrega_acordada.$lte = params.to;
       externalFilter.fecha_pedido.$lte = params.to;
     }
   }
@@ -826,6 +851,15 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     const branchObjectId = new Types.ObjectId(currentBranchId);
     internalFilter.$and = [
       ...(internalFilter.$and || []),
+      {
+        $or: [
+          { lugar_origen: branchObjectId },
+          { sucursal: branchObjectId },
+        ],
+      },
+    ];
+    vendorOptionsInternalFilter.$and = [
+      ...(vendorOptionsInternalFilter.$and || []),
       {
         $or: [
           { lugar_origen: branchObjectId },
@@ -856,6 +890,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       ],
     };
     internalFilter.$and = [...(internalFilter.$and || []), clientMatch];
+    vendorOptionsInternalFilter.$and = [...(vendorOptionsInternalFilter.$and || []), clientMatch];
     externalFilter.$and = [
       ...(externalFilter.$and || []),
       {
@@ -872,6 +907,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   if (params.guide) {
     const guideRegex = new RegExp(escapeRegex(params.guide), "i");
     internalFilter.$and = [...(internalFilter.$and || []), { numero_guia: guideRegex }];
+    vendorOptionsInternalFilter.$and = [...(vendorOptionsInternalFilter.$and || []), { numero_guia: guideRegex }];
     externalFilter.$and = [...(externalFilter.$and || []), { numero_guia: guideRegex }];
   }
 
@@ -900,9 +936,13 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     externalFilter.$and = [...(externalFilter.$and || []), { _id: { $in: [] } }];
   }
 
-  const [internalRowsLight, externalRowsLight] = await Promise.all([
+  const [internalRowsLight, vendorOptionsInternalRowsLight, externalRowsLight] = await Promise.all([
     PedidoModel.find(internalFilter)
-      .select("_id estado_pedido hora_entrega_acordada fecha_pedido lugar_origen sucursal simple_package_order simple_package_source_id lugar_entrega")
+      .select("_id estado_pedido hora_entrega_acordada fecha_pedido lugar_origen sucursal simple_package_order simple_package_source_id lugar_entrega venta.vendedor venta.id_vendedor productos_temporales.id_vendedor")
+      .sort({ hora_entrega_acordada: -1, _id: -1 })
+      .lean(),
+    PedidoModel.find(vendorOptionsInternalFilter)
+      .select("_id estado_pedido hora_entrega_acordada fecha_pedido lugar_origen sucursal simple_package_order simple_package_source_id lugar_entrega venta.vendedor venta.id_vendedor productos_temporales.id_vendedor")
       .sort({ hora_entrega_acordada: -1, _id: -1 })
       .lean(),
     VentaExternaModel.find(externalFilter)
@@ -927,6 +967,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       salesPedidoIdsCount: salesPedidoIds.length,
       salesPedidoIdsSample: salesPedidoIds.slice(0, 10).map((id: any) => String(id)),
       internalRowsLight: internalRowsLight.length,
+      vendorOptionsInternalRowsLight: vendorOptionsInternalRowsLight.length,
       externalRowsLight: externalRowsLight.length,
     });
   }
@@ -939,6 +980,13 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     .filter((row: any) => matchesDashboardCategory(row, "external", category))
     .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
     .map((row: any) => classifyDashboardRow(row, "external", currentBranchId, now, ignoreBranchVisibility));
+  const classifiedVendorOptionsInternal = vendorOptionsInternalRowsLight
+    .filter((row: any) => matchesDashboardCategory(row, "shipping", category))
+    .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
+    .map((row: any) => ({
+      row,
+      classified: classifyDashboardRow(row, "shipping", currentBranchId, now, ignoreBranchVisibility),
+    }));
 
   const allClassified = [...classifiedInternal, ...classifiedExternal]
     .filter((row) => ignoreBranchVisibility || row.related)
@@ -959,6 +1007,20 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     if (tab === "en_camino") return row.inTransit;
     return row.delivered;
   });
+  const vendorIds = Array.from(
+    new Set(
+      classifiedVendorOptionsInternal
+        .filter(({ classified }) => ignoreBranchVisibility || classified.related)
+        .filter(({ classified }) => {
+          if (tab === "todos") return classified.all;
+          if (tab === "En Espera") return classified.ready;
+          if (tab === "para_enviar") return classified.pendingSend;
+          if (tab === "en_camino") return classified.inTransit;
+          return classified.delivered;
+        })
+        .flatMap(({ row }) => collectSellerIdsFromShippingLike(row))
+    )
+  );
 
   const pageSlice = tabRows.slice((safePage - 1) * safeLimit, safePage * safeLimit);
   const pageInternalIds = pageSlice.filter((row) => row.source === "shipping").map((row) => row.rowId);
@@ -1004,6 +1066,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       classifiedExternal: classifiedExternal.length,
       allClassified: allClassified.length,
       counts,
+      vendorIdsCount: vendorIds.length,
       tabRows: tabRows.length,
       pageSlice: pageSlice.length,
       pageInternalIds: pageInternalIds.length,
@@ -1017,6 +1080,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   return {
     rows,
     counts,
+    vendorIds,
     total: tabRows.length,
     page: safePage,
     limit: safeLimit,
