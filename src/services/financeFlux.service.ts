@@ -206,6 +206,19 @@ const parseRawDate = (value?: string) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const normalizeOptionalObjectId = (value: unknown) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  const normalized = normalizeId(value);
+  if (!normalized) return null;
+  if (!Types.ObjectId.isValid(normalized)) {
+    throw new Error(`Id invalido: ${normalized}`);
+  }
+
+  return new Types.ObjectId(normalized);
+};
+
 const startOfRawDay = (value: Date) =>
   new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0, 0));
 
@@ -328,11 +341,46 @@ const updateFinanceFlux = async (
   if (!existingFlux) throw new Error("Flujo no encontrado");
 
   const oldDeuda = existingFlux.esDeuda ? existingFlux.monto : 0;
-  const payload: Partial<IFlujoFinanciero> = {
-    ...updates,
-    ...(Object.prototype.hasOwnProperty.call(updates, "esDeuda") ? { esDeuda: toBoolean((updates as any).esDeuda) } : {}),
-    ...(Object.prototype.hasOwnProperty.call(updates, "monto") ? { monto: toNumber((updates as any).monto) } : {}),
-  };
+  const payload: Partial<IFlujoFinanciero> = {};
+
+  if (Object.prototype.hasOwnProperty.call(updates, "tipo")) {
+    payload.tipo = String((updates as any).tipo || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "categoria")) {
+    payload.categoria = String((updates as any).categoria || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "concepto")) {
+    payload.concepto = String((updates as any).concepto || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "founder")) {
+    payload.founder = String((updates as any).founder || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "esDeuda")) {
+    payload.esDeuda = toBoolean((updates as any).esDeuda);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "monto")) {
+    payload.monto = toNumber((updates as any).monto);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "fecha")) {
+    const parsedFecha = parseRawDate(String((updates as any).fecha || ""));
+    if (!parsedFecha) throw new Error("Fecha invalida");
+    payload.fecha = parsedFecha;
+  }
+
+  const normalizedSellerId = normalizeOptionalObjectId((updates as any).id_vendedor);
+  if (normalizedSellerId !== undefined) {
+    payload.id_vendedor = normalizedSellerId as any;
+  }
+
+  const normalizedWorkerId = normalizeOptionalObjectId((updates as any).id_trabajador);
+  if (normalizedWorkerId !== undefined) {
+    (payload as any).id_trabajador = normalizedWorkerId;
+  }
+
+  const normalizedBranchId = normalizeOptionalObjectId((updates as any).id_sucursal);
+  if (normalizedBranchId !== undefined) {
+    payload.id_sucursal = normalizedBranchId as any;
+  }
 
   if (Array.isArray((updates as any).detalle_servicios)) {
     const { detail, total } = normalizeServiceDetailUpdates(
