@@ -29,6 +29,7 @@ import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
 import trackingFreezeRouter from "./routes/trackingFreeze.routes";
 import catalogIntegrationRouter from "./routes/catalogIntegration.routes";
 import attendanceRouter from "./routes/attendance.routes";
+import landingLeadRouter from "./routes/landingLead.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -42,6 +43,7 @@ const router = Router();
 
 router.use("/whatsapp/webhook", whatsappWebhookRouter);
 router.use("/integration/catalog", catalogIntegrationRouter);
+router.use("/landing-leads", landingLeadRouter);
 router.get("/public-reports/pagado-al-dueno/xlsx", rateLimiters.publicReports, exportPagadoAlDuenoLegacyXlsx);
 router.get("/public/seller-renewal-summary", rateLimiters.publicReports, getRenewalMonthlyPaymentSummary);
 router.use("/seller", requireAuth, sellerRouter);
