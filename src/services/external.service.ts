@@ -674,6 +674,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador") ||
     Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
   const buyerNameEditRequested = Object.prototype.hasOwnProperty.call(externalSale, "comprador");
+  const destinationEditRequested =
+    Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal_id") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal");
 
   if (serviceOrigin === "simple_package" && buyerNameEditRequested) {
     throw new Error("Por ahora no se puede editar el comprador de pedidos simples");
@@ -681,6 +684,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   if ((paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
     throw new Error("Solo se puede editar el cobro o el comprador el mismo dia que se creo la entrega");
+  }
+  if (destinationEditRequested && !isSameBusinessDay(existing.fecha_pedido)) {
+    throw new Error("Solo se puede cambiar la sucursal destino el mismo dia que se creo la entrega");
   }
 
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
@@ -875,6 +881,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.origen_sucursal = toObjectIdOrUndefined(nextBranchRoute.originBranchId);
     updatePayload.destino_sucursal = toObjectIdOrUndefined(nextBranchRoute.destinationBranchId);
     updatePayload.lugar_entrega = nextBranchRoute.destinationBranchName || existing.lugar_entrega;
+  } else if (destinationEditRequested && serviceOrigin === "simple_package") {
+    updatePayload.destino_sucursal = toObjectIdOrUndefined(nextDestinationBranchId);
   }
 
   if (serviceOrigin === "simple_package" || serviceOrigin === "external") {

@@ -334,6 +334,10 @@ const getSimplePackageMethodFromShipping = (shipping: any): "" | "efectivo" | "q
 };
 
 const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
+const isSameBusinessDay = (value: unknown) => {
+  const date = moment.tz(value as any, "America/La_Paz");
+  return date.isValid() && date.isSame(moment.tz("America/La_Paz"), "day");
+};
 
 const getExternalBuyerChargeAmount = (sale: any): number =>
   roundCurrency(
@@ -1321,11 +1325,23 @@ const updateShipping = async (
   const isSimplePackageOrder =
     Boolean((shipping as any)?.simple_package_order) ||
     Boolean((shipping as any)?.simple_package_source_id);
+  const simplePackageDestinationEditRequested =
+    isSimplePackageOrder &&
+    (
+      Object.prototype.hasOwnProperty.call(newData, "destino_sucursal_id") ||
+      Object.prototype.hasOwnProperty.call(newData, "destino_sucursal")
+    );
+
+  if (simplePackageDestinationEditRequested && !isSameBusinessDay((shipping as any)?.fecha_pedido)) {
+    throw new Error("Solo se puede cambiar la sucursal destino el mismo dia que se creo el pedido");
+  }
 
   normalizeOrderPaymentData(newData, shipping);
   await normalizeShippingBranches(newData, shipping);
   const simplePackageDestination = isSimplePackageOrder
-    ? await resolveSimplePackageDestination(shipping)
+    ? simplePackageDestinationEditRequested
+      ? null
+      : await resolveSimplePackageDestination(shipping)
     : null;
 
   if (simplePackageDestination?.id) {
@@ -1487,6 +1503,7 @@ const updateShipping = async (
 
   if (resShip && simplePackageSourceId) {
     const nextStatus = String((resShip as any).estado_pedido || "").trim();
+    const destinationBranchId = resolveBranchId((resShip as any).sucursal);
     const simplePackageUpdatePayload = {
       estado_pedido: (resShip as any).estado_pedido,
       delivered: nextStatus === "Entregado",
@@ -1506,6 +1523,14 @@ const updateShipping = async (
       shipping_qr_code: (resShip as any).shipping_qr_code || "",
       shipping_qr_payload: (resShip as any).shipping_qr_payload || "",
       shipping_qr_image_path: (resShip as any).shipping_qr_image_path || "",
+      ...(simplePackageDestinationEditRequested && destinationBranchId
+        ? {
+            destino_sucursal: Types.ObjectId.isValid(destinationBranchId)
+              ? new Types.ObjectId(destinationBranchId)
+              : undefined,
+            lugar_entrega: (resShip as any).lugar_entrega || "",
+          }
+        : {}),
     };
     const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
     const existingSource = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);

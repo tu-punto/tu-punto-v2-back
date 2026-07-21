@@ -840,6 +840,7 @@ const updateSimplePackageByID = async (params: {
   );
   ensureSellerSimpleBranch(seller, nextOriginBranchId, "La sucursal de origen");
   ensureSellerSimpleBranch(seller, nextDestinationBranchId, "La sucursal destino");
+  const canEditDebtAmounts = role === "seller" || isPrivileged;
   const nextSaldoPorPaquete = roundCurrency(
     Math.max(
       0,
@@ -920,13 +921,26 @@ const updateSimplePackageByID = async (params: {
           nextSize: nextPackageSize,
           fallbackFixedPrice: seller?.precio_paquete,
         });
+  const requestedBuyerDebtRaw = canEditDebtAmounts ? params.payload?.deuda_comprador : undefined;
+  const hasRequestedBuyerDebt =
+    requestedBuyerDebtRaw !== undefined &&
+    requestedBuyerDebtRaw !== null &&
+    String(requestedBuyerDebtRaw).trim() !== "";
+  const requestedSellerDebtRaw = canEditDebtAmounts
+    ? params.payload?.amortizacion_vendedor
+    : existing.amortizacion_vendedor;
   const nextAmortizacionVendedor = roundCurrency(
-    toNumber(
-      role === "seller"
-        ? params.payload?.amortizacion_vendedor ?? existing.amortizacion_vendedor
-        : existing.amortizacion_vendedor,
-      0
-    )
+    hasRequestedBuyerDebt
+      ? Math.max(
+          0,
+          nextPrecioPaquete +
+            nextBranchRoutePrice -
+            toNumber(requestedBuyerDebtRaw, Number(existing.deuda_comprador || 0))
+        )
+      : toNumber(
+          requestedSellerDebtRaw ?? existing.amortizacion_vendedor,
+          Number(existing.amortizacion_vendedor || 0)
+        )
   );
   if (nextAmortizacionVendedor < 0) {
     throw new Error("El monto que cubrira el vendedor no puede ser menor a 0");
