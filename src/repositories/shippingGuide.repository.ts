@@ -9,20 +9,20 @@ const getAllShippings = async (): Promise<IGuiaEnvioDocument[]> => {
 
 const getSellerShippings = async (sellerID: string): Promise<IGuiaEnvioDocument[]> => {
     if (!Types.ObjectId.isValid(sellerID)) {
-        throw new Error("ID de vendedor no válido");
+        throw new Error("ID de vendedor no vÃ¡lido");
     }
-    
+
     const sellerObjectId = new Types.ObjectId(sellerID);
     return await GuiaEnviosModel.find({ vendedor: sellerObjectId }).populate('vendedor');
 };
 
 const getBranchShippings = async (branchID: string): Promise<IGuiaEnvioDocument[]> => {
-     if(!Types.ObjectId.isValid(branchID)) {
-        throw new Error("ID de sucursal no válido");
-     }
+    if (!Types.ObjectId.isValid(branchID)) {
+        throw new Error("ID de sucursal no vÃ¡lido");
+    }
 
-     const branchObjectID = new Types.ObjectId(branchID);
-    return await GuiaEnviosModel.find({ sucursal: branchObjectID, isRecogido: false }).populate('sucursal').populate('vendedor')
+    const branchObjectID = new Types.ObjectId(branchID);
+    return await GuiaEnviosModel.find({ sucursal: branchObjectID }).populate('sucursal').populate('vendedor')
 }
 
 const uploadShipping = async(shippingGuide: IGuiaEnvio): Promise<IGuiaEnvioDocument> => {
