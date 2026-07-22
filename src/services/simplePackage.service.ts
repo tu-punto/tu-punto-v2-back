@@ -929,6 +929,10 @@ const updateSimplePackageByID = async (params: {
   const requestedSellerDebtRaw = canEditDebtAmounts
     ? params.payload?.amortizacion_vendedor
     : existing.amortizacion_vendedor;
+  const hasRequestedSellerDebt =
+    requestedSellerDebtRaw !== undefined &&
+    requestedSellerDebtRaw !== null &&
+    String(requestedSellerDebtRaw).trim() !== "";
   const nextAmortizacionVendedor = roundCurrency(
     hasRequestedBuyerDebt
       ? Math.max(
@@ -953,6 +957,25 @@ const updateSimplePackageByID = async (params: {
     nextBranchRoutePrice,
     effectiveNextDeliverySpaces
   );
+  const nextDeudaComprador = roundCurrency(
+    hasRequestedBuyerDebt
+      ? Math.max(
+          0,
+          Math.min(
+            Number(pricing.precio_total || 0),
+            toNumber(requestedBuyerDebtRaw, Number(existing.deuda_comprador || 0))
+          )
+        )
+      : Number(pricing.deuda_comprador || 0)
+  );
+  const isDebtOnlyEdit =
+    canEditDebtAmounts &&
+    (hasRequestedBuyerDebt || hasRequestedSellerDebt) &&
+    params.payload?.package_size === undefined &&
+    params.payload?.destino_sucursal === undefined &&
+    params.payload?.destino_sucursal_id === undefined &&
+    params.payload?.delivery_spaces === undefined &&
+    params.payload?.precio_entre_sucursal === undefined;
 
   const updatePayload: Partial<IVentaExterna> = {
     package_size: nextPackageSize,
@@ -985,11 +1008,30 @@ const updateSimplePackageByID = async (params: {
     const method = normalizePaymentMethod(params.payload?.metodo_pago ?? existing.metodo_pago);
     updatePayload.esta_pagado = "no";
     updatePayload.metodo_pago = method;
-    updatePayload.saldo_cobrar = buildTotalAmountToCharge(pricing);
+    updatePayload.saldo_cobrar = roundCurrency(nextDeudaComprador + nextSaldoPorPaquete);
     updatePayload.precio_entre_sucursal = pricing.precio_entre_sucursal;
+    updatePayload.amortizacion_vendedor = nextAmortizacionVendedor;
+    updatePayload.deuda_comprador = nextDeudaComprador;
+    updatePayload.monto_paga_vendedor = nextAmortizacionVendedor;
+    updatePayload.monto_paga_comprador = nextDeudaComprador;
     if (typeof params.payload?.is_external === "boolean") {
       updatePayload.is_external = params.payload.is_external;
     }
+  }
+
+  if (isDebtOnlyEdit) {
+    delete (updatePayload as any).precio_paquete_unitario;
+    delete (updatePayload as any).precio_paquete;
+    delete (updatePayload as any).precio_entre_sucursal;
+    delete (updatePayload as any).precio_total;
+    delete (updatePayload as any).cargo_delivery;
+    delete (updatePayload as any).costo_delivery;
+    delete (updatePayload as any).delivery_spaces;
+    delete (updatePayload as any).package_size;
+    delete (updatePayload as any).sucursal;
+    delete (updatePayload as any).origen_sucursal;
+    delete (updatePayload as any).destino_sucursal;
+    delete (updatePayload as any).lugar_entrega;
   }
 
   return await SimplePackageRepository.updateSimplePackageByID(params.id, updatePayload);
