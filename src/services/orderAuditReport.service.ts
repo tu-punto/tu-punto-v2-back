@@ -208,6 +208,7 @@ const buildShippingMatch = (params: OrderAuditParams) => {
 
 const buildExternalMatch = (params: OrderAuditParams) => {
   const filter: any = {
+    anulado: { $ne: true },
     $or: [
       { service_origin: { $exists: false } },
       { service_origin: "external" },

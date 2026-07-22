@@ -65,10 +65,14 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     };
 
     const user = await UserModel.findById(decoded.id)
-      .select("must_change_password role")
+      .select("must_change_password role email")
       .lean();
     if (!user) {
       return res.status(401).json({ success: false, msg: "Usuario no encontrado" });
+    }
+
+    if ((user as any)?.email) {
+      authData.email = String((user as any).email).trim().toLowerCase();
     }
 
     if (role === "seller") {

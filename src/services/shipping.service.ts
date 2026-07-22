@@ -632,7 +632,8 @@ const classifyDashboardRow = (
 ) => {
   const isExternal = source === "external";
   const status = normalizeStatusValue(row?.estado_pedido);
-  const delivered = status === "Entregado";
+  const isAnnulled = isExternal && (Boolean(row?.anulado) || status === "Anulado");
+  const delivered = isAnnulled || status === "Entregado";
   const originId = isExternal ? resolveExternalOriginBranchId(row) : resolveInternalOriginBranchId(row);
   const destinationId = isExternal ? resolveExternalDestinationBranchId(row) : resolveInternalDestinationBranchId(row);
   const related = ignoreBranchVisibility
@@ -644,11 +645,13 @@ const classifyDashboardRow = (
   const interbranch = Boolean(originId && destinationId && originId !== destinationId);
   const branchTransferManaged = isExternal || isSimplePackageLike(row);
   const pendingSend =
+    !isAnnulled &&
     status === SEND_TO_BRANCH_STATUS &&
     branchTransferManaged &&
     interbranch &&
     (ignoreBranchVisibility || originId === currentBranchId);
   const inTransit =
+    !isAnnulled &&
     !pendingSend &&
     ((status === IN_TRANSIT_STATUS &&
       (ignoreBranchVisibility
@@ -658,11 +661,12 @@ const classifyDashboardRow = (
         : true)) ||
       shouldDisplayAsInTransitLike(row, now));
   const ready =
+    !isAnnulled &&
     !delivered &&
     !pendingSend &&
     !inTransit &&
     (status === WAITING_RAW_STATUS || status === READY_FOR_PICKUP_VISUAL_STATUS);
-  const visibleInAll = !delivered && (ignoreBranchVisibility || related);
+  const visibleInAll = !isAnnulled && !delivered && (ignoreBranchVisibility || related);
 
   return {
     source,
@@ -713,7 +717,9 @@ const mapExternalRowToShippingShape = (externalSale: any) => {
     lugar_entrega: destinationLabel,
     id_sucursal: sucursalOrigen?._id || externalSale?.origen_sucursal || externalSale?.sucursal || externalSale?.id_sucursal,
     sucursal: sucursalOrigen,
-    estado_pedido: normalizeStatusValue(externalSale?.estado_pedido || (externalSale?.delivered ? "Entregado" : WAITING_RAW_STATUS)),
+    estado_pedido: externalSale?.anulado
+      ? "Anulado"
+      : normalizeStatusValue(externalSale?.estado_pedido || (externalSale?.delivered ? "Entregado" : WAITING_RAW_STATUS)),
     esta_pagado: estaPagado,
     saldo_cobrar: Number(
       externalSale?.deuda_comprador ??
@@ -950,7 +956,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       .sort({ hora_entrega_acordada: -1, _id: -1 })
       .lean(),
     VentaExternaModel.find(externalFilter)
-      .select("_id estado_pedido fecha_pedido hora_entrega_real origen_sucursal destino_sucursal sucursal service_origin lugar_entrega")
+      .select("_id estado_pedido anulado fecha_pedido hora_entrega_real origen_sucursal destino_sucursal sucursal service_origin lugar_entrega")
       .sort({ fecha_pedido: -1, _id: -1 })
       .lean(),
   ]);
