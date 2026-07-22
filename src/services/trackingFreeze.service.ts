@@ -23,6 +23,7 @@ const pedidoDeliveryFilter = {
 };
 
 const externalDeliveryFilter = {
+  anulado: { $ne: true },
   $or: [
     { service_origin: { $exists: false } },
     { service_origin: "external" },

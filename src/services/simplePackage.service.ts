@@ -840,6 +840,7 @@ const updateSimplePackageByID = async (params: {
   );
   ensureSellerSimpleBranch(seller, nextOriginBranchId, "La sucursal de origen");
   ensureSellerSimpleBranch(seller, nextDestinationBranchId, "La sucursal destino");
+  const canEditDebtAmounts = role === "seller" || isPrivileged;
   const nextSaldoPorPaquete = roundCurrency(
     Math.max(
       0,
@@ -920,13 +921,30 @@ const updateSimplePackageByID = async (params: {
           nextSize: nextPackageSize,
           fallbackFixedPrice: seller?.precio_paquete,
         });
+  const requestedBuyerDebtRaw = canEditDebtAmounts ? params.payload?.deuda_comprador : undefined;
+  const hasRequestedBuyerDebt =
+    requestedBuyerDebtRaw !== undefined &&
+    requestedBuyerDebtRaw !== null &&
+    String(requestedBuyerDebtRaw).trim() !== "";
+  const requestedSellerDebtRaw = canEditDebtAmounts
+    ? params.payload?.amortizacion_vendedor
+    : existing.amortizacion_vendedor;
+  const hasRequestedSellerDebt =
+    requestedSellerDebtRaw !== undefined &&
+    requestedSellerDebtRaw !== null &&
+    String(requestedSellerDebtRaw).trim() !== "";
   const nextAmortizacionVendedor = roundCurrency(
-    toNumber(
-      role === "seller"
-        ? params.payload?.amortizacion_vendedor ?? existing.amortizacion_vendedor
-        : existing.amortizacion_vendedor,
-      0
-    )
+    hasRequestedBuyerDebt
+      ? Math.max(
+          0,
+          nextPrecioPaquete +
+            nextBranchRoutePrice -
+            toNumber(requestedBuyerDebtRaw, Number(existing.deuda_comprador || 0))
+        )
+      : toNumber(
+          requestedSellerDebtRaw ?? existing.amortizacion_vendedor,
+          Number(existing.amortizacion_vendedor || 0)
+        )
   );
   if (nextAmortizacionVendedor < 0) {
     throw new Error("El monto que cubrira el vendedor no puede ser menor a 0");
@@ -939,6 +957,25 @@ const updateSimplePackageByID = async (params: {
     nextBranchRoutePrice,
     effectiveNextDeliverySpaces
   );
+  const nextDeudaComprador = roundCurrency(
+    hasRequestedBuyerDebt
+      ? Math.max(
+          0,
+          Math.min(
+            Number(pricing.precio_total || 0),
+            toNumber(requestedBuyerDebtRaw, Number(existing.deuda_comprador || 0))
+          )
+        )
+      : Number(pricing.deuda_comprador || 0)
+  );
+  const isDebtOnlyEdit =
+    canEditDebtAmounts &&
+    (hasRequestedBuyerDebt || hasRequestedSellerDebt) &&
+    params.payload?.package_size === undefined &&
+    params.payload?.destino_sucursal === undefined &&
+    params.payload?.destino_sucursal_id === undefined &&
+    params.payload?.delivery_spaces === undefined &&
+    params.payload?.precio_entre_sucursal === undefined;
 
   const updatePayload: Partial<IVentaExterna> = {
     package_size: nextPackageSize,
@@ -971,11 +1008,30 @@ const updateSimplePackageByID = async (params: {
     const method = normalizePaymentMethod(params.payload?.metodo_pago ?? existing.metodo_pago);
     updatePayload.esta_pagado = "no";
     updatePayload.metodo_pago = method;
-    updatePayload.saldo_cobrar = buildTotalAmountToCharge(pricing);
+    updatePayload.saldo_cobrar = roundCurrency(nextDeudaComprador + nextSaldoPorPaquete);
     updatePayload.precio_entre_sucursal = pricing.precio_entre_sucursal;
+    updatePayload.amortizacion_vendedor = nextAmortizacionVendedor;
+    updatePayload.deuda_comprador = nextDeudaComprador;
+    updatePayload.monto_paga_vendedor = nextAmortizacionVendedor;
+    updatePayload.monto_paga_comprador = nextDeudaComprador;
     if (typeof params.payload?.is_external === "boolean") {
       updatePayload.is_external = params.payload.is_external;
     }
+  }
+
+  if (isDebtOnlyEdit) {
+    delete (updatePayload as any).precio_paquete_unitario;
+    delete (updatePayload as any).precio_paquete;
+    delete (updatePayload as any).precio_entre_sucursal;
+    delete (updatePayload as any).precio_total;
+    delete (updatePayload as any).cargo_delivery;
+    delete (updatePayload as any).costo_delivery;
+    delete (updatePayload as any).delivery_spaces;
+    delete (updatePayload as any).package_size;
+    delete (updatePayload as any).sucursal;
+    delete (updatePayload as any).origen_sucursal;
+    delete (updatePayload as any).destino_sucursal;
+    delete (updatePayload as any).lugar_entrega;
   }
 
   return await SimplePackageRepository.updateSimplePackageByID(params.id, updatePayload);

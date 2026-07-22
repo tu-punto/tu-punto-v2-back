@@ -41,6 +41,10 @@ export interface IVentaExterna {
     saldo_cobrar: number;
     estado_pedido: string;
     is_external?: boolean;
+    anulado?: boolean;
+    anulado_en?: Date;
+    anulado_por?: string;
+    motivo_anulacion?: string;
     delivered: boolean;
     seller_balance_applied?: boolean;
     deposito_realizado?: boolean;

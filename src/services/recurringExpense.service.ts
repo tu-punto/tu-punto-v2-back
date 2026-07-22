@@ -2,7 +2,6 @@ import { format } from "date-fns";
 import { Types } from "mongoose";
 
 import { IRecurringExpense } from "../entities/IRecurringExpense";
-import { FinanceFluxCategoryRepository } from "../repositories/financeFluxCategory.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { RecurringExpenseRepository } from "../repositories/recurringExpense.repository";
 
@@ -44,19 +43,6 @@ const normalizePayload = (payload: Partial<IRecurringExpense>) => {
     hasta_cuando_se_pago: paidUntil,
     activo: payload?.activo ?? true,
   };
-};
-
-const getServiceCategoryName = async () => {
-  const categories = await FinanceFluxCategoryRepository.findAll();
-  const serviceCategory = categories.find(
-    (item: any) => normalizeText(item?.nombre).toLowerCase() === "servicio"
-  );
-
-  if (!serviceCategory) {
-    throw new Error("No existe la categoria SERVICIO en Flujo_Financiero_Categoria");
-  }
-
-  return serviceCategory.nombre;
 };
 
 const getAllRecurringExpenses = async () => {
@@ -106,7 +92,7 @@ const payRecurringExpense = async (id: string) => {
   }
 
   const detail = normalizeText(existing.detalle) || normalizeText(existing.tipo);
-  const categoryName = await getServiceCategoryName();
+  const categoryName = normalizeText(existing.tipo);
   const paidUntil = new Date(existing.hasta_cuando_se_pago);
   const formattedDate = format(paidUntil, "dd/MM/yyyy");
 
@@ -118,7 +104,7 @@ const payRecurringExpense = async (id: string) => {
   const createdFlux = await FinanceFluxRepository.registerFinanceFlux({
     tipo: "GASTO",
     categoria: categoryName,
-    concepto: `${existing.tipo} hasta ${formattedDate}`,
+    concepto: `${detail} hasta ${formattedDate}`,
     monto: Number(existing.monto || 0),
     fecha: paidUntil,
     esDeuda: false,

@@ -9,7 +9,10 @@ import {
   publishServiceAnnouncementController,
 } from "../controllers/serviceAnnouncement.controller";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware";
-import { uploadAnnouncementFiles } from "../middlewares/upload.middleware";
+import { announcementAttachmentMimeTypes, uploadAnnouncementFiles, validateUploadedFiles } from "../middlewares/upload.middleware";
+import { rateLimiters } from "../middlewares/rateLimit.middleware";
+import { validateRequest } from "../middlewares/validate.middleware";
+import { validateServiceAnnouncementBody } from "../validation/uploads.validation";
 
 const serviceAnnouncementRouter = Router();
 
@@ -47,7 +50,10 @@ serviceAnnouncementRouter.post(
   "/",
   requireAuth,
   requireRole("admin"),
+  rateLimiters.uploads,
   uploadAnnouncementFiles.array("attachments", 6),
+  validateUploadedFiles({ fieldLabel: "adjunto", allowedMimeTypes: announcementAttachmentMimeTypes, allowMultiple: true }),
+  validateRequest({ body: validateServiceAnnouncementBody }),
   createServiceAnnouncementController
 );
 serviceAnnouncementRouter.post(

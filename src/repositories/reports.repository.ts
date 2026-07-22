@@ -336,6 +336,8 @@ export const ReportsRepository = {
       ],
     };
 
+    filter.anulado = { $ne: true };
+
     if (sucursalIds?.length) {
       filter.sucursal = { $in: sucursalIds.map((id) => new Types.ObjectId(id)) };
     }
@@ -367,6 +369,7 @@ export const ReportsRepository = {
     if (end) rangeMatch.$lt = end;
 
     const filter: any = {
+      anulado: { $ne: true },
       $or: [
         { fecha_pedido: rangeMatch },
         { hora_entrega_real: rangeMatch },
