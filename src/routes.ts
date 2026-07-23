@@ -30,6 +30,7 @@ import trackingFreezeRouter from "./routes/trackingFreeze.routes";
 import catalogIntegrationRouter from "./routes/catalogIntegration.routes";
 import attendanceRouter from "./routes/attendance.routes";
 import landingLeadRouter from "./routes/landingLead.routes";
+import productPromotionRouter from "./routes/productPromotion.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -47,6 +48,7 @@ router.use("/landing-leads", landingLeadRouter);
 router.get("/public-reports/pagado-al-dueno/xlsx", rateLimiters.publicReports, exportPagadoAlDuenoLegacyXlsx);
 router.get("/public/seller-renewal-summary", rateLimiters.publicReports, getRenewalMonthlyPaymentSummary);
 router.use("/seller", requireAuth, sellerRouter);
+router.use("/product-promotions", productPromotionRouter);
 // router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
 router.use("/product", productRouter);
 router.use("/feature", requireAuth, requireRole("admin", "operator", "seller"), featureRouter);

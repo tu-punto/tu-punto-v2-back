@@ -16,6 +16,7 @@ import { SellerPdfService } from "../services/sellerPdf.service"; // Importar el
 import dayjs from "dayjs";
 import moment from "moment-timezone";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { UserModel } from "../entities/implements/UserSchema";
 import { SaleService } from "./sale.service";
@@ -28,6 +29,7 @@ import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 import { SimplePackageService } from "./simplePackage.service";
 import { uploadFileToAws } from "./bucket.service";
 import { hashPassword } from "../helpers/auth";
+import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -41,6 +43,7 @@ const normalizeDiscountPercent = (value: unknown) =>
 
 const applyDiscount = (amount: number, discountPercent: number) =>
   Number((amount * (1 - discountPercent / 100)).toFixed(2));
+const roundMoney = (value: number) => Number(value.toFixed(2));
 
 const getRawId = (value: any) => String(value?._id || value || "").trim();
 
@@ -1203,6 +1206,209 @@ const getSellerPaymentProofs = async (sellerId: string) => {
   }
 };
 
+const getSellerDashboard = async (sellerId: string, options?: { months?: number }) => {
+  const seller = await SellerRepository.findById(sellerId);
+  if (!seller) {
+    throw new Error("Vendedor no encontrado");
+  }
+
+  const months = Math.max(1, Math.min(12, Number(options?.months || 6)));
+  const startDate = dayjs().startOf("month").subtract(months - 1, "month").toDate();
+  const endDate = dayjs().endOf("month").toDate();
+  const monthKeys = Array.from({ length: months }, (_, index) =>
+    dayjs(startDate).add(index, "month").format("YYYY-MM")
+  );
+
+  const sales = await SaleService.getRawSalesBySellerId(sellerId);
+  const internalRows = (sales || []).filter((sale: any) => {
+    const date = sale?.pedido?.fecha_pedido ? new Date(sale.pedido.fecha_pedido) : null;
+    return date && date >= startDate && date <= endDate;
+  });
+
+  const catalogOrders = await PedidoModel.find({
+    origen_pedido: "catalogo",
+    fecha_pedido: { $gte: startDate, $lte: endDate },
+    "productos_temporales.id_vendedor": new Types.ObjectId(sellerId)
+  })
+    .select("fecha_pedido lugar_origen productos_temporales")
+    .lean();
+
+  const monthlyMap = new Map<string, { internalRevenue: number; catalogRevenue: number; units: number }>();
+  monthKeys.forEach((key) => monthlyMap.set(key, { internalRevenue: 0, catalogRevenue: 0, units: 0 }));
+
+  const productMap = new Map<string, { productName: string; units: number; revenue: number; channels: Set<string> }>();
+  const branchMap = new Map<string, { branchName: string; revenue: number; units: number }>();
+
+  let internalRevenue = 0;
+  let catalogRevenue = 0;
+  let internalUnits = 0;
+  let catalogUnits = 0;
+
+  for (const sale of internalRows as any[]) {
+    const quantity = Math.max(0, Number(sale?.cantidad || 0));
+    const revenue = roundMoney(quantity * Number(sale?.precio_unitario || 0));
+    const date = sale?.pedido?.fecha_pedido ? dayjs(sale.pedido.fecha_pedido) : null;
+    const monthKey = date?.isValid() ? date.format("YYYY-MM") : null;
+    if (monthKey && monthlyMap.has(monthKey)) {
+      const row = monthlyMap.get(monthKey)!;
+      row.internalRevenue += revenue;
+      row.units += quantity;
+    }
+    internalRevenue += revenue;
+    internalUnits += quantity;
+
+    const productName = String(sale?.producto?.nombre_producto || sale?.nombre_variante || "Producto");
+    const productKey = `${String(sale?.producto?._id || sale?._id || productName)}::internal`;
+    const productRow = productMap.get(productKey) || {
+      productName,
+      units: 0,
+      revenue: 0,
+      channels: new Set<string>()
+    };
+    productRow.units += quantity;
+    productRow.revenue += revenue;
+    productRow.channels.add("interno");
+    productMap.set(productKey, productRow);
+
+    const branchId = String(sale?.sucursal || "");
+    const branchLabel = String((sale?.pedido as any)?.sucursal_name || branchId || "Sucursal");
+    const branchRow = branchMap.get(branchId) || { branchName: branchLabel, revenue: 0, units: 0 };
+    branchRow.revenue += revenue;
+    branchRow.units += quantity;
+    branchMap.set(branchId, branchRow);
+  }
+
+  for (const order of catalogOrders as any[]) {
+    const date = order?.fecha_pedido ? dayjs(order.fecha_pedido) : null;
+    const monthKey = date?.isValid() ? date.format("YYYY-MM") : null;
+    const branchKey = String(order?.lugar_origen || "catalogo");
+    const branchRow = branchMap.get(branchKey) || { branchName: "Catalogo", revenue: 0, units: 0 };
+
+    for (const item of Array.isArray(order?.productos_temporales) ? order.productos_temporales : []) {
+      if (String(item?.id_vendedor || "") !== sellerId) continue;
+      const quantity = Math.max(0, Number(item?.cantidad || 0));
+      const revenue = roundMoney(quantity * Number(item?.precio_unitario || 0));
+      if (monthKey && monthlyMap.has(monthKey)) {
+        const row = monthlyMap.get(monthKey)!;
+        row.catalogRevenue += revenue;
+        row.units += quantity;
+      }
+      catalogRevenue += revenue;
+      catalogUnits += quantity;
+
+      const productName = String(item?.producto || "Producto catalogo");
+      const productKey = `${productName}::catalogo`;
+      const productRow = productMap.get(productKey) || {
+        productName,
+        units: 0,
+        revenue: 0,
+        channels: new Set<string>()
+      };
+      productRow.units += quantity;
+      productRow.revenue += revenue;
+      productRow.channels.add("catalogo");
+      productMap.set(productKey, productRow);
+
+      branchRow.revenue += revenue;
+      branchRow.units += quantity;
+    }
+    branchMap.set(branchKey, branchRow);
+  }
+
+  const activePromotions = await ProductPromotionModel.find({
+    id_vendedor: sellerId,
+    estado: "active",
+    fecha_inicio: { $lte: new Date() },
+    fecha_fin: { $gte: new Date() }
+  })
+    .sort({ fecha_fin: 1 })
+    .limit(8)
+    .lean();
+
+  const productsById = activePromotions.length
+    ? await ProductoModel.find({
+        _id: {
+          $in: activePromotions
+            .map((promotion: any) => promotion?.id_producto)
+            .filter(Boolean)
+        }
+      })
+        .select("nombre_producto")
+        .lean()
+    : [];
+  const productNameById = new Map(
+    productsById.map((product: any) => [String(product._id), String(product.nombre_producto || "Producto")])
+  );
+
+  const monthlySeries = monthKeys.map((key) => {
+    const row = monthlyMap.get(key)!;
+    return {
+      month: key,
+      internalRevenue: roundMoney(row.internalRevenue),
+      catalogRevenue: roundMoney(row.catalogRevenue),
+      totalRevenue: roundMoney(row.internalRevenue + row.catalogRevenue),
+      units: row.units
+    };
+  });
+
+  const totalRevenue = roundMoney(internalRevenue + catalogRevenue);
+  const totalUnits = internalUnits + catalogUnits;
+
+  return {
+    sellerId,
+    sellerName: `${String((seller as any)?.nombre || "").trim()} ${String((seller as any)?.apellido || "").trim()}`.trim(),
+    range: {
+      from: startDate,
+      to: endDate,
+      months
+    },
+    totals: {
+      totalRevenue,
+      totalUnits,
+      ticketAverage: totalUnits > 0 ? roundMoney(totalRevenue / totalUnits) : 0,
+      internalRevenue: roundMoney(internalRevenue),
+      catalogRevenue: roundMoney(catalogRevenue),
+      internalUnits,
+      catalogUnits
+    },
+    monthlySeries,
+    topProducts: Array.from(productMap.values())
+      .sort((left, right) => right.revenue - left.revenue)
+      .slice(0, 6)
+      .map((row) => ({
+        productName: row.productName,
+        units: row.units,
+        revenue: roundMoney(row.revenue),
+        channels: Array.from(row.channels)
+      })),
+    channelBreakdown: [
+      { channel: "interno", revenue: roundMoney(internalRevenue), units: internalUnits },
+      { channel: "catalogo", revenue: roundMoney(catalogRevenue), units: catalogUnits }
+    ],
+    branchBreakdown: Array.from(branchMap.values())
+      .sort((left, right) => right.revenue - left.revenue)
+      .slice(0, 6)
+      .map((row) => ({
+        branchName: row.branchName,
+        revenue: roundMoney(row.revenue),
+        units: row.units
+      })),
+    activePromotions: activePromotions.map((promotion: any) => ({
+      id: String(promotion._id),
+      productName: productNameById.get(String(promotion.id_producto)) || "Producto",
+      variantKey: String(promotion.variantKey || ""),
+      scope: String(promotion.scope || ""),
+      title: String(promotion.titulo || "").trim(),
+      endsAt: promotion.fecha_fin,
+      simplePrice:
+        promotion.precio_simple === undefined || promotion.precio_simple === null
+          ? null
+          : roundMoney(Number(promotion.precio_simple)),
+      tiers: Array.isArray(promotion.escalas) ? promotion.escalas : []
+    }))
+  };
+};
+
 export const SellerService = {
   getAllSellers,
   getAllSellersBasic,
@@ -1223,4 +1429,5 @@ export const SellerService = {
   getRenewalMonthlyPaymentSummary,
   getClientsStatusList,
   getSellerPaymentProofs,
+  getSellerDashboard,
 };

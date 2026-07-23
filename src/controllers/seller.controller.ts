@@ -168,6 +168,21 @@ export const getSeller = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellerDashboard = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const months = Math.max(1, Math.min(12, Number(req.query.months || 6)));
+    const dashboard = await SellerService.getSellerDashboard(id, { months });
+    res.json({ ok: true, dashboard });
+  } catch (err: any) {
+    console.error("Error obteniendo dashboard del vendedor:", err);
+    res.status(500).json({
+      ok: false,
+      msg: err?.message || "Error obteniendo dashboard del vendedor"
+    });
+  }
+};
+
 export const registerSeller = async (req: Request, res: Response) => {
   try {
     const sellerPayload = req.body;
