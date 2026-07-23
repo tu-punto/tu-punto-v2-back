@@ -336,7 +336,7 @@ const buildSellerMetricsStages = () => [
         { $unwind: "$pedido" },
         {
           $match: {
-            "pedido.estado_pedido": "Entregado",
+            "pedido.estado_pedido": { $in: ["Entregado", "interno"] },
           }
         },
         {

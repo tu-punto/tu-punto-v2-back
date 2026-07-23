@@ -119,7 +119,8 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       return acc; // evita que truene
     }
 
-    if (sale.deposito_realizado || sale.pedido.estado_pedido !== "Entregado") {
+    const status = String(sale?.pedido?.estado_pedido || "").trim().toLowerCase();
+    if (sale.deposito_realizado || (status !== "entregado" && status !== "interno")) {
       return acc;
     }
 

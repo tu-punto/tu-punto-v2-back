@@ -68,8 +68,10 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const sales = await SaleService.getProductsBySellerId(sellerId);
   const seller = await SellerService.getSeller(sellerId);
   const filteredSales = sales.filter(
-    (sale) =>
-      !sale.deposito_realizado && sale.id_pedido.estado_pedido === "Entregado"
+    (sale) => {
+      const status = String(sale?.id_pedido?.estado_pedido || "").trim().toLowerCase();
+      return !sale.deposito_realizado && (status === "entregado" || status === "interno");
+    }
   );
   const pedidos = Array.from(
     new Set(filteredSales.map((sale) => sale.id_pedido))
