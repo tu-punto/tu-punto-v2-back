@@ -69,7 +69,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const seller = await SellerService.getSeller(sellerId);
   const filteredSales = sales.filter(
     (sale) =>
-      !sale.deposito_realizado && sale.id_pedido.estado_pedido !== "En Espera"
+      !sale.deposito_realizado && sale.id_pedido.estado_pedido === "Entregado"
   );
   const pedidos = Array.from(
     new Set(filteredSales.map((sale) => sale.id_pedido))

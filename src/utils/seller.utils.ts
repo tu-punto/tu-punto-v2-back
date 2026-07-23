@@ -119,11 +119,7 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       return acc; // evita que truene
     }
 
-    if (
-      sale.deposito_realizado ||
-      sale.pedido.estado_pedido === 'En Espera' ||
-      sale.pedido.simple_package_order === true
-    ) {
+    if (sale.deposito_realizado || sale.pedido.estado_pedido !== "Entregado") {
       return acc;
     }
 
@@ -134,12 +130,9 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       : subtotal - sale.utilidad;
 
     if (!pedidosProcesados.has(sale.pedido._id.toString())) {
-      const deliveryDiscount = sale.pedido.simple_package_order
-        ? 0
-        : (sale.pedido.cargo_delivery ?? 0);
       subtotalDeuda -=
         (sale.pedido.adelanto_cliente ?? 0) +
-        deliveryDiscount;
+        (sale.pedido.cargo_delivery ?? 0);
       pedidosProcesados.add(sale.pedido._id.toString());
     }
 

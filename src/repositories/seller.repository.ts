@@ -336,8 +336,7 @@ const buildSellerMetricsStages = () => [
         { $unwind: "$pedido" },
         {
           $match: {
-            "pedido.estado_pedido": { $ne: "En Espera" },
-            "pedido.simple_package_order": { $ne: true },
+            "pedido.estado_pedido": "Entregado",
           }
         },
         {
@@ -363,13 +362,7 @@ const buildSellerMetricsStages = () => [
             orderDiscount: {
               $add: [
                 { $ifNull: ["$pedido.adelanto_cliente", 0] },
-                {
-                  $cond: [
-                    "$pedido.simple_package_order",
-                    0,
-                    { $ifNull: ["$pedido.cargo_delivery", 0] },
-                  ],
-                },
+                { $ifNull: ["$pedido.cargo_delivery", 0] },
               ],
             },
           },
@@ -391,37 +384,6 @@ const buildSellerMetricsStages = () => [
         },
       ],
       as: "salesMetrics",
-    },
-  },
-  {
-    $lookup: {
-      from: "VentaExterna",
-      let: { vendedor_id: "$_id" },
-      pipeline: [
-        {
-          $match: {
-            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
-            service_origin: "simple_package",
-            is_external: true,
-            seller_balance_applied: true,
-            deposito_realizado: { $ne: true },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            saldo_pendiente: {
-              $sum: {
-                $ifNull: [
-                  "$seller_balance_applied_amount",
-                  { $ifNull: ["$amortizacion_vendedor", 0] },
-                ],
-              },
-            },
-          },
-        },
-      ],
-      as: "simplePackageMetrics",
     },
   },
   {
@@ -448,10 +410,7 @@ const buildSellerMetricsStages = () => [
   {
     $addFields: {
       saldo_pendiente: {
-        $add: [
-          { $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0] },
-          { $ifNull: [{ $arrayElemAt: ["$simplePackageMetrics.saldo_pendiente", 0] }, 0] },
-        ],
+        $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0],
       },
       deuda: {
         $ifNull: [{ $arrayElemAt: ["$debtMetrics.deuda", 0] }, 0],

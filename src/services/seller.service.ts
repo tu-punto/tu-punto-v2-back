@@ -231,19 +231,11 @@ const getAllSellers = async (params?: SellerListFilters) => {
       sellerData.sales,
       sellerData.debts as IFinanceFlux[]
     );
-    const simplePackagePending = Array.isArray(sellerData?.simplePackageSales)
-      ? sellerData.simplePackageSales.reduce(
-          (sum: number, row: any) => sum + Number(row?.seller_balance_applied_amount || 0),
-          0
-        )
-      : 0;
     const pagoMensual = calcPagoMensual(sellerData);
 
     return {
       ...sellerData,
       ...metrics,
-      saldo_pendiente: Number(metrics.saldo_pendiente || 0) + simplePackagePending,
-      pago_pendiente: Number(metrics.pago_pendiente || 0) + simplePackagePending,
       pago_mensual: pagoMensual,
     };
   });
