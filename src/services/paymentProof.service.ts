@@ -16,6 +16,7 @@ const getComprobantesByVendedor = async (vendedorId: string) => {
 const createComprobante = async (comprobanteData: {
   vendedor: string;
   comprobante_entrada_pdf: string;
+  metodo_pago: "efectivo" | "qr";
   monto_pagado: number;
   total_ventas: number;
   total_adelantos: number;

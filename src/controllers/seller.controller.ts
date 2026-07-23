@@ -246,11 +246,17 @@ export const autoRenewSellers = async (_req: Request, res: Response) => {
 
 export const paySellerDebt = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { payAll } = req.body;
+  const { payAll, paymentMethod } = req.body;
 
   try {
+    if (paymentMethod !== "efectivo" && paymentMethod !== "qr") {
+      return res.status(400).json({
+        msg: "Metodo de pago invalido. Debe ser 'efectivo' o 'qr'."
+      });
+    }
+
     // Actualizar la deuda del vendedor
-    const pdfBuffer = await SellerPdfService.generateSellerPdfBuffer(id);
+    const pdfBuffer = await SellerPdfService.generateSellerPdfBuffer(id, paymentMethod);
     const updatedSeller = await SellerService.paySellerDebt(id, payAll);
 
     if (!updatedSeller) {

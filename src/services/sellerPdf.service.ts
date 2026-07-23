@@ -61,7 +61,15 @@ const appendSellerQrToPdf = async (doc: jsPDF, seller: any, startY: number) => {
   }
 };
 
-const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
+const paymentMethodLabelMap: Record<"efectivo" | "qr", string> = {
+  efectivo: "Efectivo",
+  qr: "QR"
+};
+
+const generateSellerPdfBuffer = async (
+  sellerId: any,
+  paymentMethod: "efectivo" | "qr"
+): Promise<Buffer> => {
   const sucursales = await SucursalsService.getAllSucursals();
   const deudas = await FinanceFluxService.getSellerInfoById(sellerId);
   const filteredDeudas = deudas.filter((deuda) => deuda.esDeuda);
@@ -262,8 +270,13 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     10,
     amountY
   );
+  doc.text(
+    `METODO DE PAGO AL VENDEDOR: ${paymentMethodLabelMap[paymentMethod]}`,
+    10,
+    amountY + 8
+  );
 
-  await appendSellerQrToPdf(doc, seller, amountY + 15);
+  await appendSellerQrToPdf(doc, seller, amountY + 23);
 
   const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
 
@@ -275,6 +288,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const savedUrl = await PaymentProofService.createComprobante({
     vendedor: sellerId,
     comprobante_entrada_pdf: pdfUrl.url,
+    metodo_pago: paymentMethod,
     monto_pagado: montoPagado,
     total_ventas: totalVentasComision,
     total_adelantos: totalAdelantos,
