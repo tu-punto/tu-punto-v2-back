@@ -222,6 +222,17 @@ const getSellerAccountingSimplePackages = async (sellerId: string) => {
     id_vendedor: new Types.ObjectId(sellerId),
     is_external: true,
     seller_balance_applied: true,
+    $expr: {
+      $gt: [
+        {
+          $ifNull: [
+            "$seller_balance_applied_amount",
+            { $ifNull: ["$amortizacion_vendedor", 0] },
+          ],
+        },
+        0,
+      ],
+    },
   })
     .sort({ fecha_pedido: -1, numero_paquete: 1 })
     .populate({ path: "origen_sucursal", select: "_id nombre" })

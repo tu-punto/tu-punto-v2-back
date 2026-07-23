@@ -119,7 +119,11 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       return acc; // evita que truene
     }
 
-    if (sale.deposito_realizado || sale.pedido.estado_pedido === 'En Espera') {
+    if (
+      sale.deposito_realizado ||
+      sale.pedido.estado_pedido === 'En Espera' ||
+      sale.pedido.simple_package_order === true
+    ) {
       return acc;
     }
 

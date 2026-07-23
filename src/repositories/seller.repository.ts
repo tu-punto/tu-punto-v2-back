@@ -281,6 +281,34 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
         ],
         as: "debts"
       }
+    },
+    {
+      $lookup: {
+        from: "VentaExterna",
+        let: { vendedor_id: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+              service_origin: "simple_package",
+              is_external: true,
+              seller_balance_applied: true,
+              deposito_realizado: { $ne: true },
+            }
+          },
+          {
+            $project: {
+              seller_balance_applied_amount: {
+                $ifNull: [
+                  "$seller_balance_applied_amount",
+                  { $ifNull: ["$amortizacion_vendedor", 0] },
+                ],
+              }
+            }
+          }
+        ],
+        as: "simplePackageSales"
+      }
     }
   ]).exec();
 };
@@ -306,7 +334,12 @@ const buildSellerMetricsStages = () => [
           },
         },
         { $unwind: "$pedido" },
-        { $match: { "pedido.estado_pedido": { $ne: "En Espera" } } },
+        {
+          $match: {
+            "pedido.estado_pedido": { $ne: "En Espera" },
+            "pedido.simple_package_order": { $ne: true },
+          }
+        },
         {
           $project: {
             pedidoId: "$pedido._id",
@@ -362,6 +395,37 @@ const buildSellerMetricsStages = () => [
   },
   {
     $lookup: {
+      from: "VentaExterna",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+            service_origin: "simple_package",
+            is_external: true,
+            seller_balance_applied: true,
+            deposito_realizado: { $ne: true },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            saldo_pendiente: {
+              $sum: {
+                $ifNull: [
+                  "$seller_balance_applied_amount",
+                  { $ifNull: ["$amortizacion_vendedor", 0] },
+                ],
+              },
+            },
+          },
+        },
+      ],
+      as: "simplePackageMetrics",
+    },
+  },
+  {
+    $lookup: {
       from: "Flujo_Financiero",
       let: { vendedor_id: "$_id" },
       pipeline: [
@@ -384,7 +448,10 @@ const buildSellerMetricsStages = () => [
   {
     $addFields: {
       saldo_pendiente: {
-        $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0],
+        $add: [
+          { $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0] },
+          { $ifNull: [{ $arrayElemAt: ["$simplePackageMetrics.saldo_pendiente", 0] }, 0] },
+        ],
       },
       deuda: {
         $ifNull: [{ $arrayElemAt: ["$debtMetrics.deuda", 0] }, 0],

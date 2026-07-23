@@ -2,7 +2,6 @@ import moment from "moment-timezone";
 import { Types } from "mongoose";
 import { IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
-import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SellerRepository } from "../repositories/seller.repository";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
@@ -179,10 +178,11 @@ const buildPackagePricing = (
 
 const buildAccountingAmount = (row: any) =>
   roundCurrency(
-    Math.max(
-      0,
-      Number(row?.precio_paquete || 0) - Number(row?.amortizacion_vendedor || 0)
-    ) + Number(row?.saldo_por_paquete || 0)
+    Number(
+      row?.seller_balance_applied_amount ??
+      row?.amortizacion_vendedor ??
+      0
+    )
   );
 
 const buildTotalAmountToCharge = (row: any) =>
@@ -221,91 +221,6 @@ const resolveSimplePackagePaymentPayload = (row: any) => {
     subtotal_qr: method === "qr" ? sellerDebtAmount : 0,
     subtotal_efectivo: method === "efectivo" ? sellerDebtAmount : 0,
   };
-};
-
-const applySimplePackageDebt = async (params: {
-  sellerId: string;
-  originBranchId?: string;
-  amount: number;
-  packageCount: number;
-}) => {
-  const amount = roundCurrency(params.amount);
-  if (!params.sellerId || amount <= 0) return;
-
-  await FinanceFluxRepository.registerFinanceFlux({
-    tipo: "INGRESO",
-    categoria: "SERVICIO",
-    concepto:
-      params.packageCount > 1
-        ? `Paquetes simples sin pagar (${params.packageCount})`
-        : "Paquete simple sin pagar",
-    monto: amount,
-    fecha: new Date(),
-    esDeuda: true,
-    visible_en_flujo_general: false,
-    id_vendedor: new Types.ObjectId(params.sellerId),
-    id_sucursal:
-      params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
-        ? new Types.ObjectId(params.originBranchId)
-        : undefined,
-  });
-  await SellerRepository.incrementDebt(params.sellerId, amount);
-};
-
-const applySimplePackageIncomeEffectivo = async (params: {
-  sellerId: string;
-  originBranchId?: string;
-  amount: number;
-  packageCount: number;
-}) => {
-  const amount = roundCurrency(params.amount);
-  if (!params.sellerId || amount <= 0) return;
-
-  await FinanceFluxRepository.registerFinanceFlux({
-    tipo: "INGRESO",
-    categoria: "SERVICIO",
-    concepto:
-      params.packageCount > 1
-        ? `Paquetes simples en efectivo (${params.packageCount})`
-        : "Paquete simple en efectivo",
-    monto: amount,
-    fecha: new Date(),
-    esDeuda: false,
-    visible_en_flujo_general: false,
-    id_vendedor: new Types.ObjectId(params.sellerId),
-    id_sucursal:
-      params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
-        ? new Types.ObjectId(params.originBranchId)
-        : undefined,
-  });
-};
-
-const applySimplePackageIncomeQR = async (params: {
-  sellerId: string;
-  originBranchId?: string;
-  amount: number;
-  packageCount: number;
-}) => {
-  const amount = roundCurrency(params.amount);
-  if (!params.sellerId || amount <= 0) return;
-
-  await FinanceFluxRepository.registerFinanceFlux({
-    tipo: "INGRESO",
-    categoria: "SERVICIO",
-    concepto:
-      params.packageCount > 1
-        ? `Paquetes simples en QR (${params.packageCount})`
-        : "Paquete simple en QR",
-    monto: amount,
-    fecha: new Date(),
-    esDeuda: false,
-    visible_en_flujo_general: false,
-    id_vendedor: new Types.ObjectId(params.sellerId),
-    id_sucursal:
-      params.originBranchId && Types.ObjectId.isValid(params.originBranchId)
-        ? new Types.ObjectId(params.originBranchId)
-        : undefined,
-  });
 };
 
 const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) => {
@@ -579,12 +494,6 @@ const createSimplePackageOrders = async (params: {
   }
 
   const shippingResults: any[] = [];
-  let debtAmount = 0;
-  let debtCount = 0;
-  let effectivoAmount = 0;
-  let effectivoCount = 0;
-  let qrAmount = 0;
-  let qrCount = 0;
   const orderCreatedAt = normalizeDate(new Date());
 
   for (const row of pendingRows as any[]) {
@@ -601,34 +510,13 @@ const createSimplePackageOrders = async (params: {
     try {
       await ShippingService.processSalesForShipping(String(createdShipping._id), [salePayload]);
 
-      const sellerAmortizacion = roundCurrency(
-        Math.min(
-          Math.max(0, Number(row?.amortizacion_vendedor || 0)),
-          Math.max(
-            0,
-            Number(row?.precio_total ?? Number(row?.precio_paquete || 0) + Number(row?.precio_entre_sucursal || row?.cargo_delivery || 0))
-          )
-        )
-      );
-      
-      if (paymentMethod === "efectivo") {
-        effectivoAmount += sellerAmortizacion;
-        effectivoCount += 1;
-      } else if (paymentMethod === "qr") {
-        qrAmount += sellerAmortizacion;
-        qrCount += 1;
-      } else {
-        // No payment method specified - register as debt
-        debtAmount += sellerAmortizacion;
-        debtCount += 1;
-      }
-
       const updatedRow = await SimplePackageRepository.updateSimplePackageByID(String(row._id), {
         is_external: true,
         pedido_ref: createdShipping._id,
         estado_pedido: createdShipping.estado_pedido,
         delivered: createdShipping.estado_pedido === "Entregado",
-        seller_balance_applied: createdShipping.estado_pedido === "Entregado",
+        seller_balance_applied: false,
+        seller_balance_applied_amount: 0,
         public_tracking_ready_for_pickup_at:
           String(createdShipping.estado_pedido || "").trim() === "LISTO PARA RECOGER"
             ? orderCreatedAt
@@ -653,36 +541,6 @@ const createSimplePackageOrders = async (params: {
       await ShippingService.deleteShippingById(String(createdShipping._id));
       throw error;
     }
-  }
-
-  const sellerId = String((pendingRows[0] as any)?.id_vendedor || "");
-  const originBranchId = String(((pendingRows[0] as any)?.origen_sucursal as any)?._id || (pendingRows[0] as any)?.origen_sucursal || "");
-
-  if (debtAmount > 0) {
-    await applySimplePackageDebt({
-      sellerId,
-      originBranchId,
-      amount: debtAmount,
-      packageCount: debtCount,
-    });
-  }
-
-  if (effectivoAmount > 0) {
-    await applySimplePackageIncomeEffectivo({
-      sellerId,
-      originBranchId,
-      amount: effectivoAmount,
-      packageCount: effectivoCount,
-    });
-  }
-
-  if (qrAmount > 0) {
-    await applySimplePackageIncomeQR({
-      sellerId,
-      originBranchId,
-      amount: qrAmount,
-      packageCount: qrCount,
-    });
   }
 
   if (!skipGuideNotification) {
@@ -812,9 +670,6 @@ const updateSimplePackageByID = async (params: {
   const existing = await SimplePackageRepository.getSimplePackageByID(params.id);
   if (!existing) return null;
   assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
-  if ((existing as any).is_external) {
-    throw new Error("No se puede modificar un paquete que ya fue convertido");
-  }
 
   const role = String(params.role || "").toLowerCase();
   const existingSellerId = String(existing.id_vendedor || "");
@@ -978,7 +833,27 @@ const updateSimplePackageByID = async (params: {
     }
   }
 
-  return await SimplePackageRepository.updateSimplePackageByID(params.id, updatePayload);
+  const updated = await SimplePackageRepository.updateSimplePackageByID(params.id, updatePayload);
+  if (!updated) return updated;
+
+  const delivered = String((updated as any)?.estado_pedido || "").trim() === "Entregado";
+  if (!delivered) {
+    return updated;
+  }
+
+  const previousApplied = roundCurrency(Number((existing as any)?.seller_balance_applied_amount || 0));
+  const nextApplied = roundCurrency(Number((updated as any)?.amortizacion_vendedor || 0));
+  const delta = roundCurrency(nextApplied - previousApplied);
+
+  if (delta !== 0) {
+    await adjustSellerSaldoPendiente(existingSellerId, delta);
+  }
+
+  return await SimplePackageRepository.updateSimplePackageByID(params.id, {
+    seller_balance_applied: nextApplied > 0,
+    seller_balance_applied_amount: nextApplied,
+    deposito_realizado: false,
+  });
 };
 
 const deleteSimplePackageByID = async (params: {
