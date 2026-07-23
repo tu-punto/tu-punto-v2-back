@@ -71,10 +71,21 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     SimplePackageService.getSellerAccountingSimplePackages(String(sellerId)),
   ]);
   const seller = await SellerService.getSeller(sellerId);
+  const simplePackagePedidoIds = new Set(
+    simplePackageRows
+      .map((row: any) => String(row?.pedido_ref?._id || row?.pedido_ref || row?._id || "").trim())
+      .filter(Boolean)
+  );
   const filteredSales = sales.filter(
     (sale) => {
       const status = String(sale?.id_pedido?.estado_pedido || "").trim().toLowerCase();
-      return !sale.deposito_realizado && (status === "entregado" || status === "interno");
+      const pedidoId = String(sale?.id_pedido?._id || sale?.id_pedido || "").trim();
+      return (
+        !sale.deposito_realizado &&
+        (status === "entregado" || status === "interno") &&
+        sale?.id_pedido?.simple_package_order !== true &&
+        !simplePackagePedidoIds.has(pedidoId)
+      );
     }
   );
   const simplePackageSales = simplePackageRows.map((row: any) => ({

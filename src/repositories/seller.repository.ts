@@ -262,6 +262,11 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
               path: "$pedido",
               preserveNullAndEmptyArrays: true
             }
+          },
+          {
+            $match: {
+              "pedido.simple_package_order": { $ne: true }
+            }
           }
         ],
         as: "sales"
@@ -334,6 +339,7 @@ const buildSellerMetricsStages = () => [
         {
           $match: {
             "pedido.estado_pedido": { $in: ["Entregado", "interno"] },
+            "pedido.simple_package_order": { $ne: true },
           }
         },
         {

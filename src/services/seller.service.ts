@@ -420,6 +420,99 @@ const getAssignedPaymentDate = (date = new Date()) => {
   return base.clone().add(1, "month").date(8).hour(12).minute(0).second(0).millisecond(0).toDate();
 };
 
+const buildSellerMetricsBreakdown = (sales: any[], simplePackageSales: any[], debts: IFinanceFlux[]) => {
+  const pedidosProcesados = new Set<string>();
+  const simplePackagePedidoIds = new Set(
+    (simplePackageSales || [])
+      .map((row: any) => String(row?.pedido_ref?._id || row?.pedido_ref || row?._id || "").trim())
+      .filter(Boolean)
+  );
+
+  const regularSales = (sales || []).flatMap((sale: any) => {
+    const status = String(sale?.pedido?.estado_pedido || "").trim().toLowerCase();
+    const pedidoId = String(sale?.pedido?._id || "").trim();
+    if (
+      !sale?.pedido ||
+      sale?.deposito_realizado ||
+      (status !== "entregado" && status !== "interno") ||
+      sale?.pedido?.simple_package_order === true ||
+      (pedidoId && simplePackagePedidoIds.has(pedidoId))
+    ) {
+      return [];
+    }
+
+    const subtotal = Number(sale?.cantidad || 0) * Number(sale?.precio_unitario || 0);
+    const utilidad = Number(sale?.utilidad || 0);
+    let contribution = sale?.pedido?.pagado_al_vendedor ? -utilidad : subtotal - utilidad;
+    const normalizedPedidoId = String(sale?.pedido?._id || "");
+    const orderDiscount =
+      normalizedPedidoId && !pedidosProcesados.has(normalizedPedidoId)
+        ? Number(sale?.pedido?.adelanto_cliente || 0) + Number(sale?.pedido?.cargo_delivery || 0)
+        : 0;
+
+    if (normalizedPedidoId) pedidosProcesados.add(normalizedPedidoId);
+    contribution -= orderDiscount;
+
+    return [{
+      source: "sale",
+      pedido_id: normalizedPedidoId,
+      fecha: sale?.pedido?.fecha_pedido ?? sale?.fecha_pedido ?? null,
+      producto: sale?.nombre_variante || sale?.producto?.nombre_producto || "Producto",
+      estado_pedido: sale?.pedido?.estado_pedido || "",
+      subtotal,
+      utilidad,
+      adelanto_cliente: Number(sale?.pedido?.adelanto_cliente || 0),
+      cargo_delivery: Number(sale?.pedido?.cargo_delivery || 0),
+      contribution,
+    }];
+  });
+
+  const simplePackages = (simplePackageSales || []).flatMap((row: any) => {
+    const status = String(row?.estado_pedido || "").trim().toLowerCase();
+    if (row?.deposito_realizado || (status !== "entregado" && status !== "interno")) {
+      return [];
+    }
+
+    return [{
+      source: "simple_package",
+      pedido_id: String(row?.pedido_ref?._id || row?.pedido_ref || row?._id || ""),
+      fecha: row?.fecha_pedido ?? null,
+      producto: row?.descripcion_paquete || "Paquete simple",
+      estado_pedido: row?.estado_pedido || "",
+      saldo_por_paquete: Number(row?.saldo_por_paquete || 0),
+      amortizacion_vendedor: Number(row?.amortizacion_vendedor || 0),
+      deuda_comprador: Number(row?.deuda_comprador || 0),
+      contribution: Number(row?.saldo_por_paquete || 0),
+    }];
+  });
+
+  const debtRows = (debts || [])
+    .filter((debt) => debt?.esDeuda)
+    .map((debt: any) => ({
+      source: "debt",
+      fecha: debt?.fecha ?? null,
+      concepto: debt?.concepto || "",
+      monto: Number(debt?.monto || 0),
+    }));
+
+  const saldoPendiente = [...regularSales, ...simplePackages].reduce(
+    (sum, row: any) => sum + Number(row?.contribution || 0),
+    0
+  );
+  const deuda = debtRows.reduce((sum, row) => sum + Number(row.monto || 0), 0);
+
+  return {
+    regularSales,
+    simplePackages,
+    debts: debtRows,
+    totals: {
+      saldo_pendiente: saldoPendiente,
+      deuda,
+      pago_pendiente: saldoPendiente - deuda,
+    },
+  };
+};
+
 const getSeller = async (sellerId: string) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) {
@@ -431,9 +524,10 @@ const getSeller = async (sellerId: string) => {
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
   const debts = fluxes.filter((f) => f.esDeuda);
   const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[], simplePackageSales);
+  const metrics_breakdown = buildSellerMetricsBreakdown(sales, simplePackageSales, debts as IFinanceFlux[]);
   const normalizedSeller = await normalizeSellerBranchesForInput(seller);
 
-  return { ...normalizedSeller, pago_mensual: calcPagoMensual(normalizedSeller), ...metrics };
+  return { ...normalizedSeller, pago_mensual: calcPagoMensual(normalizedSeller), ...metrics, metrics_breakdown };
 };
 
 const buildInitialSellerPassword = (seller: any) => {

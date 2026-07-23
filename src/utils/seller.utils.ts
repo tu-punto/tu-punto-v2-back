@@ -104,6 +104,11 @@ export const canAccessSellerProductInfoByCommission = (seller: {
 
 export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[], simplePackageSales: any[] = []) => {
   const pedidosProcesados = new Set();
+  const simplePackagePedidoIds = new Set(
+    (simplePackageSales || [])
+      .map((row: any) => String(row?.pedido_ref?._id || row?.pedido_ref || row?._id || "").trim())
+      .filter(Boolean)
+  );
   const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {
     if (!sale) {
       console.warn('[calcPagoPendiente] Sale vacío', { index: i });
@@ -120,7 +125,13 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[], simplePac
     }
 
     const status = String(sale?.pedido?.estado_pedido || "").trim().toLowerCase();
-    if (sale.deposito_realizado || (status !== "entregado" && status !== "interno")) {
+    const pedidoId = String(sale?.pedido?._id || "").trim();
+    if (
+      sale.deposito_realizado ||
+      (status !== "entregado" && status !== "interno") ||
+      sale?.pedido?.simple_package_order === true ||
+      (pedidoId && simplePackagePedidoIds.has(pedidoId))
+    ) {
       return acc;
     }
 
