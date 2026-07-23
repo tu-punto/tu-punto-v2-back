@@ -229,7 +229,8 @@ const getAllSellers = async (params?: SellerListFilters) => {
   const processedSellers = sellersWithData.map((sellerData: any) => {
     const metrics = calcPagoPendiente(
       sellerData.sales,
-      sellerData.debts as IFinanceFlux[]
+      sellerData.debts as IFinanceFlux[],
+      sellerData.simplePackageSales
     );
     const pagoMensual = calcPagoMensual(sellerData);
 
@@ -426,9 +427,10 @@ const getSeller = async (sellerId: string) => {
     return null;
   }
   const sales = await SaleService.getRawSalesBySellerId(sellerId);
+  const simplePackageSales = await SimplePackageService.getSellerAccountingSimplePackages(sellerId);
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
   const debts = fluxes.filter((f) => f.esDeuda);
-  const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[]);
+  const metrics = calcPagoPendiente(sales, debts as IFinanceFlux[], simplePackageSales);
   const normalizedSeller = await normalizeSellerBranchesForInput(seller);
 
   return { ...normalizedSeller, pago_mensual: calcPagoMensual(normalizedSeller), ...metrics };

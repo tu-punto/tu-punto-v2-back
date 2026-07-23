@@ -292,18 +292,15 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
               $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
               service_origin: "simple_package",
               is_external: true,
-              seller_balance_applied: true,
               deposito_realizado: { $ne: true },
+              $or: [{ delivered: true }, { estado_pedido: "Entregado" }, { estado_pedido: "interno" }],
             }
           },
           {
             $project: {
-              seller_balance_applied_amount: {
-                $ifNull: [
-                  "$seller_balance_applied_amount",
-                  { $ifNull: ["$amortizacion_vendedor", 0] },
-                ],
-              }
+              saldo_por_paquete: { $ifNull: ["$saldo_por_paquete", 0] },
+              estado_pedido: 1,
+              deposito_realizado: 1,
             }
           }
         ],
@@ -388,6 +385,30 @@ const buildSellerMetricsStages = () => [
   },
   {
     $lookup: {
+      from: "VentaExterna",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+            service_origin: "simple_package",
+            is_external: true,
+            deposito_realizado: { $ne: true },
+            $or: [{ delivered: true }, { estado_pedido: "Entregado" }, { estado_pedido: "interno" }],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            saldo_pendiente: { $sum: { $ifNull: ["$saldo_por_paquete", 0] } },
+          },
+        },
+      ],
+      as: "simplePackageMetrics",
+    },
+  },
+  {
+    $lookup: {
       from: "Flujo_Financiero",
       let: { vendedor_id: "$_id" },
       pipeline: [
@@ -410,7 +431,10 @@ const buildSellerMetricsStages = () => [
   {
     $addFields: {
       saldo_pendiente: {
-        $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0],
+        $add: [
+          { $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0] },
+          { $ifNull: [{ $arrayElemAt: ["$simplePackageMetrics.saldo_pendiente", 0] }, 0] },
+        ],
       },
       deuda: {
         $ifNull: [{ $arrayElemAt: ["$debtMetrics.deuda", 0] }, 0],
@@ -482,6 +506,7 @@ const buildSellerMetricsStages = () => [
   {
     $project: {
       salesMetrics: 0,
+      simplePackageMetrics: 0,
       debtMetrics: 0,
     },
   },

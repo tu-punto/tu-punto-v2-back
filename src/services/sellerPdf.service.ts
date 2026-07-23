@@ -8,6 +8,7 @@ import { uploadPdfToAws } from "./bucket.service";
 import { ComprobantePagoModel } from "../entities/implements/ComprobantePagoSchema";
 import mongoose from "mongoose";
 import { PaymentProofService } from "./paymentProof.service";
+import { SimplePackageService } from "./simplePackage.service";
 
 const getPdfImageFormat = (contentType: string, url: string) => {
   const normalizedContentType = contentType.toLowerCase();
@@ -65,7 +66,10 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   const sucursales = await SucursalsService.getAllSucursals();
   const deudas = await FinanceFluxService.getSellerInfoById(sellerId);
   const filteredDeudas = deudas.filter((deuda) => deuda.esDeuda);
-  const sales = await SaleService.getProductsBySellerId(sellerId);
+  const [sales, simplePackageRows] = await Promise.all([
+    SaleService.getProductsBySellerId(sellerId),
+    SimplePackageService.getSellerAccountingSimplePackages(String(sellerId)),
+  ]);
   const seller = await SellerService.getSeller(sellerId);
   const filteredSales = sales.filter(
     (sale) => {
@@ -73,8 +77,27 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
       return !sale.deposito_realizado && (status === "entregado" || status === "interno");
     }
   );
+  const simplePackageSales = simplePackageRows.map((row: any) => ({
+    nombre_variante: row.descripcion_paquete || "Paquete simple",
+    precio_unitario: Number(row.saldo_por_paquete ?? 0),
+    cantidad: 1,
+    utilidad: 0,
+    id_sucursal:
+      (row?.origen_sucursal as any)?._id || row?.origen_sucursal || row?.sucursal,
+    deposito_realizado: !!row.deposito_realizado,
+    fecha_pedido: row.fecha_pedido,
+    id_pedido: {
+      _id: `simple-${row._id}`,
+      estado_pedido: row.estado_pedido || "Entregado",
+      pagado_al_vendedor: false,
+      adelanto_cliente: 0,
+      cargo_delivery: 0,
+      fecha_pedido: row.fecha_pedido,
+    },
+  }));
+  const allSales = [...filteredSales, ...simplePackageSales];
   const pedidos = Array.from(
-    new Set(filteredSales.map((sale) => sale.id_pedido))
+    new Set(allSales.map((sale) => sale.id_pedido))
   );
 
   const doc = new jsPDF();
@@ -89,7 +112,7 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
   doc.text(title, titleX, 10);
 
   // Tabla de ventas
-  const salesTableData = filteredSales.map((sale: any) => {
+  const salesTableData = allSales.map((sale: any) => {
     const foundSucursal = sucursales.find(
       (sucursal) => sale.id_sucursal.toString() === sucursal._id.toString()
     );
@@ -111,14 +134,14 @@ const generateSellerPdfBuffer = async (sellerId: any): Promise<Buffer> => {
     ];
   });
 
-  const totalVentas = filteredSales.reduce((acc: number, sale: any) => {
+  const totalVentas = allSales.reduce((acc: number, sale: any) => {
     if (!sale.id_pedido.pagado_al_vendedor) {
       return acc + sale.cantidad * sale.precio_unitario;
     }
     return acc;
   }, 0);
 
-  const totalVentasComision = filteredSales.reduce((acc: number, sale: any) => {
+  const totalVentasComision = allSales.reduce((acc: number, sale: any) => {
     if (!sale.id_pedido.pagado_al_vendedor) {
       return acc + sale.cantidad * sale.precio_unitario - sale.utilidad;
     }

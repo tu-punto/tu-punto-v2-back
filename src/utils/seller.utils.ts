@@ -102,7 +102,7 @@ export const canAccessSellerProductInfoByCommission = (seller: {
   return hasValidLifecycle && hasCommission;
 };
 
-export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
+export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[], simplePackageSales: any[] = []) => {
   const pedidosProcesados = new Set();
   const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {
     if (!sale) {
@@ -138,6 +138,13 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
     }
 
     return acc + subtotalDeuda;
+  }, 0) + (simplePackageSales || []).reduce((acc: number, row: any) => {
+    const status = String(row?.estado_pedido || "").trim().toLowerCase();
+    if (row?.deposito_realizado || (status !== "entregado" && status !== "interno")) {
+      return acc;
+    }
+
+    return acc + Number(row?.saldo_por_paquete ?? 0);
   }, 0);
 
   const deuda = (debts || []).reduce((acc, debt) => {
