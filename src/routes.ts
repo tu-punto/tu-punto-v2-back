@@ -29,10 +29,12 @@ import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
 import trackingFreezeRouter from "./routes/trackingFreeze.routes";
 import catalogIntegrationRouter from "./routes/catalogIntegration.routes";
 import attendanceRouter from "./routes/attendance.routes";
+import landingLeadRouter from "./routes/landingLead.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
 import { requireAuth, requireRole } from "./middlewares/auth.middleware";
+import { rateLimiters } from "./middlewares/rateLimit.middleware";
 import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller";
 import { getRenewalMonthlyPaymentSummary } from "./controllers/seller.controller";
@@ -41,8 +43,9 @@ const router = Router();
 
 router.use("/whatsapp/webhook", whatsappWebhookRouter);
 router.use("/integration/catalog", catalogIntegrationRouter);
-router.get("/public-reports/pagado-al-dueno/xlsx", exportPagadoAlDuenoLegacyXlsx);
-router.get("/public/seller-renewal-summary", getRenewalMonthlyPaymentSummary);
+router.use("/landing-leads", landingLeadRouter);
+router.get("/public-reports/pagado-al-dueno/xlsx", rateLimiters.publicReports, exportPagadoAlDuenoLegacyXlsx);
+router.get("/public/seller-renewal-summary", rateLimiters.publicReports, getRenewalMonthlyPaymentSummary);
 router.use("/seller", requireAuth, sellerRouter);
 // router.use("/product", requireAuth, requireRole("admin", "operator", "seller"), productRouter);
 router.use("/product", productRouter);

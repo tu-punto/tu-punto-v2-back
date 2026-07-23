@@ -129,6 +129,40 @@ export const deleteExternalSaleByID = async (req: Request, res: Response) => {
   }
 }
 
+export const annulExternalSaleByID = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const auth = res.locals.auth as { id?: string; role?: string; email?: string } | undefined;
+        const role = String(auth?.role || "").toLowerCase();
+        const performedBy = String(auth?.email || "").trim().toLowerCase() || role || "user";
+        const updatedSale = await ExternalSaleService.annulExternalSaleByID({
+            id,
+            reason: String(req.body?.reason || ""),
+            role,
+            performedBy,
+        });
+
+        if (!updatedSale) {
+            return res.status(404).json({
+                success: false,
+                message: "Venta externa no encontrada"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Pedido externo anulado exitosamente",
+            data: updatedSale
+        });
+    } catch (error: any) {
+        console.error("Error al anular la venta externa:", error);
+        res.status(400).json({
+            success: false,
+            message: error?.message || "No se pudo anular la venta externa"
+        });
+    }
+}
+
 export const updateExternalSaleByID = async (req: Request, res: Response) => {
     const { id } = req.params;
     const updateData = req.body;

@@ -206,6 +206,25 @@ const VentaExternaSchema = new Schema({
         type: Boolean,
         default: true
     },
+    anulado: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
+    anulado_en: {
+        type: Date,
+        required: false,
+    },
+    anulado_por: {
+        type: String,
+        required: false,
+        default: "",
+    },
+    motivo_anulacion: {
+        type: String,
+        required: false,
+        default: "",
+    },
 
     delivered: {
         type: Boolean,

@@ -659,9 +659,64 @@ const deleteExternalSaleByID = async (id: string) => {
   return await ExternalSaleRepository.deleteExternalSaleByID(id);
 };
 
+const annulExternalSaleByID = async (params: {
+  id: string;
+  reason: string;
+  role: string;
+  performedBy: string;
+}) => {
+  const existing = await ExternalSaleRepository.getExternalSaleByID(params.id);
+  if (!existing) return null;
+
+  const role = String(params.role || "").toLowerCase();
+  if (!["admin", "operator", "superadmin"].includes(role)) {
+    throw new Error("No autorizado para anular pedidos externos");
+  }
+  if ((existing as any).anulado === true) {
+    throw new Error("Este pedido externo ya fue anulado");
+  }
+  if (existing.is_external !== true || String(existing.service_origin || "external").trim().toLowerCase() !== "external") {
+    throw new Error("Solo se pueden anular pedidos externos");
+  }
+  if (existing.estado_pedido === "Entregado" || existing.delivered === true) {
+    throw new Error("No se puede anular un pedido externo entregado");
+  }
+  if (!isSameBusinessDay(existing.fecha_pedido)) {
+    throw new Error("Solo se puede anular el mismo dia de la creacion del pedido");
+  }
+
+  const reason = toTrimmed(params.reason);
+  if (!reason) {
+    throw new Error("Debe ingresar el motivo de anulacion");
+  }
+
+  const sellerPaymentMethod = normalizeSellerPaymentMethod(existing.metodo_pago);
+  const sellerPaymentAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
+  const branchId = String((existing.sucursal as any)?._id || existing.sucursal || "");
+
+  if (sellerPaymentMethod && sellerPaymentAmount > 0) {
+    await adjustExternalSellerIncome({
+      paymentMethod: sellerPaymentMethod,
+      amountDelta: -sellerPaymentAmount,
+      branchId,
+      date: existing.fecha_pedido,
+    });
+  }
+
+  return await ExternalSaleRepository.annulExternalSaleByID(params.id, {
+    anulado: true,
+    anulado_en: moment().tz("America/La_Paz").toDate(),
+    anulado_por: params.performedBy,
+    motivo_anulacion: reason,
+  });
+};
+
 const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
+  if ((existing as any).anulado === true) {
+    throw new Error("No se puede editar un pedido externo anulado");
+  }
   assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
   const existingDelivered = existing.estado_pedido === "Entregado" || existing.delivered === true;
 
@@ -674,6 +729,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     Object.prototype.hasOwnProperty.call(externalSale, "monto_paga_comprador") ||
     Object.prototype.hasOwnProperty.call(externalSale, "metodo_pago");
   const buyerNameEditRequested = Object.prototype.hasOwnProperty.call(externalSale, "comprador");
+  const destinationEditRequested =
+    Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal_id") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal");
 
   if (serviceOrigin === "simple_package" && buyerNameEditRequested) {
     throw new Error("Por ahora no se puede editar el comprador de pedidos simples");
@@ -681,6 +739,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
 
   if ((paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
     throw new Error("Solo se puede editar el cobro o el comprador el mismo dia que se creo la entrega");
+  }
+  if (destinationEditRequested && !isSameBusinessDay(existing.fecha_pedido)) {
+    throw new Error("Solo se puede cambiar la sucursal destino el mismo dia que se creo la entrega");
   }
 
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
@@ -875,6 +936,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     updatePayload.origen_sucursal = toObjectIdOrUndefined(nextBranchRoute.originBranchId);
     updatePayload.destino_sucursal = toObjectIdOrUndefined(nextBranchRoute.destinationBranchId);
     updatePayload.lugar_entrega = nextBranchRoute.destinationBranchName || existing.lugar_entrega;
+  } else if (destinationEditRequested && serviceOrigin === "simple_package") {
+    updatePayload.destino_sucursal = toObjectIdOrUndefined(nextDestinationBranchId);
   }
 
   if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
@@ -977,5 +1040,6 @@ export const ExternalSaleService = {
   registerExternalSale,
   registerExternalSalesByPackages,
   deleteExternalSaleByID,
+  annulExternalSaleByID,
   updateExternalSaleByID,
 };

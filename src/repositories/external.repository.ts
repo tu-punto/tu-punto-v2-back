@@ -10,6 +10,10 @@ const EXTERNAL_SERVICE_FILTER = {
     ]
 };
 
+const ACTIVE_EXTERNAL_FILTER = {
+    anulado: { $ne: true }
+};
+
 const buildExternalOriginBranchMatch = (branchObjectId: Types.ObjectId) => ({
     $or: [
         { origen_sucursal: branchObjectId },
@@ -30,7 +34,10 @@ const buildExternalBranchVisibilityMatch = (branchObjectId: Types.ObjectId) => (
 });
 
 const getAllExternalSales = async (): Promise<IVentaExternaDocument[]> => {
-    return await VentaExternaModel.find(EXTERNAL_SERVICE_FILTER)
+    return await VentaExternaModel.find({
+        ...EXTERNAL_SERVICE_FILTER,
+        ...ACTIVE_EXTERNAL_FILTER,
+    })
         .populate('sucursal')
         .populate({ path: "origen_sucursal", select: "_id nombre" })
         .populate({ path: "destino_sucursal", select: "_id nombre" });
@@ -48,7 +55,7 @@ const getExternalSalesList = async (params: {
     const safePage = Math.max(1, Number(params.page) || 1);
     const safeLimit = Math.min(200, Math.max(1, Number(params.limit) || 50));
 
-    const match: any = { ...EXTERNAL_SERVICE_FILTER };
+    const match: any = { ...EXTERNAL_SERVICE_FILTER, ...ACTIVE_EXTERNAL_FILTER };
     if (params.status) {
         match.estado_pedido = params.status;
     }
@@ -122,7 +129,7 @@ const getExternalContactSuggestions = async (params: {
     const safeLimit = Math.min(20, Math.max(1, Number(params.limit) || 8));
     const regex = new RegExp(escapeRegex(query), "i");
     const field = params.field || "name";
-    const match: any = { ...EXTERNAL_SERVICE_FILTER };
+    const match: any = { ...EXTERNAL_SERVICE_FILTER, ...ACTIVE_EXTERNAL_FILTER };
 
     if (field === "seller_carnet") {
         match.carnet_vendedor = regex;
@@ -217,7 +224,7 @@ const getExternalSalesByDateRange = async (
     const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
     if (!from && !to && !validSucursalIds.length) return await getAllExternalSales();
 
-    const match: any = { ...EXTERNAL_SERVICE_FILTER };
+    const match: any = { ...EXTERNAL_SERVICE_FILTER, ...ACTIVE_EXTERNAL_FILTER };
     if (from || to) {
         match.fecha_pedido = {};
         if (from) match.fecha_pedido.$gte = from;
@@ -241,7 +248,7 @@ const getExternalSalesHistoryCandidates = async (
     sucursalIds?: string[]
 ): Promise<IVentaExternaDocument[]> => {
     const validSucursalIds = (sucursalIds || []).filter((id) => Types.ObjectId.isValid(id));
-    const match: any = { $and: [EXTERNAL_SERVICE_FILTER] };
+    const match: any = { $and: [EXTERNAL_SERVICE_FILTER, ACTIVE_EXTERNAL_FILTER] };
 
     if (validSucursalIds.length) {
         const branchObjectIds = validSucursalIds.map((id) => new Types.ObjectId(id));
@@ -301,7 +308,8 @@ const deleteExternalSaleByID = async (externalSaleID: string) => {
     if (!Types.ObjectId.isValid(externalSaleID)) return null;
     return await VentaExternaModel.findOneAndDelete({
         _id: new Types.ObjectId(externalSaleID),
-        ...EXTERNAL_SERVICE_FILTER
+        ...EXTERNAL_SERVICE_FILTER,
+        ...ACTIVE_EXTERNAL_FILTER,
     });
 }
 
@@ -310,9 +318,26 @@ const updateExternalSaleByID = async (id: string, externalSale: IVentaExterna): 
     return await VentaExternaModel.findOneAndUpdate(
         {
             _id: new Types.ObjectId(id),
-            ...EXTERNAL_SERVICE_FILTER
+            ...EXTERNAL_SERVICE_FILTER,
+            ...ACTIVE_EXTERNAL_FILTER,
         },
         externalSale,
+        { new: true }
+    )
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
+}
+
+const annulExternalSaleByID = async (id: string, payload: Partial<IVentaExterna>): Promise<IVentaExternaDocument | null> => {
+    if (!Types.ObjectId.isValid(id)) return null;
+    return await VentaExternaModel.findOneAndUpdate(
+        {
+            _id: new Types.ObjectId(id),
+            ...EXTERNAL_SERVICE_FILTER,
+            ...ACTIVE_EXTERNAL_FILTER,
+        },
+        { $set: payload },
         { new: true }
     )
         .populate('sucursal')
@@ -330,5 +355,6 @@ export const ExternalSaleRepository = {
     registerExternalSale,
     registerExternalSales,
     deleteExternalSaleByID,
-    updateExternalSaleByID
+    updateExternalSaleByID,
+    annulExternalSaleByID
 };

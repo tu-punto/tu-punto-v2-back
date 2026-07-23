@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+    annulExternalSaleByID,
     deleteExternalSaleByID,
     getAllExternalSales,
     getExternalContactSuggestions,
@@ -21,6 +22,7 @@ externalSaleRouter.get("/:id", getExternalSaleByID)
 externalSaleRouter.post("/register", registerExternalSale)
 externalSaleRouter.post("/register-packages", registerExternalSalesByPackages)
 externalSaleRouter.post("/:id/send-guide-whatsapp", requireRole("superadmin"), sendExternalGuideWhatsapp)
+externalSaleRouter.post("/:id/anular", requireRole("admin", "operator", "superadmin"), annulExternalSaleByID)
 externalSaleRouter.delete("/:id", deleteExternalSaleByID)
 externalSaleRouter.put("/update/:id", updateExternalSaleByID)
 
