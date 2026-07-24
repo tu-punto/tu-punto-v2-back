@@ -1,6 +1,8 @@
 import { Types } from "mongoose";
 import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { SellerRepository } from "../repositories/seller.repository";
+import { canAccessSellerProductInfoByCommission } from "../utils";
 import { createVariantKey } from "../utils/variantKey";
 
 type PromotionScope = "interno" | "catalogo" | "ambos";
@@ -73,6 +75,20 @@ const normalizeDate = (value: unknown, label: string) => {
 
 const scopeIntersects = (left: PromotionScope, right: PromotionScope) =>
   left === "ambos" || right === "ambos" || left === right;
+
+const sellerCanUseCatalogScopes = async (sellerId: string) => {
+  const seller = await SellerRepository.findById(sellerId);
+  if (!seller) return false;
+
+  return canAccessSellerProductInfoByCommission({
+    comision_porcentual: Number((seller as any)?.comision_porcentual ?? 0),
+    comision_fija: Number((seller as any)?.comision_fija ?? 0),
+    fecha_vigencia: (seller as any)?.fecha_vigencia,
+  });
+};
+
+const normalizeScopeForSeller = (scope: PromotionScope | undefined, sellerCanUseCatalog: boolean): PromotionScope =>
+  sellerCanUseCatalog ? (scope || "interno") : "interno";
 
 const rangesOverlap = (startA: Date, endA: Date, startB: Date, endB: Date) =>
   startA <= endB && startB <= endA;
@@ -340,12 +356,17 @@ const resolveEffectivePricing = async ({
 };
 
 const createPromotion = async (input: PromotionInput) => {
-  const validated = await validatePromotionPayload(input);
+  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(input.sellerId);
+  const nextInput = {
+    ...input,
+    scope: normalizeScopeForSeller(input.scope, sellerCanUseCatalog),
+  };
+  const validated = await validatePromotionPayload(nextInput);
   const created = await ProductPromotionModel.create({
     id_vendedor: new Types.ObjectId(input.sellerId),
     id_producto: new Types.ObjectId(input.productId),
     variantKey: input.variantKey,
-    scope: input.scope,
+    scope: nextInput.scope,
     titulo: text(input.title),
     precio_simple: validated.simplePrice,
     escalas: validated.tiers,
@@ -366,11 +387,12 @@ const updatePromotion = async (promotionId: string, sellerId: string, input: Par
     throw new Error("Promocion no encontrada");
   }
 
+  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(sellerId);
   const nextPayload: PromotionInput = {
     sellerId,
     productId: text(input.productId || current.id_producto),
     variantKey: text(input.variantKey || current.variantKey),
-    scope: (input.scope || current.scope) as PromotionScope,
+    scope: normalizeScopeForSeller((input.scope || current.scope) as PromotionScope, sellerCanUseCatalog),
     title: input.title ?? current.titulo,
     simplePrice:
       input.simplePrice !== undefined ? input.simplePrice : (current as any).precio_simple,
@@ -417,7 +439,10 @@ const listPromotions = async (params: {
   const safePage = Math.max(1, Number(params.page || 1));
   const safeLimit = Math.min(100, Math.max(1, Number(params.limit || 12)));
   const query: any = { id_vendedor: params.sellerId };
-  if (params.scope && params.scope !== "all") {
+  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(params.sellerId);
+  if (!sellerCanUseCatalog) {
+    query.scope = "interno";
+  } else if (params.scope && params.scope !== "all") {
     query.scope = params.scope;
   }
   if (params.state && ["draft", "active", "disabled"].includes(params.state)) {
@@ -504,6 +529,7 @@ const listSellerVariantOptions = async (sellerId: string, q?: string) => {
 };
 
 const previewPromotion = async (input: PricingPreviewInput) => {
+  const sellerCanUseCatalog = input.sellerId ? await sellerCanUseCatalogScopes(input.sellerId) : false;
   const context = await getVariantContext({
     sellerId: input.sellerId,
     productId: input.productId,
@@ -516,6 +542,7 @@ const previewPromotion = async (input: PricingPreviewInput) => {
       ? null
       : roundMoney(Math.max(0, toNumber(input.simplePrice)));
   const quantity = Math.max(1, Math.floor(toNumber(input.quantity) || 1));
+  const scope = normalizeScopeForSeller(input.scope, sellerCanUseCatalog);
   const matchedTier = [...tiers]
     .sort((left, right) => right.minQuantity - left.minQuantity)
     .find((tier) => quantity >= tier.minQuantity);
@@ -535,7 +562,8 @@ const previewPromotion = async (input: PricingPreviewInput) => {
     discountPercent: Math.max(0, discountPercent),
     matchedTier: matchedTier || null,
     simplePrice,
-    tiers
+    tiers,
+    scope
   };
 };
 

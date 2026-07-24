@@ -13,6 +13,7 @@ import { Types } from 'mongoose';
 import ExcelJS from "exceljs";
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 import { IngresoModel } from "../entities/implements/IngresoSchema";
 import { ProductVariantKeyService } from "./productVariantKey.service";
 import { createVariantKey } from "../utils/variantKey";
@@ -51,6 +52,120 @@ const buildInventoryVariantKey = (row: {
 
   const variants = normalizeVariantsForEntry(row.variantes || row.variantes_obj);
   return `${productId}::${JSON.stringify(variants)}`;
+};
+
+const roundMoney = (value: number) => Number(value.toFixed(2));
+
+const normalizePromotionTiers = (tiers: any[] = []) =>
+  tiers
+    .map((tier) => ({
+      minQuantity: Math.max(2, Math.floor(Number(tier?.minQuantity || 0))),
+      unitPrice: roundMoney(Math.max(0, Number(tier?.unitPrice || 0)))
+    }))
+    .filter((tier) => tier.minQuantity >= 2 && tier.unitPrice > 0)
+    .sort((left, right) => left.minQuantity - right.minQuantity);
+
+const resolvePromotionPricing = (basePrice: number, promotion?: any, quantity = 1) => {
+  const simplePrice =
+    promotion?.precio_simple === undefined || promotion?.precio_simple === null
+      ? null
+      : roundMoney(Math.max(0, Number(promotion.precio_simple)));
+  const tiers = normalizePromotionTiers(promotion?.escalas || []);
+  const safeQuantity = Math.max(1, Math.floor(Number(quantity || 1)));
+  const matchedTier = [...tiers]
+    .sort((left, right) => right.minQuantity - left.minQuantity)
+    .find((tier) => safeQuantity >= tier.minQuantity);
+  const effectivePrice = matchedTier?.unitPrice ?? simplePrice ?? basePrice;
+  const discountPercent =
+    basePrice > 0 ? roundMoney(((basePrice - effectivePrice) / basePrice) * 100) : 0;
+
+  return {
+    basePrice: roundMoney(Math.max(0, Number(basePrice || 0))),
+    effectivePrice: roundMoney(Math.max(0, Number(effectivePrice || 0))),
+    discountPercent: Math.max(0, discountPercent),
+    simplePrice,
+    tiers,
+    matchedTier,
+    title: String(promotion?.titulo || "").trim() || null,
+    startsAt: promotion?.fecha_inicio || null,
+    endsAt: promotion?.fecha_fin || null,
+    scope: promotion?.scope || null
+  };
+};
+
+const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return safeRows;
+
+  const productIds = Array.from(
+    new Set(
+      safeRows
+        .map((row) => normalizeText(row?.productId || row?._id || row?.id_producto))
+        .filter(Boolean)
+    )
+  ).filter((id) => Types.ObjectId.isValid(id));
+  const variantKeys = Array.from(
+    new Set(
+      safeRows
+        .map((row) => normalizeText(row?.variantKey))
+        .filter(Boolean)
+    )
+  );
+
+  if (!productIds.length || !variantKeys.length) {
+    return safeRows.map((row) => ({
+      ...row,
+      precio_original: Number(row?.precio || row?.price || 0),
+      precio: Number(row?.precio || row?.price || 0),
+      pricingPromotion: null
+    }));
+  }
+
+  const promotions = await ProductPromotionModel.find({
+    id_producto: { $in: productIds.map((id) => new Types.ObjectId(id)) },
+    variantKey: { $in: variantKeys },
+    estado: "active",
+    fecha_inicio: { $lte: new Date() },
+    fecha_fin: { $gte: new Date() },
+    scope: { $in: ["interno", "ambos"] }
+  })
+    .select("id_producto variantKey scope titulo precio_simple escalas fecha_inicio fecha_fin")
+    .lean();
+
+  const promotionMap = new Map(
+    promotions.map((promotion: any) => [
+      `${String(promotion.id_producto)}::${String(promotion.variantKey)}`,
+      promotion
+    ])
+  );
+
+  return safeRows.map((row) => {
+    const productId = normalizeText(row?.productId || row?._id || row?.id_producto);
+    const variantKey = normalizeText(row?.variantKey);
+    const promotion = promotionMap.get(`${productId}::${variantKey}`);
+    const basePrice = Number(row?.precio ?? row?.price ?? 0);
+    const pricing = promotion ? resolvePromotionPricing(basePrice, promotion, quantity) : null;
+
+    return {
+      ...row,
+      precio_original: pricing?.basePrice ?? roundMoney(Math.max(0, basePrice)),
+      precio: pricing?.effectivePrice ?? roundMoney(Math.max(0, basePrice)),
+      discountPercent: pricing?.discountPercent ?? 0,
+      pricingPromotion: pricing
+        ? {
+            label: pricing.title,
+            startsAt: pricing.startsAt,
+            endsAt: pricing.endsAt,
+            tiers: pricing.tiers,
+            simplePrice: pricing.simplePrice,
+            effectivePrice: pricing.effectivePrice,
+            discountPercent: pricing.discountPercent,
+            matchedTier: pricing.matchedTier,
+            scope: pricing.scope
+          }
+        : null
+    };
+  });
 };
 
 const getActiveSellerIdsForBranch = async (sucursalId: string) => {
@@ -570,7 +685,8 @@ const getFlatProductList = async (params?: {
   inStock?: boolean;
   q?: string;
 }) => {
-  return await ProductRepository.findFlatProductList(params);
+  const rows = await ProductRepository.findFlatProductList(params);
+  return await enrichRowsWithPromotionPricing(rows);
 };
 
 const getFlatProductListPage = async (params?: {
@@ -582,7 +698,11 @@ const getFlatProductListPage = async (params?: {
   page?: number;
   limit?: number;
 }) => {
-  return await ProductRepository.findFlatProductListPage(params);
+  const result = await ProductRepository.findFlatProductListPage(params);
+  return {
+    ...result,
+    rows: await enrichRowsWithPromotionPricing(result.rows || [])
+  };
 };
 
 const generateInventoryQRReport = async (params: {
@@ -596,10 +716,10 @@ const generateInventoryQRReport = async (params: {
 
   const { sellerIds, sellerNameById } = await getActiveSellerIdsForBranch(params.sucursalId);
   const activeProducts = sellerIds.length
-    ? await ProductRepository.findFlatProductList({
+    ? await enrichRowsWithPromotionPricing(await ProductRepository.findFlatProductList({
         sucursalId: params.sucursalId,
         sellerIds
-      })
+      }))
     : [];
 
   const scannedRows = Array.isArray(params.rows) ? params.rows : [];

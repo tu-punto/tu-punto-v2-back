@@ -1302,11 +1302,36 @@ const getSellerPaymentProofs = async (sellerId: string) => {
   }
 };
 
-const getSellerDashboard = async (sellerId: string, options?: { months?: number }) => {
+const getSellerDashboard = async (sellerId: string, options?: { months?: number; sucursalIds?: string[] }) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) {
     throw new Error("Vendedor no encontrado");
   }
+
+  const availableBranches = await resolveSellerBranches((seller as any)?.pago_sucursales || []);
+  const branchNameById = new Map(
+    availableBranches.map((branch: any) => [String(branch?.id_sucursal || ""), String(branch?.sucursalName || "Sucursal")])
+  );
+  const availableBranchIds = availableBranches
+    .map((branch: any) => String(branch?.id_sucursal || "").trim())
+    .filter(Boolean);
+  const selectedBranchIds = Array.from(
+    new Set(
+      (options?.sucursalIds || [])
+        .map((branchId) => String(branchId || "").trim())
+        .filter((branchId) => availableBranchIds.includes(branchId))
+    )
+  );
+  const branchFilterSet = new Set(selectedBranchIds);
+  const shouldFilterBranches = branchFilterSet.size > 0 && branchFilterSet.size < availableBranchIds.length;
+  const isBranchAllowed = (branchId: string) => !shouldFilterBranches || branchFilterSet.has(branchId);
+  const resolveBranchId = (...values: any[]) => {
+    for (const value of values) {
+      const branchId = String((value as any)?._id || value || "").trim();
+      if (branchId) return branchId;
+    }
+    return "";
+  };
 
   const months = Math.max(1, Math.min(12, Number(options?.months || 6)));
   const startDate = dayjs().startOf("month").subtract(months - 1, "month").toDate();
@@ -1333,7 +1358,7 @@ const getSellerDashboard = async (sellerId: string, options?: { months?: number 
   monthKeys.forEach((key) => monthlyMap.set(key, { internalRevenue: 0, catalogRevenue: 0, units: 0 }));
 
   const productMap = new Map<string, { productName: string; units: number; revenue: number; channels: Set<string> }>();
-  const branchMap = new Map<string, { branchName: string; revenue: number; units: number }>();
+  const branchMap = new Map<string, { branchId: string; branchName: string; revenue: number; units: number }>();
 
   let internalRevenue = 0;
   let catalogRevenue = 0;
@@ -1341,6 +1366,17 @@ const getSellerDashboard = async (sellerId: string, options?: { months?: number 
   let catalogUnits = 0;
 
   for (const sale of internalRows as any[]) {
+    const resolvedBranchId = resolveBranchId(
+      sale?.sucursal,
+      sale?.id_sucursal,
+      sale?.sucursalId,
+      sale?.idSucursal,
+      sale?.pedido?.sucursal,
+      sale?.pedido?.id_sucursal
+    );
+    if (shouldFilterBranches && !resolvedBranchId) continue;
+    if (resolvedBranchId && !isBranchAllowed(resolvedBranchId)) continue;
+
     const quantity = Math.max(0, Number(sale?.cantidad || 0));
     const revenue = roundMoney(quantity * Number(sale?.precio_unitario || 0));
     const date = sale?.pedido?.fecha_pedido ? dayjs(sale.pedido.fecha_pedido) : null;
@@ -1366,19 +1402,37 @@ const getSellerDashboard = async (sellerId: string, options?: { months?: number 
     productRow.channels.add("interno");
     productMap.set(productKey, productRow);
 
-    const branchId = String(sale?.sucursal || "");
-    const branchLabel = String((sale?.pedido as any)?.sucursal_name || branchId || "Sucursal");
-    const branchRow = branchMap.get(branchId) || { branchName: branchLabel, revenue: 0, units: 0 };
+    const branchLabel = String(
+      branchNameById.get(resolvedBranchId) ||
+        (sale?.pedido as any)?.sucursal_name ||
+        (sale?.pedido as any)?.sucursal?.nombre ||
+        resolvedBranchId ||
+        "Sin sucursal"
+    );
+    const branchKey = resolvedBranchId || branchLabel;
+    const branchRow =
+      branchMap.get(branchKey) || { branchId: resolvedBranchId || branchKey, branchName: branchLabel, revenue: 0, units: 0 };
     branchRow.revenue += revenue;
     branchRow.units += quantity;
-    branchMap.set(branchId, branchRow);
+    branchMap.set(branchKey, branchRow);
   }
 
   for (const order of catalogOrders as any[]) {
+    const resolvedBranchId = resolveBranchId(order?.lugar_origen, order?.sucursal, order?.id_sucursal);
+    if (shouldFilterBranches && !resolvedBranchId) continue;
+    if (resolvedBranchId && !isBranchAllowed(resolvedBranchId)) continue;
+
     const date = order?.fecha_pedido ? dayjs(order.fecha_pedido) : null;
     const monthKey = date?.isValid() ? date.format("YYYY-MM") : null;
-    const branchKey = String(order?.lugar_origen || "catalogo");
-    const branchRow = branchMap.get(branchKey) || { branchName: "Catalogo", revenue: 0, units: 0 };
+    const branchLabel = String(
+      branchNameById.get(resolvedBranchId) ||
+        order?.lugar_origen_name ||
+        order?.sucursal_name ||
+        (resolvedBranchId ? "Sucursal" : "Sin sucursal")
+    );
+    const branchKey = resolvedBranchId || branchLabel;
+    const branchRow =
+      branchMap.get(branchKey) || { branchId: resolvedBranchId || branchKey, branchName: branchLabel, revenue: 0, units: 0 };
 
     for (const item of Array.isArray(order?.productos_temporales) ? order.productos_temporales : []) {
       if (String(item?.id_vendedor || "") !== sellerId) continue;
@@ -1485,10 +1539,16 @@ const getSellerDashboard = async (sellerId: string, options?: { months?: number 
       .sort((left, right) => right.revenue - left.revenue)
       .slice(0, 6)
       .map((row) => ({
+        branchId: row.branchId,
         branchName: row.branchName,
         revenue: roundMoney(row.revenue),
         units: row.units
       })),
+    availableBranches: availableBranches.map((branch: any) => ({
+      id: String(branch?.id_sucursal || ""),
+      name: String(branch?.sucursalName || "Sucursal"),
+      active: branch?.activo !== false,
+    })),
     activePromotions: activePromotions.map((promotion: any) => ({
       id: String(promotion._id),
       productName: productNameById.get(String(promotion.id_producto)) || "Producto",
