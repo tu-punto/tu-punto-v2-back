@@ -435,7 +435,7 @@ const getSimplePackageBalanceToApply = async (
   if (!simplePackage) return null;
 
   const sellerId = String((simplePackage as any)?.id_vendedor || "").trim();
-  const amount = roundCurrency(Number((simplePackage as any)?.saldo_cobrar || 0));
+  const amount = roundCurrency(Number((simplePackage as any)?.amortizacion_vendedor || 0));
 
   if (!sellerId || amount <= 0) return null;
 
@@ -1435,31 +1435,18 @@ const updateShipping = async (
 
     if (isSimplePackageOrder) {
       const balanceToApply = await getSimplePackageBalanceToApply(shipping);
+      const simplePackageSource = await getSimplePackageSource(shipping);
+      const previousApplied = roundCurrency(Number((simplePackageSource as any)?.seller_balance_applied_amount || 0));
+      const nextApplied =
+        balanceToApply && !newData.pagado_al_vendedor
+          ? roundCurrency(Number(balanceToApply.amount || 0))
+          : 0;
+      const delta = roundCurrency(nextApplied - previousApplied);
 
-      if (balanceToApply && !newData.pagado_al_vendedor) {
+      if (balanceToApply?.sellerId && delta !== 0) {
         await VendedorModel.findByIdAndUpdate(balanceToApply.sellerId, {
-          $inc: { saldo_pendiente: balanceToApply.amount },
+          $inc: { saldo_pendiente: delta },
         });
-      } else {
-        const sellerTotals = new Map<string, number>();
-
-        salesForBalance.forEach((sale: any) => {
-          const sellerId = String(sale?.id_vendedor || "").trim();
-          if (!sellerId) return;
-
-          const subtotal = roundCurrency(Number(sale?.cantidad || 0) * Number(sale?.precio_unitario || 0));
-          const nextAmount = newData.pagado_al_vendedor ? 0 : subtotal;
-          if (nextAmount <= 0) return;
-
-          sellerTotals.set(sellerId, roundCurrency((sellerTotals.get(sellerId) || 0) + nextAmount));
-        });
-
-        for (const [sellerId, amount] of sellerTotals.entries()) {
-          if (amount <= 0) continue;
-          await VendedorModel.findByIdAndUpdate(sellerId, {
-            $inc: { saldo_pendiente: amount },
-          });
-        }
       }
     } else {
       // Regular packages: update using the standard balance calculation
@@ -1482,6 +1469,18 @@ const updateShipping = async (
       if (salesToUpdateSaldo.length > 0) {
         await actualizarSaldoVendedor(salesToUpdateSaldo);
       }
+    }
+  }
+
+  if (isSimplePackageOrder && wasDelivered && !willBeDelivered) {
+    const simplePackageSource = await getSimplePackageSource(shipping);
+    const previousApplied = roundCurrency(Number((simplePackageSource as any)?.seller_balance_applied_amount || 0));
+    const sellerId = String((simplePackageSource as any)?.id_vendedor || "").trim();
+
+    if (sellerId && previousApplied > 0) {
+      await VendedorModel.findByIdAndUpdate(sellerId, {
+        $inc: { saldo_pendiente: -previousApplied },
+      });
     }
   }
 
@@ -1509,11 +1508,17 @@ const updateShipping = async (
 
   if (resShip && simplePackageSourceId) {
     const nextStatus = String((resShip as any).estado_pedido || "").trim();
+    const existingSource = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+    const sellerAppliedAmount =
+      nextStatus === "Entregado"
+        ? roundCurrency(Number((existingSource as any)?.amortizacion_vendedor || 0))
+        : 0;
     const destinationBranchId = resolveBranchId((resShip as any).sucursal);
     const simplePackageUpdatePayload = {
       estado_pedido: (resShip as any).estado_pedido,
       delivered: nextStatus === "Entregado",
-      seller_balance_applied: nextStatus === "Entregado",
+      seller_balance_applied: nextStatus === "Entregado" && sellerAppliedAmount > 0,
+      seller_balance_applied_amount: sellerAppliedAmount,
       esta_pagado: (String((resShip as any).esta_pagado || "").trim().toLowerCase() === "si" ? "si" : "no") as "si" | "no",
       metodo_pago: getSimplePackageMethodFromShipping(resShip),
       hora_entrega_real: (resShip as any).hora_entrega_real,
@@ -1539,7 +1544,6 @@ const updateShipping = async (
         : {}),
     };
     const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
-    const existingSource = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
     const simplePackageFinancialPatch =
       lateFee > 0
         ? {

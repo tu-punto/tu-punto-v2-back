@@ -234,6 +234,10 @@ const VentaExternaSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    seller_balance_applied_amount: {
+        type: Number,
+        default: 0,
+    },
     seller_debt_applied: {
         type: Boolean,
         default: false,

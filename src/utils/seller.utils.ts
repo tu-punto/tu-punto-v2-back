@@ -102,8 +102,13 @@ export const canAccessSellerProductInfoByCommission = (seller: {
   return hasValidLifecycle && hasCommission;
 };
 
-export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
+export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[], simplePackageSales: any[] = []) => {
   const pedidosProcesados = new Set();
+  const simplePackagePedidoIds = new Set(
+    (simplePackageSales || [])
+      .map((row: any) => String(row?.pedido_ref?._id || row?.pedido_ref || row?._id || "").trim())
+      .filter(Boolean)
+  );
   const saldoPendiente = (sales || []).reduce((acc: number, sale: any, i: number) => {
     if (!sale) {
       console.warn('[calcPagoPendiente] Sale vacío', { index: i });
@@ -119,7 +124,14 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       return acc; // evita que truene
     }
 
-    if (sale.deposito_realizado || sale.pedido.estado_pedido === 'En Espera') {
+    const status = String(sale?.pedido?.estado_pedido || "").trim().toLowerCase();
+    const pedidoId = String(sale?.pedido?._id || "").trim();
+    if (
+      sale.deposito_realizado ||
+      (status !== "entregado" && status !== "interno") ||
+      sale?.pedido?.simple_package_order === true ||
+      (pedidoId && simplePackagePedidoIds.has(pedidoId))
+    ) {
       return acc;
     }
 
@@ -130,16 +142,20 @@ export const calcPagoPendiente = (sales: any[], debts: IFinanceFlux[]) => {
       : subtotal - sale.utilidad;
 
     if (!pedidosProcesados.has(sale.pedido._id.toString())) {
-      const deliveryDiscount = sale.pedido.simple_package_order
-        ? 0
-        : (sale.pedido.cargo_delivery ?? 0);
       subtotalDeuda -=
         (sale.pedido.adelanto_cliente ?? 0) +
-        deliveryDiscount;
+        (sale.pedido.cargo_delivery ?? 0);
       pedidosProcesados.add(sale.pedido._id.toString());
     }
 
     return acc + subtotalDeuda;
+  }, 0) + (simplePackageSales || []).reduce((acc: number, row: any) => {
+    const status = String(row?.estado_pedido || "").trim().toLowerCase();
+    if (row?.deposito_realizado || (status !== "entregado" && status !== "interno")) {
+      return acc;
+    }
+
+    return acc + Number(row?.saldo_por_paquete ?? 0);
   }, 0);
 
   const deuda = (debts || []).reduce((acc, debt) => {

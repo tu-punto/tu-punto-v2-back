@@ -262,6 +262,11 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
               path: "$pedido",
               preserveNullAndEmptyArrays: true
             }
+          },
+          {
+            $match: {
+              "pedido.simple_package_order": { $ne: true }
+            }
           }
         ],
         as: "sales"
@@ -280,6 +285,31 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
           }
         ],
         as: "debts"
+      }
+    },
+    {
+      $lookup: {
+        from: "VentaExterna",
+        let: { vendedor_id: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+              service_origin: "simple_package",
+              is_external: true,
+              deposito_realizado: { $ne: true },
+              $or: [{ delivered: true }, { estado_pedido: "Entregado" }, { estado_pedido: "interno" }],
+            }
+          },
+          {
+            $project: {
+              saldo_por_paquete: { $ifNull: ["$saldo_por_paquete", 0] },
+              estado_pedido: 1,
+              deposito_realizado: 1,
+            }
+          }
+        ],
+        as: "simplePackageSales"
       }
     }
   ]).exec();
@@ -306,7 +336,12 @@ const buildSellerMetricsStages = () => [
           },
         },
         { $unwind: "$pedido" },
-        { $match: { "pedido.estado_pedido": { $ne: "En Espera" } } },
+        {
+          $match: {
+            "pedido.estado_pedido": { $in: ["Entregado", "interno"] },
+            "pedido.simple_package_order": { $ne: true },
+          }
+        },
         {
           $project: {
             pedidoId: "$pedido._id",
@@ -330,13 +365,7 @@ const buildSellerMetricsStages = () => [
             orderDiscount: {
               $add: [
                 { $ifNull: ["$pedido.adelanto_cliente", 0] },
-                {
-                  $cond: [
-                    "$pedido.simple_package_order",
-                    0,
-                    { $ifNull: ["$pedido.cargo_delivery", 0] },
-                  ],
-                },
+                { $ifNull: ["$pedido.cargo_delivery", 0] },
               ],
             },
           },
@@ -358,6 +387,30 @@ const buildSellerMetricsStages = () => [
         },
       ],
       as: "salesMetrics",
+    },
+  },
+  {
+    $lookup: {
+      from: "VentaExterna",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+            service_origin: "simple_package",
+            is_external: true,
+            deposito_realizado: { $ne: true },
+            $or: [{ delivered: true }, { estado_pedido: "Entregado" }, { estado_pedido: "interno" }],
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            saldo_pendiente: { $sum: { $ifNull: ["$saldo_por_paquete", 0] } },
+          },
+        },
+      ],
+      as: "simplePackageMetrics",
     },
   },
   {
@@ -384,7 +437,10 @@ const buildSellerMetricsStages = () => [
   {
     $addFields: {
       saldo_pendiente: {
-        $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0],
+        $add: [
+          { $ifNull: [{ $arrayElemAt: ["$salesMetrics.saldo_pendiente", 0] }, 0] },
+          { $ifNull: [{ $arrayElemAt: ["$simplePackageMetrics.saldo_pendiente", 0] }, 0] },
+        ],
       },
       deuda: {
         $ifNull: [{ $arrayElemAt: ["$debtMetrics.deuda", 0] }, 0],
@@ -456,6 +512,7 @@ const buildSellerMetricsStages = () => [
   {
     $project: {
       salesMetrics: 0,
+      simplePackageMetrics: 0,
       debtMetrics: 0,
     },
   },

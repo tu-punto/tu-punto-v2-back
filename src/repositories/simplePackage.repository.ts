@@ -221,7 +221,8 @@ const getSellerAccountingSimplePackages = async (sellerId: string) => {
     ...SIMPLE_PACKAGE_FILTER,
     id_vendedor: new Types.ObjectId(sellerId),
     is_external: true,
-    seller_balance_applied: true,
+    deposito_realizado: { $ne: true },
+    $or: [{ delivered: true }, { estado_pedido: "Entregado" }],
   })
     .sort({ fecha_pedido: -1, numero_paquete: 1 })
     .populate({ path: "origen_sucursal", select: "_id nombre" })
