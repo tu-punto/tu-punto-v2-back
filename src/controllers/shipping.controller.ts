@@ -161,7 +161,15 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
   const { shippingId, sales } = req.body;
 
   try {
-    const result = await ShippingService.processSalesForShipping(shippingId, sales);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    const result = await ShippingService.processSalesForShipping(shippingId, sales, {
+      auditActor: {
+        userId: String(auth?.id || "").trim() || undefined,
+        role: String(auth?.role || "").trim() || undefined,
+        name: String(auth?.email || "").trim() || undefined,
+        sellerId: String(auth?.sellerId || "").trim() || undefined,
+      },
+    });
     res.json(result);
   } catch (error) {
     console.error(error);
@@ -244,7 +252,13 @@ export const getShippingsBySellerController = async (
 export const deleteShippingById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    await ShippingService.deleteShippingById(id);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    await ShippingService.deleteShippingById(id, {
+      userId: String(auth?.id || "").trim() || undefined,
+      role: String(auth?.role || "").trim() || undefined,
+      name: String(auth?.email || "").trim() || undefined,
+      sellerId: String(auth?.sellerId || "").trim() || undefined,
+    });
     res.json({ success: true });
   } catch (error) {
     console.error("❌ Error al eliminar el pedido:", error);

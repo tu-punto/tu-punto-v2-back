@@ -8,8 +8,19 @@ import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
 import { applySellerCommissionCap } from "../utils/commissionCap";
 import { variantFingerprint, variantLabel } from "../utils/variantKey";
+import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
 
 type VariantRecord = Record<string, string>;
+type StockAdjustmentAudit = {
+  productId: string;
+  productNameSnapshot: string;
+  variantKey?: string;
+  variantAttributesSnapshot?: Record<string, string>;
+  stockBefore: number;
+  stockAfter: number;
+  sellerId?: string;
+  branchId?: string;
+};
 
 const getAllSales = async () => {
   return await SaleRepository.findAll();
@@ -172,14 +183,60 @@ const findVariantIndexForSale = (product: any, sale: any): number => {
   return -1;
 };
 
+const buildSaleSourceId = (sale: any, fallbackSaleId?: string) => {
+  const saleId = normalizeText(fallbackSaleId || sale?._id || sale?.id_venta);
+  const pedidoId = normalizeText(sale?.pedido?._id || sale?.pedido || sale?.id_pedido);
+  return saleId || pedidoId || "";
+};
+
+const recordSaleAudit = async (params: {
+  eventType: string;
+  sourceModule: string;
+  sourceId: string;
+  actor?: InventoryAuditActor;
+  sale: any;
+  adjustment?: StockAdjustmentAudit | null;
+  metadata?: Record<string, unknown>;
+}) => {
+  const adjustment = params.adjustment;
+  if (!adjustment || Number(adjustment.stockBefore) === Number(adjustment.stockAfter)) return;
+
+  await InventoryAuditService.recordEventSafe({
+    eventType: params.eventType,
+    sourceModule: params.sourceModule,
+    sourceId: params.sourceId,
+    actor: params.actor,
+    sellerId: adjustment.sellerId,
+    branchId: adjustment.branchId,
+    metadata: {
+      quantity: Number(params.sale?.cantidad || 0),
+      pedidoId: normalizeText(params.sale?.pedido?._id || params.sale?.pedido || params.sale?.id_pedido),
+      saleId: normalizeText(params.sale?._id || params.sale?.id_venta),
+      ...params.metadata,
+    },
+    movements: [
+      {
+        productId: adjustment.productId,
+        productNameSnapshot: adjustment.productNameSnapshot,
+        variantKey: normalizeText(adjustment.variantKey),
+        variantAttributesSnapshot: adjustment.variantAttributesSnapshot || {},
+        stockBefore: adjustment.stockBefore,
+        stockAfter: adjustment.stockAfter,
+        sellerId: adjustment.sellerId,
+        branchId: adjustment.branchId,
+      },
+    ],
+  });
+};
+
 const adjustStockForSale = async (sale: any, delta: number) => {
-  if (!delta) return;
+  if (!delta) return null;
 
   const productId = getSaleProductId(sale);
-  if (!Types.ObjectId.isValid(productId)) return;
+  if (!Types.ObjectId.isValid(productId)) return null;
 
   const product = await ProductService.getProductById(productId);
-  if (product.esTemporal) return;
+  if (product.esTemporal) return null;
 
   const sucursalId = getSaleSucursalId(sale);
   const sucursal = product.sucursales.find((s: any) => s.id_sucursal?.toString() === sucursalId);
@@ -205,9 +262,19 @@ const adjustStockForSale = async (sale: any, delta: number) => {
 
   sucursal.combinaciones[index].stock = nextStock;
   await (product as any).save();
+  return {
+    productId,
+    productNameSnapshot: normalizeText(product.nombre_producto) || "Producto",
+    variantKey: normalizeText(sucursal.combinaciones[index]?.variantKey),
+    variantAttributesSnapshot: toVariantRecord(sucursal.combinaciones[index]?.variantes) || undefined,
+    stockBefore: currentStock,
+    stockAfter: nextStock,
+    sellerId: normalizeIdValue(product?.id_vendedor || sale?.id_vendedor || sale?.vendedor),
+    branchId: sucursalId,
+  } as StockAdjustmentAudit;
 };
 
-const registerSale = async (sale: any) => {
+const registerSale = async (sale: any, options?: { auditActor?: InventoryAuditActor }) => {
   const salesArray = Array.isArray(sale) ? sale : [sale];
   const savedSales = [];
 
@@ -238,7 +305,7 @@ const registerSale = async (sale: any) => {
     };
     saleData.utilidad = applySellerCommissionCap(saleData.vendedor, Number(saleData.utilidad || 0));
 
-    await adjustStockForSale(saleData, -cantidad);
+    const adjustment = await adjustStockForSale(saleData, -cantidad);
 
     try {
       const saved = await SaleRepository.registerSale(saleData);
@@ -250,6 +317,17 @@ const registerSale = async (sale: any) => {
       await VendedorModel.findByIdAndUpdate(saleData.vendedor, {
         $addToSet: { venta: saved._id },
       });
+      await recordSaleAudit({
+        eventType: "sale_registered",
+        sourceModule: "sale.register",
+        sourceId: buildSaleSourceId(saved, String(saved?._id || "")),
+        actor: options?.auditActor,
+        sale: saved,
+        adjustment,
+        metadata: {
+          action: "register",
+        },
+      });
     } catch (error) {
       await adjustStockForSale(saleData, cantidad);
       throw error;
@@ -259,10 +337,10 @@ const registerSale = async (sale: any) => {
   return savedSales;
 };
 
-const registerMultipleSales = async (sales: any[]) => {
+const registerMultipleSales = async (sales: any[], options?: { auditActor?: InventoryAuditActor }) => {
   const savedSales = [];
   for (const sale of sales) {
-    const savedList = await SaleService.registerSale(sale);
+    const savedList = await SaleService.registerSale(sale, options);
     for (const saved of savedList) {
       savedSales.push(saved);
     }
@@ -384,7 +462,7 @@ const getProductsBySellerId = async (sellerId: string) => {
   return products;
 };
 
-const updateProducts = async (shippingId: any, prods: any[]) => {
+const updateProducts = async (shippingId: any, prods: any[], auditActor?: InventoryAuditActor) => {
   const sales = await SaleRepository.findByPedidoId(shippingId);
   if (!sales || sales.length === 0) {
     throw new Error(`Shipping with id ${shippingId} doesn't exist`);
@@ -408,7 +486,7 @@ const updateProducts = async (shippingId: any, prods: any[]) => {
     }
     if ("id_producto" in prod) fieldsToUpdate.id_producto = prod.id_producto;
 
-    const updatedSale = await updateSaleById(saleId, fieldsToUpdate);
+    const updatedSale = await updateSaleById(saleId, fieldsToUpdate, auditActor);
     if (updatedSale) updated.push(updatedSale);
   }
 
@@ -447,9 +525,13 @@ const deleteProducts = async (shippingId: any, prods: any[]) => {
   return await SaleRepository.deleteProducts(sale, prods);
 };
 
-const deleteSalesByIdsAndPullFromPedido = async (pedidoId: string, ventaIds: string[]) => {
+const deleteSalesByIdsAndPullFromPedido = async (
+  pedidoId: string,
+  ventaIds: string[],
+  auditActor?: InventoryAuditActor
+) => {
   for (const ventaId of ventaIds) {
-    await deleteSaleById(String(ventaId));
+    await deleteSaleById(String(ventaId), undefined, auditActor);
   }
 
   await PedidoModel.findByIdAndUpdate(pedidoId, {
@@ -459,19 +541,19 @@ const deleteSalesByIdsAndPullFromPedido = async (pedidoId: string, ventaIds: str
   return ventaIds;
 };
 
-const deleteSalesByIds = async (saleIds: string[]): Promise<any> => {
+const deleteSalesByIds = async (saleIds: string[], auditActor?: InventoryAuditActor): Promise<any> => {
   for (const saleId of saleIds) {
-    await deleteSaleById(String(saleId));
+    await deleteSaleById(String(saleId), undefined, auditActor);
   }
 };
 
-const deleteSalesOfProducts = async (stockData: any[]) => {
+const deleteSalesOfProducts = async (stockData: any[], auditActor?: InventoryAuditActor) => {
   const ids = stockData
     .map((item) => String(item?._id || item?.id_venta || ""))
     .filter((id: string) => id.length > 0);
 
   for (const id of ids) {
-    await deleteSaleById(id);
+    await deleteSaleById(id, undefined, auditActor);
   }
 
   return ids;
@@ -497,7 +579,7 @@ const getDataPaymentProof = async (sellerId: number) => {
   return { products, payments };
 };
 
-const updateSaleById = async (id: string, fields: any) => {
+const updateSaleById = async (id: string, fields: any, auditActor?: InventoryAuditActor) => {
   const venta = await SaleRepository.findById(id);
   if (!venta) {
     return null;
@@ -516,7 +598,7 @@ const updateSaleById = async (id: string, fields: any) => {
   }
 
   const stockAdjustment = Number(venta.cantidad) - nextCantidad;
-  await adjustStockForSale(venta, stockAdjustment);
+  const adjustment = await adjustStockForSale(venta, stockAdjustment);
 
   const oldSubtotal = Number(venta.cantidad) * Number(venta.precio_unitario);
   const newSubtotal = nextCantidad * nextPrecioUnitario;
@@ -538,14 +620,26 @@ const updateSaleById = async (id: string, fields: any) => {
   } as any);
 
   await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
+  await recordSaleAudit({
+    eventType: "sale_stock_adjusted",
+    sourceModule: "sale.update",
+    sourceId: buildSaleSourceId(venta, id),
+    actor: auditActor,
+    sale: venta,
+    adjustment,
+    metadata: {
+      action: "update",
+      nextCantidad,
+    },
+  });
   return updatedSale;
 };
 
-const deleteSaleById = async (id: string, id_sucursal?: string) => {
+const deleteSaleById = async (id: string, id_sucursal?: string, auditActor?: InventoryAuditActor) => {
   const venta = await SaleRepository.findById(id);
   if (!venta) return null;
 
-  await adjustStockForSale(venta, Number(venta.cantidad));
+  const adjustment = await adjustStockForSale(venta, Number(venta.cantidad));
 
   const subtotal = Number(venta.cantidad) * Number(venta.precio_unitario);
   const addPendingSaldo = venta.pedido.pagado_al_vendedor
@@ -565,6 +659,17 @@ const deleteSaleById = async (id: string, id_sucursal?: string) => {
   });
 
   const deleted = await SaleRepository.deleteSaleById(id);
+  await recordSaleAudit({
+    eventType: "sale_deleted_stock_restored",
+    sourceModule: "sale.delete",
+    sourceId: buildSaleSourceId(venta, id),
+    actor: auditActor,
+    sale: venta,
+    adjustment,
+    metadata: {
+      action: "delete",
+    },
+  });
   return deleted;
 };
 

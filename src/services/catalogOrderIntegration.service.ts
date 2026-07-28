@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { createVariantKey } from "../utils/variantKey";
+import { InventoryAuditService } from "./inventoryAudit.service";
 
 type CatalogOrderItem = {
   name: string;
@@ -40,6 +41,10 @@ type ReservedStockItem = {
   internalBranchId: string;
   quantity: number;
   currentStock: number;
+  productNameSnapshot?: string;
+  variantLabelSnapshot?: string;
+  variantAttributesSnapshot?: Record<string, string>;
+  sellerId?: string;
 };
 
 const findCombination = (
@@ -89,6 +94,8 @@ const reserveItemStock = async (
   if (!product) throw new Error(`Producto no encontrado: ${text(item.name)}`);
   const found = findCombination(product, variantKey, preferredBranchId, quantity);
   if (!found) throw new Error(`Variante no encontrada: ${text(item.name)}`);
+  const selectedCombination =
+    product?.sucursales?.[found.branchIndex]?.combinaciones?.[found.combinationIndex];
 
   const stockPath = `sucursales.${found.branchIndex}.combinaciones.${found.combinationIndex}.stock`;
   const keyPath = `sucursales.${found.branchIndex}.combinaciones.${found.combinationIndex}.variantKey`;
@@ -119,6 +126,10 @@ const reserveItemStock = async (
     internalVariantKey: variantKey,
     internalBranchId: found.branchId,
     quantity,
+    productNameSnapshot: text((product as any)?.nombre_producto || item.name),
+    variantLabelSnapshot: text(item.name),
+    variantAttributesSnapshot: selectedCombination?.variantes || {},
+    sellerId: text((product as any)?.id_vendedor || item.internalSellerId),
     currentStock: Number(
       refreshed?.sucursales?.[refreshedCombination?.branchIndex ?? -1]?.combinaciones?.[
         refreshedCombination?.combinationIndex ?? -1
@@ -232,6 +243,28 @@ const createOrder = async (payload: CatalogOrderPayload) => {
     (order as any).catalog_stock_items = reservedItems;
     (order as any).catalog_stock_status = "reserved";
     await order.save();
+    await InventoryAuditService.recordEventSafe({
+      eventType: "catalog_stock_reserved",
+      sourceModule: "catalog.order.reserve",
+      sourceId: String(order._id),
+      branchId: branchId || undefined,
+      metadata: {
+        catalogOrderId: orderId,
+        origin: "catalog",
+        itemCount: reservedItems.length,
+      },
+      movements: reservedItems.map((item) => ({
+        productId: item.internalProductId,
+        productNameSnapshot: item.productNameSnapshot || item.variantLabelSnapshot || "Producto",
+        variantKey: item.internalVariantKey,
+        variantLabelSnapshot: item.variantLabelSnapshot || "",
+        variantAttributesSnapshot: item.variantAttributesSnapshot || {},
+        sellerId: item.sellerId,
+        branchId: item.internalBranchId,
+        stockBefore: Number(item.currentStock || 0) + Number(item.quantity || 0),
+        stockAfter: Number(item.currentStock || 0),
+      })),
+    });
     return order;
   } catch (error) {
     await restoreReservedStock(orderId, reservedItems);
@@ -369,6 +402,27 @@ const rejectOrder = async (shippingId: string, reason: string, rejectedBy: strin
     );
     (pedido as any).catalog_stock_items = restoredItems;
     (pedido as any).catalog_stock_status = "restored";
+    await InventoryAuditService.recordEventSafe({
+      eventType: "catalog_stock_restored",
+      sourceModule: "catalog.order.reject",
+      sourceId: String(pedido._id),
+      metadata: {
+        catalogOrderId: String((pedido as any).catalog_order_id || ""),
+        origin: "catalog",
+        itemCount: restoredItems.length,
+      },
+      movements: restoredItems.map((item) => ({
+        productId: item.internalProductId,
+        productNameSnapshot: item.productNameSnapshot || item.variantLabelSnapshot || "Producto",
+        variantKey: item.internalVariantKey,
+        variantLabelSnapshot: item.variantLabelSnapshot || "",
+        variantAttributesSnapshot: item.variantAttributesSnapshot || {},
+        sellerId: item.sellerId,
+        branchId: item.internalBranchId,
+        stockBefore: Number(item.currentStock || 0) - Number(item.quantity || 0),
+        stockAfter: Number(item.currentStock || 0),
+      })),
+    });
   }
   pedido.estado_pedido = "Rechazado";
   (pedido as any).motivo_rechazo = text(reason) || "Pedido rechazado por Tu Punto";

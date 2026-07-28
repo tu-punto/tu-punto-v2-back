@@ -31,6 +31,7 @@ import catalogIntegrationRouter from "./routes/catalogIntegration.routes";
 import attendanceRouter from "./routes/attendance.routes";
 import landingLeadRouter from "./routes/landingLead.routes";
 import productPromotionRouter from "./routes/productPromotion.routes";
+import inventoryAuditRouter from "./routes/inventoryAudit.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -82,6 +83,7 @@ router.use("/simple-packages", requireAuth, requireRole("admin", "operator", "se
 router.use("/tracking-freeze", requireAuth, requireRole("superadmin"), trackingFreezeRouter)
 router.use("/stock-withdrawals", requireAuth, stockWithdrawalRouter)
 router.use("/attendance", requireAuth, requireRole("admin", "operator"), attendanceRouter)
+router.use("/inventory-audit", requireAuth, requireRole("superadmin"), inventoryAuditRouter)
 
 router.use("/qr", qr);
 

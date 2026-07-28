@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { StockWithdrawalService } from "../services/stockWithdrawal.service";
 
 const getAuth = (res: Response) =>
-  (res.locals.auth as { id?: string; role?: string; sellerId?: string } | undefined) || {};
+  (res.locals.auth as { id?: string; role?: string; sellerId?: string; email?: string } | undefined) || {};
 
 export const listStockWithdrawalRequests = async (req: Request, res: Response) => {
   try {
@@ -42,6 +42,12 @@ export const approveStockWithdrawalRequest = async (req: Request, res: Response)
     const request = await StockWithdrawalService.approveRequest({
       requestId: req.params.id,
       userId: auth.id,
+      auditActor: {
+        userId: String(auth.id || "").trim() || undefined,
+        role: String(auth.role || "").trim() || undefined,
+        name: String(auth.email || "").trim() || undefined,
+        sellerId: String(auth.sellerId || "").trim() || undefined,
+      },
     });
     res.json({ success: true, request });
   } catch (error: any) {

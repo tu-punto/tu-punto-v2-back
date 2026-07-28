@@ -141,7 +141,13 @@ const registerProduct = async (req: Request, res: Response) => {
   
   const { product } = req.body;
   try {
-    const newProduct = await ProductService.registerProduct(product);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    const newProduct = await ProductService.registerProduct(product, {
+      userId: String(auth?.id || "").trim() || undefined,
+      role: String(auth?.role || "").trim() || undefined,
+      name: String(auth?.email || "").trim() || undefined,
+      sellerId: String(auth?.sellerId || "").trim() || undefined,
+    });
     res.status(201).json({
       success: true,
       message: "Producto registrado correctamente",
@@ -157,7 +163,13 @@ export const registerProductVariants = async (req: Request, res: Response) => {
   console.log("📥 Body recibido en /register:", JSON.stringify(req.body, null, 2));
 
   try {
-    const newProduct = await ProductService.registerProduct(req.body);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    const newProduct = await ProductService.registerProduct(req.body, {
+      userId: String(auth?.id || "").trim() || undefined,
+      role: String(auth?.role || "").trim() || undefined,
+      name: String(auth?.email || "").trim() || undefined,
+      sellerId: String(auth?.sellerId || "").trim() || undefined,
+    });
     res.status(201).json({ success: true, newProduct });
   } catch (error: any) {
     console.error("❌ Error al registrar variantes:", error?.message || error);
@@ -671,11 +683,18 @@ export const updatePrice = async (req: Request, res: Response) => {
 export const updateSubvariantStock = async (req: Request, res: Response) => {
   //console.log("Updating subvariant stock");
   const { productId, sucursalId, variantes, stock } = req.body;  try {
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
     const result = await ProductService.updateStockByVariantCombination({
       productId,
       sucursalId,
       variantes,
-      stock
+      stock,
+      auditActor: {
+        userId: String(auth?.id || "").trim() || undefined,
+        role: String(auth?.role || "").trim() || undefined,
+        name: String(auth?.email || "").trim() || undefined,
+        sellerId: String(auth?.sellerId || "").trim() || undefined,
+      }
   });
 
     res.json({ success: true, result });
@@ -687,7 +706,13 @@ export const updateSubvariantStock = async (req: Request, res: Response) => {
 export const addVariantToProduct = async (req: Request, res: Response) => {
   try {
     const { productId, sucursalId, combinaciones } = req.body;
-    const result = await ProductService.addVariantToProduct(productId, sucursalId, combinaciones);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    const result = await ProductService.addVariantToProduct(productId, sucursalId, combinaciones, {
+      userId: String(auth?.id || "").trim() || undefined,
+      role: String(auth?.role || "").trim() || undefined,
+      name: String(auth?.email || "").trim() || undefined,
+      sellerId: String(auth?.sellerId || "").trim() || undefined,
+    });
     res.json({ success: true, result });
   } catch (error) {
     console.error("Error al agregar variante:", error);
@@ -1014,13 +1039,20 @@ export const getSuperadminVariantInventoryList = async (req: Request, res: Respo
 export const updateVariantStockByBranchForSuperadmin = async (req: Request, res: Response) => {
   try {
     const { productId, sellerId, variantKey, sucursalId, stock } = req.body || {};
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
 
     const result = await ProductService.updateVariantStockByBranchForSuperadmin({
       productId: String(productId || "").trim(),
       sellerId: String(sellerId || "").trim(),
       variantKey: String(variantKey || "").trim(),
       sucursalId: String(sucursalId || "").trim(),
-      stock: Number(stock)
+      stock: Number(stock),
+      auditActor: {
+        userId: String(auth?.id || "").trim() || undefined,
+        role: String(auth?.role || "").trim() || undefined,
+        name: String(auth?.email || "").trim() || undefined,
+        sellerId: String(auth?.sellerId || "").trim() || undefined,
+      }
     });
 
     return res.json({

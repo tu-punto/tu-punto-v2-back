@@ -3,6 +3,7 @@ import { IngresoModel } from "../entities/implements/IngresoSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { StockWithdrawalRequestModel } from "../entities/implements/StockWithdrawalRequestSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
 
 const toObjectId = (value: unknown, label: string) => {
   const id = String(value || "").trim();
@@ -158,12 +159,22 @@ const createRequest = async (params: {
   return buildDto(request);
 };
 
-const approveRequest = async (params: { requestId: string; userId?: string }) => {
+const approveRequest = async (params: { requestId: string; userId?: string; auditActor?: InventoryAuditActor }) => {
   const request = await StockWithdrawalRequestModel.findById(params.requestId);
   if (!request) throw new Error("Solicitud no encontrada");
   if (request.status !== "pending") throw new Error("La solicitud ya fue procesada");
 
   const branchId = String(request.branch);
+  const auditMovements: Array<{
+    productId: string;
+    productNameSnapshot: string;
+    variantKey?: string;
+    variantAttributesSnapshot?: Record<string, string>;
+    stockBefore: number;
+    stockAfter: number;
+    sellerId?: string;
+    branchId?: string;
+  }> = [];
   for (const item of request.items as any[]) {
     const product = await ProductoModel.findById(item.product);
     if (!product) throw new Error(`Producto no encontrado: ${item.productName}`);
@@ -177,6 +188,16 @@ const approveRequest = async (params: { requestId: string; userId?: string }) =>
     }
 
     combination.stock = currentStock - quantity;
+    auditMovements.push({
+      productId: String(product._id),
+      productNameSnapshot: String(product.nombre_producto || item.productName || "Producto"),
+      variantKey: String(combination?.variantKey || item?.variantKey || ""),
+      variantAttributesSnapshot: normalizeVariants(combination.variantes || item.variantes),
+      stockBefore: currentStock,
+      stockAfter: currentStock - quantity,
+      sellerId: String(request.seller || ""),
+      branchId,
+    });
     const ingreso = await IngresoModel.create({
       fecha_ingreso: new Date(),
       estado: "salida_solicitada",
@@ -201,6 +222,22 @@ const approveRequest = async (params: { requestId: string; userId?: string }) =>
     (request as any).approvedBy = new Types.ObjectId(params.userId);
   }
   await request.save();
+  await InventoryAuditService.recordEventSafe({
+    eventType: "withdrawal_request_approved",
+    sourceModule: "stock-withdrawals.approve",
+    sourceId: String(request._id),
+    actor: params.auditActor,
+    sellerId: String(request.seller || ""),
+    branchId,
+    metadata: {
+      requestId: String(request._id),
+      itemCount: auditMovements.length,
+    },
+    movements: auditMovements.map((movement) => ({
+      ...movement,
+      variantLabelSnapshot: getVariantFullLabel(movement.variantAttributesSnapshot || {}).replace(/^ - /, ""),
+    })),
+  });
   return buildDto(await request.populate("seller branch"));
 };
 

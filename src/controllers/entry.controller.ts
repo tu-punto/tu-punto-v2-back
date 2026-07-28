@@ -30,7 +30,13 @@ export const deleteEntries = async (req: Request, res: Response) => {
   const entries = req.body.entries;
   try {
     const entryIds = entries.map((entry: { id_ingreso: number }) => entry.id_ingreso);
-    const deletedEntries = await EntryService.deleteEntriesByIds(entryIds);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    const deletedEntries = await EntryService.deleteEntriesByIds(entryIds, {
+      userId: String(auth?.id || "").trim() || undefined,
+      role: String(auth?.role || "").trim() || undefined,
+      name: String(auth?.email || "").trim() || undefined,
+      sellerId: String(auth?.sellerId || "").trim() || undefined,
+    });
     res.json({
       status: true,
       message: 'Entries deleted successfully',
@@ -60,7 +66,13 @@ export const deleteEntriesOfProducts = async (req: Request, res: Response) => {
 export const updateEntry = async (req: Request, res: Response) => {
   const entries = req.body.entries
   try {
-    const entryUpdated = await EntryService.updateEntries(entries);
+    const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    const entryUpdated = await EntryService.updateEntries(entries, {
+      userId: String(auth?.id || "").trim() || undefined,
+      role: String(auth?.role || "").trim() || undefined,
+      name: String(auth?.email || "").trim() || undefined,
+      sellerId: String(auth?.sellerId || "").trim() || undefined,
+    });
     res.status(200).json({
       status: "success",
       message: `${entryUpdated.length} entries updated successfully`,
