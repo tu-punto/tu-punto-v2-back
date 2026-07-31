@@ -65,6 +65,7 @@ type ListParams = {
   q?: string;
   page?: number;
   limit?: number;
+  order?: "asc" | "desc";
 };
 
 const toObjectId = (value?: string) => {
@@ -162,6 +163,8 @@ const buildBaseMatch = (params: ListParams) => {
   }
   return match;
 };
+
+const buildSortStage = (order?: string) => ({ created_at: order === "asc" ? 1 : -1, _id: order === "asc" ? 1 : -1 });
 
 const buildLookupStages = () => [
   {
@@ -310,11 +313,12 @@ const listMovements = async (params: ListParams) => {
   const skip = (page - 1) * limit;
   const match = buildBaseMatch(params);
   const searchMatch = buildSearchMatch(params);
+  const sortStage = buildSortStage(params.order);
 
   const pipeline: any[] = [{ $match: match }, ...buildLookupStages()];
   if (searchMatch) pipeline.push({ $match: searchMatch });
   pipeline.push(
-    { $sort: { created_at: -1, _id: -1 } },
+    { $sort: sortStage },
     {
       $facet: {
         rows: [
@@ -340,6 +344,7 @@ const listMovements = async (params: ListParams) => {
               stock_before: 1,
               stock_delta: 1,
               stock_after: 1,
+              resolved: 1,
               movement_direction: 1,
               performed_at: 1,
               created_at: 1,
@@ -394,6 +399,24 @@ const getEventDetail = async (eventId: string) => {
   };
 };
 
+const setMovementResolved = async (movementId: string, resolved: boolean) => {
+  if (!Types.ObjectId.isValid(movementId)) {
+    throw new Error("Movimiento de auditoria invalido");
+  }
+
+  const movement = await InventoryAuditMovementModel.findByIdAndUpdate(
+    movementId,
+    { resolved: Boolean(resolved) },
+    { new: true }
+  ).lean();
+
+  if (!movement) {
+    throw new Error("Movimiento de auditoria no encontrado");
+  }
+
+  return { movement };
+};
+
 const exportMovementsReport = async (params: ListParams) => {
   const fullResult = await listMovements({ ...params, page: 1, limit: 5000 });
   const workbook = new ExcelJS.Workbook();
@@ -409,6 +432,7 @@ const exportMovementsReport = async (params: ListParams) => {
     { header: "Antes", key: "antes", width: 12 },
     { header: "Delta", key: "delta", width: 12 },
     { header: "Despues", key: "despues", width: 12 },
+    { header: "Resuelto", key: "resuelto", width: 12 },
     { header: "Usuario", key: "usuario", width: 28 },
     { header: "Rol", key: "rol", width: 16 },
     { header: "Modulo", key: "modulo", width: 24 },
@@ -425,6 +449,7 @@ const exportMovementsReport = async (params: ListParams) => {
       antes: Number(row?.stock_before || 0),
       delta: Number(row?.stock_delta || 0),
       despues: Number(row?.stock_after || 0),
+      resuelto: row?.resolved ? "Si" : "No",
       usuario: row?.event_actor_name || "",
       rol: row?.event_actor_role || "",
       modulo: row?.source_module || "",
@@ -595,4 +620,5 @@ export const InventoryAuditService = {
   listMovements,
   getEventDetail,
   exportMovementsReport,
+  setMovementResolved,
 };

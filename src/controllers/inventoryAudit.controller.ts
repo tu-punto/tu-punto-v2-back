@@ -20,7 +20,18 @@ const parseParams = (source: any) => ({
   q: typeof source?.q === "string" ? String(source.q).trim() : undefined,
   page: Number(source?.page || 1),
   limit: Number(source?.limit || 20),
+  order: (source?.order === "asc" ? "asc" : "desc") as "asc" | "desc",
 });
+
+const parseBoolean = (value: unknown) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const raw = value.trim().toLowerCase();
+    if (raw === "true" || raw === "1") return true;
+    if (raw === "false" || raw === "0") return false;
+  }
+  return undefined;
+};
 
 export const listInventoryAuditMovements = async (req: Request, res: Response) => {
   try {
@@ -64,6 +75,24 @@ export const exportInventoryAuditXlsx = async (req: Request, res: Response) => {
       success: false,
       message: "No se pudo exportar la auditoria de stock",
       error: error?.message || "Internal error",
+    });
+  }
+};
+
+export const updateInventoryAuditMovementResolved = async (req: Request, res: Response) => {
+  try {
+    const resolved = parseBoolean(req.body?.resolved);
+    if (resolved === undefined) {
+      return res.status(400).json({ success: false, message: "El valor de resuelto es inválido" });
+    }
+
+    const result = await InventoryAuditService.setMovementResolved(String(req.params.id || "").trim(), resolved);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("updateInventoryAuditMovementResolved error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "No se pudo actualizar el estado del movimiento",
     });
   }
 };

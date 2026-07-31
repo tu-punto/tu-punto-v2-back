@@ -19,6 +19,7 @@ export interface IInventoryAuditMovement {
   stock_delta: number;
   stock_after: number;
   movement_direction: "in" | "out" | "neutral";
+  resolved?: boolean;
   performed_at: Date;
   created_at: Date;
 }

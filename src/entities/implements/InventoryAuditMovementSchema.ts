@@ -20,6 +20,7 @@ const InventoryAuditMovementSchema = new Schema<IInventoryAuditMovementDocument>
     stock_before: { type: Number, required: true },
     stock_delta: { type: Number, required: true },
     stock_after: { type: Number, required: true },
+    resolved: { type: Boolean, default: false },
     movement_direction: {
       type: String,
       enum: ["in", "out", "neutral"],
@@ -42,6 +43,7 @@ InventoryAuditMovementSchema.index({ branch_id: 1, created_at: -1 });
 InventoryAuditMovementSchema.index({ event_type: 1, created_at: -1 });
 InventoryAuditMovementSchema.index({ correlation_id: 1 });
 InventoryAuditMovementSchema.index({ event_id: 1 });
+InventoryAuditMovementSchema.index({ resolved: 1, created_at: -1 });
 
 export const InventoryAuditMovementModel = model<IInventoryAuditMovementDocument>(
   "InventoryAuditMovement",
