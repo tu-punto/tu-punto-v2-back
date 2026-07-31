@@ -10,6 +10,7 @@ export interface IVenta {
   id_vendedor: Types.ObjectId;
   cantidad: number;
   precio_unitario: number;
+  precio_original?: number;
   utilidad: number;
   deposito_realizado: boolean;
 

@@ -141,6 +141,7 @@ const generateSellerPdfBuffer = async (
       sale.nombre_variante,
       foundSucursal?.nombre || "Sucursal desconocida",
       sale.precio_unitario,
+      Number(sale.precio_original ?? sale.precio_unitario),
       sale.cantidad,
       !sale.id_pedido.pagado_al_vendedor
         ? `Bs. ${sale.cantidad * sale.precio_unitario}`
@@ -173,6 +174,7 @@ const generateSellerPdfBuffer = async (
     "",
     "",
     "",
+    "",
     `Bs. ${totalVentas.toFixed(2)}`,
     `Bs. ${totalVentasComision.toFixed(2)}`,
   ]);
@@ -181,14 +183,15 @@ const generateSellerPdfBuffer = async (
     startY: 20,
     head: [
       [
-        "FECHA",
-        "PRODUCTO",
-        "SUCURSAL",
-        "PRECIO",
-        "CANTIDAD",
-        "SUBTOTAL",
-        "SUBTOTAL - COMISIÓN",
-      ],
+    "FECHA",
+    "PRODUCTO",
+    "SUCURSAL",
+    "PRECIO",
+    "PRECIO ORIGINAL",
+    "CANTIDAD",
+    "SUBTOTAL",
+    "SUBTOTAL - COMISIÓN",
+  ],
     ],
     body: salesTableData,
     styles: { fontSize: 10 },

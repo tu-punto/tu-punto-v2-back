@@ -294,6 +294,9 @@ const registerSale = async (sale: any, options?: { auditActor?: InventoryAuditAc
     const saleData: any = {
       ...rawSale,
       cantidad,
+      precio_original: Number(
+        rawSale.precio_original ?? rawSale.originalPrice ?? rawSale.basePrice ?? rawSale.precio ?? rawSale.precio_unitario ?? 0
+      ),
       producto: new Types.ObjectId(String(idProducto)),
       pedido: new Types.ObjectId(String(idPedido)),
       vendedor: new Types.ObjectId(String(idVendedor)),
@@ -565,6 +568,7 @@ const getDataPaymentProof = async (sellerId: number) => {
   const products = data.map((venta) => ({
     producto: venta.producto.nombre_producto,
     unitario: venta.precio_unitario,
+    original: Number(venta.precio_original ?? venta.precio_unitario),
     cantidad: venta.cantidad,
     total: venta.precio_unitario * venta.cantidad,
   }));
