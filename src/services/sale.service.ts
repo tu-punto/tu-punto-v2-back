@@ -54,6 +54,55 @@ const toVariantRecord = (variantes: unknown): VariantRecord | null => {
 
 const normalizeIdValue = (value: unknown): string => String(value ?? "").trim();
 
+const resolveStoredOriginalPrice = (sale: any) => {
+  const price = Number(sale?.precio_original ?? 0);
+  return Number.isFinite(price) && price > 0 ? price : null;
+};
+
+const resolveOriginalPriceFromProduct = (sale: any) => {
+  const product = sale?.producto;
+  if (!product?.sucursales?.length) return null;
+
+  const branchId = normalizeIdValue(
+    sale?.sucursal ?? sale?.id_sucursal ?? sale?.sucursalId ?? sale?.idSucursal ?? sale?.pedido?.sucursal
+  );
+  const variantKey = normalizeText(sale?.variantKey || sale?.variant_key || "");
+  const saleVariants = toVariantRecord(sale?.variantes);
+
+  const candidateBranches = branchId
+    ? (product.sucursales || []).filter((branch: any) => normalizeIdValue(branch?.id_sucursal) === branchId)
+    : (product.sucursales || []);
+
+  for (const branch of candidateBranches) {
+    const combinations = Array.isArray(branch?.combinaciones) ? branch.combinaciones : [];
+
+    const byVariantKey = variantKey
+      ? combinations.find((combination: any) => normalizeText(combination?.variantKey || "") === variantKey)
+      : null;
+    if (byVariantKey) return Number(byVariantKey?.precio || 0);
+
+    const byVariants = saleVariants
+      ? combinations.find((combination: any) => {
+          const combinationVariants = toVariantRecord(combination?.variantes);
+          return variantFingerprint(combinationVariants || {}) === variantFingerprint(saleVariants || {});
+        })
+      : null;
+    if (byVariants) return Number(byVariants?.precio || 0);
+  }
+
+  return null;
+};
+
+const resolveSaleOriginalPrice = (sale: any) => {
+  const stored = resolveStoredOriginalPrice(sale);
+  if (stored !== null) return stored;
+
+  const inferred = resolveOriginalPriceFromProduct(sale);
+  if (inferred !== null && Number.isFinite(inferred) && inferred > 0) return inferred;
+
+  return Number(sale?.precio_unitario || sale?.precio || 0);
+};
+
 const getSaleProductId = (sale: any): string => {
   const raw =
     sale?.id_producto ??
@@ -362,6 +411,7 @@ const getSalesByShippingId = async (pedidoId: string) => {
     producto: sale.producto.nombre_producto,
     nombre_variante: sale.nombre_variante,
     precio_unitario: sale.precio_unitario,
+    precio_original: resolveSaleOriginalPrice(sale),
     cantidad: sale.cantidad,
     utilidad: sale.utilidad,
     id_venta: sale._id,
@@ -373,12 +423,13 @@ const getSalesByShippingId = async (pedidoId: string) => {
 
   const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
     key: `temp-${i}`,
-    producto: prod.producto,
-    cantidad: prod.cantidad,
-    precio_unitario: prod.precio_unitario,
-    utilidad: prod.utilidad,
-    id_vendedor: prod.id_vendedor,
-    id_pedido: pedidoId,
+      producto: prod.producto,
+      cantidad: prod.cantidad,
+      precio_unitario: prod.precio_unitario,
+      precio_original: Number((prod as any).precio_original ?? prod.precio_unitario),
+      utilidad: prod.utilidad,
+      id_vendedor: prod.id_vendedor,
+      id_pedido: pedidoId,
     id_sucursal: (pedido as any)?.sucursal ?? (pedido as any)?.lugar_origen ?? null,
     deposito_realizado: false,
     esTemporal: true,
@@ -403,6 +454,7 @@ const getProductDetailsByProductId = async (productId: number) => {
       key: `${sale.producto._id}-${formattedDate}`,
       producto: sale.producto.nombre_producto,
       precio_unitario: sale.precio_unitario,
+      precio_original: resolveSaleOriginalPrice(sale),
       cantidad: sale.cantidad,
       utilidad: sale.utilidad,
       id_venta: sale._id,
@@ -441,6 +493,7 @@ const getProductsBySellerId = async (sellerId: string) => {
       variantes: sale.variantes ?? null,
       variantKey: sale.variantKey || "",
       precio_unitario: sale.precio_unitario,
+      precio_original: resolveSaleOriginalPrice(sale),
       cantidad: sale.cantidad,
       utilidad: sale.utilidad,
       id_venta: sale._id,

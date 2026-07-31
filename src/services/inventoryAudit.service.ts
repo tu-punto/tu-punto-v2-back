@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { Types } from "mongoose";
 import { InventoryAuditEventModel } from "../entities/implements/InventoryAuditEventSchema";
 import { InventoryAuditMovementModel } from "../entities/implements/InventoryAuditMovementSchema";
+import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
@@ -62,6 +63,7 @@ type ListParams = {
   eventType?: string;
   actorUserId?: string;
   direction?: string;
+  viewMode?: "operativa" | "control";
   q?: string;
   page?: number;
   limit?: number;
@@ -169,6 +171,20 @@ const buildSortStage = (order?: string) => ({ created_at: order === "asc" ? 1 : 
 const buildLookupStages = () => [
   {
     $lookup: {
+      from: "Producto",
+      localField: "product_id",
+      foreignField: "_id",
+      as: "product_doc",
+    },
+  },
+  {
+    $unwind: {
+      path: "$product_doc",
+      preserveNullAndEmptyArrays: true,
+    },
+  },
+  {
+    $lookup: {
       from: "InventoryAuditEvent",
       localField: "event_id",
       foreignField: "_id",
@@ -182,6 +198,31 @@ const buildLookupStages = () => [
     },
   },
 ];
+
+const buildViewModeMatch = (params: ListParams) => {
+  const conditions: any[] = [
+    {
+      $or: [
+        { product_id: { $exists: false } },
+        { product_id: null },
+        { "product_doc.esTemporal": { $ne: true } },
+      ],
+    },
+  ];
+
+  if (params.viewMode === "control") {
+    conditions.push({
+      $expr: {
+        $ne: [
+          { $add: ["$stock_before", "$stock_delta"] },
+          "$stock_after",
+        ],
+      },
+    });
+  }
+
+  return conditions.length === 1 ? conditions[0] : { $and: conditions };
+};
 
 const buildSearchMatch = (params: ListParams) => {
   const q = toTrimmed(params.q);
@@ -210,7 +251,11 @@ const buildSearchMatch = (params: ListParams) => {
 const buildSummary = async (params: ListParams) => {
   const match = buildBaseMatch(params);
   const searchMatch = buildSearchMatch(params);
-  const pipeline: any[] = [{ $match: match }, ...buildLookupStages()];
+  const pipeline: any[] = [
+    { $match: match },
+    ...buildLookupStages(),
+    { $match: buildViewModeMatch(params) },
+  ];
   if (searchMatch) pipeline.push({ $match: searchMatch });
 
   const [totals, byType, byActor, topProducts] = await Promise.all([
@@ -315,7 +360,11 @@ const listMovements = async (params: ListParams) => {
   const searchMatch = buildSearchMatch(params);
   const sortStage = buildSortStage(params.order);
 
-  const pipeline: any[] = [{ $match: match }, ...buildLookupStages()];
+  const pipeline: any[] = [
+    { $match: match },
+    ...buildLookupStages(),
+    { $match: buildViewModeMatch(params) },
+  ];
   if (searchMatch) pipeline.push({ $match: searchMatch });
   pipeline.push(
     { $sort: sortStage },
@@ -393,9 +442,29 @@ const getEventDetail = async (eventId: string) => {
     .sort({ created_at: 1, _id: 1 })
     .lean();
 
+  const productIds = movements
+    .map((movement: any) => {
+      const productId = movement?.product_id;
+      return Types.ObjectId.isValid(productId) ? new Types.ObjectId(productId) : null;
+    })
+    .filter(Boolean) as Types.ObjectId[];
+
+  const temporaryProducts = productIds.length
+    ? await ProductoModel.find({ _id: { $in: productIds }, esTemporal: true }).select("_id").lean()
+    : [];
+
+  const temporaryProductIdSet = new Set(
+    temporaryProducts.map((product: any) => String(product?._id || "")).filter(Boolean)
+  );
+
+  const visibleMovements = movements.filter((movement: any) => {
+    const productId = String(movement?.product_id || "");
+    return !productId || !temporaryProductIdSet.has(productId);
+  });
+
   return {
     event,
-    movements,
+    movements: visibleMovements,
   };
 };
 

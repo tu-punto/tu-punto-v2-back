@@ -172,6 +172,38 @@ const resolveBranchId = (value: any): string => {
   return "";
 };
 
+const resolveShippingSaleOriginalPrice = (sale: any) => {
+  const stored = Number(sale?.precio_original ?? 0);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+
+  const product = sale?.producto;
+  const branchId = resolveBranchId(sale?.sucursal);
+  const saleVariantKey = String(sale?.variantKey || "").trim();
+  const saleVariants = sale?.variantes || {};
+  const branches = Array.isArray(product?.sucursales) ? product.sucursales : [];
+  const candidateBranches = branchId
+    ? branches.filter((branch: any) => resolveBranchId(branch?.id_sucursal) === branchId)
+    : branches;
+
+  for (const branch of candidateBranches) {
+    const combinations = Array.isArray(branch?.combinaciones) ? branch.combinaciones : [];
+
+    const byVariantKey = saleVariantKey
+      ? combinations.find((combination: any) => String(combination?.variantKey || "").trim() === saleVariantKey)
+      : null;
+    if (byVariantKey?.precio !== undefined) return Number(byVariantKey.precio || 0);
+
+    const byVariants = combinations.find((combination: any) => {
+      const combinationVariants = combination?.variantes || {};
+      const combinationEntries = Object.entries(combinationVariants);
+      return combinationEntries.length > 0 && combinationEntries.every(([key, value]) => saleVariants?.[key] === value);
+    });
+    if (byVariants?.precio !== undefined) return Number(byVariants.precio || 0);
+  }
+
+  return Number(sale?.precio_unitario || 0);
+};
+
 const buildGoogleMapsSearchUrl = (query: string): string => {
   if (!query) return "";
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
@@ -1159,7 +1191,29 @@ const registerShipping = async (shipping: any) => {
 };
 const getShippingById = async (id: string) => {
   const shipping = await ShippingRepository.findById(id);
-  return await attachSimplePackageFieldsToShipping(shipping);
+  const withSimplePackage = await attachSimplePackageFieldsToShipping(shipping);
+  if (!withSimplePackage) return withSimplePackage;
+
+  const base =
+    typeof (withSimplePackage as any)?.toObject === "function"
+      ? (withSimplePackage as any).toObject()
+      : { ...withSimplePackage };
+
+  base.venta = Array.isArray(base.venta)
+    ? base.venta.map((sale: any) => ({
+        ...sale,
+        precio_original: resolveShippingSaleOriginalPrice(sale),
+      }))
+    : [];
+
+  base.productos_temporales = Array.isArray(base.productos_temporales)
+    ? base.productos_temporales.map((item: any) => ({
+        ...item,
+        precio_original: Number(item?.precio_original ?? item?.precio_unitario ?? 0),
+      }))
+    : [];
+
+  return base;
 };
 
 const SHIPPING_QR_PREFIX = "TP|v1|SHIP|";

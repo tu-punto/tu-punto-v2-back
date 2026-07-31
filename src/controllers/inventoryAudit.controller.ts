@@ -17,6 +17,7 @@ const parseParams = (source: any) => ({
   eventType: typeof source?.eventType === "string" ? String(source.eventType).trim() : undefined,
   actorUserId: typeof source?.actorUserId === "string" ? String(source.actorUserId).trim() : undefined,
   direction: typeof source?.direction === "string" ? String(source.direction).trim() : undefined,
+  viewMode: (source?.viewMode === "control" ? "control" : "operativa") as "control" | "operativa",
   q: typeof source?.q === "string" ? String(source.q).trim() : undefined,
   page: Number(source?.page || 1),
   limit: Number(source?.limit || 20),

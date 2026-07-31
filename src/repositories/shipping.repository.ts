@@ -14,7 +14,7 @@ const shippingPopulate = [
       },
       {
         path: 'producto',
-        select: 'nombre_producto esTemporal',
+        select: 'nombre_producto esTemporal sucursales',
       }
     ],
   },
