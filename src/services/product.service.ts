@@ -69,6 +69,9 @@ const normalizePromotionTiers = (tiers: any[] = []) =>
     .filter((tier) => tier.minQuantity >= 2 && tier.unitPrice > 0)
     .sort((left, right) => left.minQuantity - right.minQuantity);
 
+const isPromotionPayloadInvalid = (simplePrice: number | null, tiers: any[] = []) =>
+  simplePrice !== null && normalizePromotionTiers(tiers).length > 0;
+
 const resolvePromotionPricing = (basePrice: number, promotion?: any, quantity = 1) => {
   const simplePrice =
     promotion?.precio_simple === undefined || promotion?.precio_simple === null
@@ -137,10 +140,18 @@ const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
     .lean();
 
   const promotionMap = new Map(
-    promotions.map((promotion: any) => [
-      `${String(promotion.id_producto)}::${String(promotion.variantKey)}`,
-      promotion
-    ])
+    promotions
+      .filter((promotion: any) => {
+        const simplePrice =
+          promotion?.precio_simple === undefined || promotion?.precio_simple === null
+            ? null
+            : roundMoney(Math.max(0, Number(promotion.precio_simple)));
+        return !isPromotionPayloadInvalid(simplePrice, promotion?.escalas || []);
+      })
+      .map((promotion: any) => [
+        `${String(promotion.id_producto)}::${String(promotion.variantKey)}`,
+        promotion
+      ])
   );
 
   return safeRows.map((row) => {

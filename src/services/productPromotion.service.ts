@@ -18,6 +18,7 @@ type PromotionInput = {
   productId: string;
   variantKey: string;
   scope: PromotionScope;
+  pricingMode?: "simple" | "tiers";
   title?: string;
   simplePrice?: number | null;
   tiers?: PromotionTierInput[];
@@ -92,6 +93,19 @@ const normalizeScopeForSeller = (scope: PromotionScope | undefined, sellerCanUse
 
 const rangesOverlap = (startA: Date, endA: Date, startB: Date, endB: Date) =>
   startA <= endB && startB <= endA;
+
+const inferStoredPricingMode = (simplePrice: number | null, tiers: PromotionTierInput[]) => {
+  const hasSimplePrice = simplePrice !== null;
+  const hasTiers = tiers.length > 0;
+
+  if (hasSimplePrice && hasTiers) return "invalid";
+  if (hasTiers) return "tiers";
+  if (hasSimplePrice) return "simple";
+  return "invalid";
+};
+
+const isPromotionPayloadInvalid = (simplePrice: number | null, tiers: PromotionTierInput[]) =>
+  inferStoredPricingMode(simplePrice, tiers) === "invalid";
 
 const getEffectiveState = (promotion: any, now = new Date()) => {
   if (promotion?.estado === "disabled") return "disabled";
@@ -185,11 +199,28 @@ const validatePromotionPayload = async (input: PromotionInput, excludeId?: strin
   const tiers = normalizeTierList(input.tiers || []);
   ensureNoDuplicateTiers(tiers);
 
-  if (simplePrice === null && tiers.length === 0) {
-    throw new Error("Debes definir un precio simple o al menos una escala");
-  }
   if (simplePrice !== null && simplePrice <= 0) {
     throw new Error("El precio simple debe ser mayor a 0");
+  }
+  if (input.pricingMode === "simple") {
+    if (simplePrice === null) {
+      throw new Error("Debes definir un precio fijo promocional");
+    }
+    if (tiers.length > 0) {
+      throw new Error("Una promocion de precio fijo no puede tener escalas por cantidad");
+    }
+  } else if (input.pricingMode === "tiers") {
+    if (tiers.length === 0) {
+      throw new Error("Debes agregar al menos una escala por cantidad");
+    }
+    if (simplePrice !== null) {
+      throw new Error("Una promocion por cantidad no puede tener precio fijo");
+    }
+  } else {
+    const inferredPricingMode = inferStoredPricingMode(simplePrice, tiers);
+    if (inferredPricingMode === "invalid") {
+      throw new Error("La promocion es invalida y debe rehacerse");
+    }
   }
 
   const context = await getVariantContext({
@@ -237,6 +268,17 @@ const mapPromotion = async (promotion: any) => {
     productId: String(promotion.id_producto),
     variantKey: String(promotion.variantKey)
   });
+  const normalizedSimplePrice =
+    promotion.precio_simple === undefined || promotion.precio_simple === null
+      ? null
+      : roundMoney(toNumber(promotion.precio_simple));
+  const normalizedTiers = Array.isArray(promotion.escalas)
+    ? promotion.escalas.map((tier: any) => ({
+        minQuantity: Math.max(2, Math.floor(toNumber(tier?.minQuantity))),
+        unitPrice: roundMoney(toNumber(tier?.unitPrice))
+      }))
+    : [];
+  const pricingMode = inferStoredPricingMode(normalizedSimplePrice, normalizedTiers);
 
   return {
     id: String(promotion._id),
@@ -248,17 +290,11 @@ const mapPromotion = async (promotion: any) => {
     basePrice: context.basePrice,
     totalStock: context.totalStock,
     scope: promotion.scope,
+    pricingMode,
+    isInvalid: pricingMode === "invalid",
     title: text(promotion.titulo),
-    simplePrice:
-      promotion.precio_simple === undefined || promotion.precio_simple === null
-        ? null
-        : roundMoney(toNumber(promotion.precio_simple)),
-    tiers: Array.isArray(promotion.escalas)
-      ? promotion.escalas.map((tier: any) => ({
-          minQuantity: Math.max(2, Math.floor(toNumber(tier?.minQuantity))),
-          unitPrice: roundMoney(toNumber(tier?.unitPrice))
-        }))
-      : [],
+    simplePrice: normalizedSimplePrice,
+    tiers: normalizedTiers,
     startsAt: promotion.fecha_inicio,
     endsAt: promotion.fecha_fin,
     state: promotion.estado,
@@ -291,7 +327,14 @@ const getApplicablePromotion = async ({
     .sort({ updatedAt: -1 })
     .lean();
 
-  const promotion = promotions[0];
+  const promotion = promotions.find((candidate: any) => {
+    const simplePrice =
+      candidate?.precio_simple === undefined || candidate?.precio_simple === null
+        ? null
+        : roundMoney(toNumber(candidate?.precio_simple));
+    const tiers = normalizeTierList(candidate?.escalas || []);
+    return !isPromotionPayloadInvalid(simplePrice, tiers);
+  });
   if (!promotion) return null;
 
   const tiers = normalizeTierList(promotion.escalas || []);
@@ -393,6 +436,7 @@ const updatePromotion = async (promotionId: string, sellerId: string, input: Par
     productId: text(input.productId || current.id_producto),
     variantKey: text(input.variantKey || current.variantKey),
     scope: normalizeScopeForSeller((input.scope || current.scope) as PromotionScope, sellerCanUseCatalog),
+    pricingMode: input.pricingMode,
     title: input.title ?? current.titulo,
     simplePrice:
       input.simplePrice !== undefined ? input.simplePrice : (current as any).precio_simple,
