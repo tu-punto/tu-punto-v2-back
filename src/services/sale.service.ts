@@ -6,6 +6,7 @@ import { SellerService } from "./seller.service";
 import { ProductService } from "./product.service";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { applySellerCommissionCap } from "../utils/commissionCap";
 import { variantFingerprint, variantLabel } from "../utils/variantKey";
 import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
@@ -25,6 +26,8 @@ type StockAdjustmentAudit = {
 const getAllSales = async () => {
   return await SaleRepository.findAll();
 };
+
+const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 
 const normalizeText = (value: unknown): string => String(value ?? "").trim();
 
@@ -544,6 +547,50 @@ const updateProducts = async (shippingId: any, prods: any[], auditActor?: Invent
 
     const updatedSale = await updateSaleById(saleId, fieldsToUpdate, auditActor);
     if (updatedSale) updated.push(updatedSale);
+  }
+
+  const pedido = await PedidoModel.findById(shippingId)
+    .select("simple_package_source_id productos_temporales")
+    .lean();
+  const simplePackageSourceId = String(
+    (pedido as any)?.simple_package_source_id?._id || (pedido as any)?.simple_package_source_id || ""
+  ).trim();
+
+  if (simplePackageSourceId) {
+    const refreshedSales = await SaleRepository.findByPedidoId(shippingId);
+    let nextSaldoPorPaquete: number | null = null;
+
+    if (refreshedSales.length === 1) {
+      const sourceSale = refreshedSales[0];
+      nextSaldoPorPaquete = roundCurrency(
+        Number(sourceSale?.precio_unitario || 0) * Number(sourceSale?.cantidad || 0)
+      );
+    } else if (refreshedSales.length === 0) {
+      const temporaryProducts = Array.isArray((pedido as any)?.productos_temporales)
+        ? (pedido as any).productos_temporales
+        : [];
+
+      if (temporaryProducts.length === 1) {
+        const sourceProduct = temporaryProducts[0];
+        nextSaldoPorPaquete = roundCurrency(
+          Number(sourceProduct?.precio_unitario || 0) * Number(sourceProduct?.cantidad || 0)
+        );
+      }
+    }
+
+    if (nextSaldoPorPaquete !== null) {
+      const simplePackage = await SimplePackageRepository.getSimplePackageByID(simplePackageSourceId);
+      if (simplePackage) {
+        const currentBuyerDebt = roundCurrency(
+          Number((simplePackage as any)?.deuda_comprador ?? (simplePackage as any)?.monto_paga_comprador ?? 0)
+        );
+
+        await SimplePackageRepository.updateSimplePackageByID(simplePackageSourceId, {
+          saldo_por_paquete: nextSaldoPorPaquete,
+          saldo_cobrar: roundCurrency(currentBuyerDebt + nextSaldoPorPaquete),
+        });
+      }
+    }
   }
 
   return updated;

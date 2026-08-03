@@ -407,8 +407,8 @@ const resolvePaymentSplit = (
   montoVendedorRaw: unknown,
   montoCompradorRaw: unknown
 ) => {
-  let montoPagaVendedor = toNumber(montoVendedorRaw, 0);
-  let montoPagaComprador = toNumber(montoCompradorRaw, 0);
+  let montoPagaVendedor = roundCurrency(toNumber(montoVendedorRaw, 0));
+  let montoPagaComprador = roundCurrency(toNumber(montoCompradorRaw, 0));
 
   if (montoPagaVendedor < 0 || montoPagaComprador < 0) {
     throw new Error("Los montos de pago no pueden ser negativos");
@@ -430,24 +430,37 @@ const resolvePaymentSplit = (
     };
   }
 
-  const mixedTotal = +(montoPagaVendedor + montoPagaComprador).toFixed(2);
   if (amountToCharge <= 0) {
     throw new Error("Para pago mixto el precio del paquete debe ser mayor a 0");
   }
+
+  if (montoPagaVendedor <= 0 && montoPagaComprador > 0) {
+    montoPagaVendedor = roundCurrency(amountToCharge - montoPagaComprador);
+  } else if (montoPagaComprador <= 0 && montoPagaVendedor > 0) {
+    montoPagaComprador = roundCurrency(amountToCharge - montoPagaVendedor);
+  }
+
   if (montoPagaVendedor <= 0 || montoPagaComprador <= 0) {
     throw new Error("En pago mixto ambos deben pagar un monto mayor a 0");
   }
+
   if (montoPagaVendedor >= amountToCharge || montoPagaComprador >= amountToCharge) {
     throw new Error("En pago mixto ninguna parte puede pagar todo el monto");
   }
+
+  const mixedTotal = roundCurrency(montoPagaVendedor + montoPagaComprador);
   if (Math.abs(mixedTotal - amountToCharge) > 0.01) {
-    throw new Error("En pago mixto la suma debe ser exactamente igual al monto total a cobrar");
+    montoPagaComprador = roundCurrency(amountToCharge - montoPagaVendedor);
+  }
+
+  if (montoPagaVendedor <= 0 || montoPagaComprador <= 0) {
+    throw new Error("En pago mixto ambos deben pagar un monto mayor a 0");
   }
 
   return {
-    montoPagaVendedor: +montoPagaVendedor.toFixed(2),
-    montoPagaComprador: +montoPagaComprador.toFixed(2),
-    saldoCobrar: +montoPagaComprador.toFixed(2),
+    montoPagaVendedor,
+    montoPagaComprador: roundCurrency(montoPagaComprador),
+    saldoCobrar: roundCurrency(montoPagaComprador),
   };
 };
 
