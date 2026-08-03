@@ -24,6 +24,7 @@ import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
+import { InventoryAuditActor } from "./inventoryAudit.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -169,6 +170,38 @@ const resolveBranchId = (value: any): string => {
     return String(value?._id || value?.id_sucursal || value?.$oid || "");
   }
   return "";
+};
+
+const resolveShippingSaleOriginalPrice = (sale: any) => {
+  const stored = Number(sale?.precio_original ?? 0);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+
+  const product = sale?.producto;
+  const branchId = resolveBranchId(sale?.sucursal);
+  const saleVariantKey = String(sale?.variantKey || "").trim();
+  const saleVariants = sale?.variantes || {};
+  const branches = Array.isArray(product?.sucursales) ? product.sucursales : [];
+  const candidateBranches = branchId
+    ? branches.filter((branch: any) => resolveBranchId(branch?.id_sucursal) === branchId)
+    : branches;
+
+  for (const branch of candidateBranches) {
+    const combinations = Array.isArray(branch?.combinaciones) ? branch.combinaciones : [];
+
+    const byVariantKey = saleVariantKey
+      ? combinations.find((combination: any) => String(combination?.variantKey || "").trim() === saleVariantKey)
+      : null;
+    if (byVariantKey?.precio !== undefined) return Number(byVariantKey.precio || 0);
+
+    const byVariants = combinations.find((combination: any) => {
+      const combinationVariants = combination?.variantes || {};
+      const combinationEntries = Object.entries(combinationVariants);
+      return combinationEntries.length > 0 && combinationEntries.every(([key, value]) => saleVariants?.[key] === value);
+    });
+    if (byVariants?.precio !== undefined) return Number(byVariants.precio || 0);
+  }
+
+  return Number(sale?.precio_unitario || 0);
 };
 
 const buildGoogleMapsSearchUrl = (query: string): string => {
@@ -1158,7 +1191,29 @@ const registerShipping = async (shipping: any) => {
 };
 const getShippingById = async (id: string) => {
   const shipping = await ShippingRepository.findById(id);
-  return await attachSimplePackageFieldsToShipping(shipping);
+  const withSimplePackage = await attachSimplePackageFieldsToShipping(shipping);
+  if (!withSimplePackage) return withSimplePackage;
+
+  const base =
+    typeof (withSimplePackage as any)?.toObject === "function"
+      ? (withSimplePackage as any).toObject()
+      : { ...withSimplePackage };
+
+  base.venta = Array.isArray(base.venta)
+    ? base.venta.map((sale: any) => ({
+        ...sale,
+        precio_original: resolveShippingSaleOriginalPrice(sale),
+      }))
+    : [];
+
+  base.productos_temporales = Array.isArray(base.productos_temporales)
+    ? base.productos_temporales.map((item: any) => ({
+        ...item,
+        precio_original: Number(item?.precio_original ?? item?.precio_unitario ?? 0),
+      }))
+    : [];
+
+  return base;
 };
 
 const SHIPPING_QR_PREFIX = "TP|v1|SHIP|";
@@ -1291,7 +1346,8 @@ const actualizarSaldoVendedor = async (
 
 const registerSaleToShipping = async (
   shippingId: string,
-  saleWithoutShippingId: any
+  saleWithoutShippingId: any,
+  auditActor?: InventoryAuditActor
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
   if (!shipping)
@@ -1303,7 +1359,7 @@ const registerSaleToShipping = async (
     sucursal: saleWithoutShippingId.sucursal || saleWithoutShippingId.id_sucursal,
   };
 
-  const created = await SaleService.registerSale(payload);
+  const created = await SaleService.registerSale(payload, { auditActor });
   return created[0];
 };
 
@@ -1618,14 +1674,14 @@ const addTemporaryProductsToShipping = async (
   });
 };
 
-const deleteShippingById = async (id: string) => {
+const deleteShippingById = async (id: string, auditActor?: InventoryAuditActor) => {
   const pedido = await PedidoModel.findById(id);
   if (!pedido) throw new Error("Pedido no encontrado");
   assertEditableIfNotDeliveredOlderThanFiveDays(pedido as any);
 
   if (pedido.venta && pedido.venta.length > 0) {
     for (const ventaId of pedido.venta) {
-      await SaleService.deleteSaleById(String(ventaId));
+      await SaleService.deleteSaleById(String(ventaId), undefined, auditActor);
     }
   }
 
@@ -1633,7 +1689,11 @@ const deleteShippingById = async (id: string) => {
   return { success: true };
 };
 
-const processSalesForShipping = async (shippingId: string, sales: any[]) => {
+const processSalesForShipping = async (
+  shippingId: string,
+  sales: any[],
+  options?: { auditActor?: InventoryAuditActor }
+) => {
   const savedSales = [];
   const salesToUpdateSaldo = [];
 
@@ -1673,7 +1733,7 @@ const processSalesForShipping = async (shippingId: string, sales: any[]) => {
       id_producto: productId,
       producto: productId,
       sucursal: sale.sucursal || sale.id_sucursal,
-    });
+    }, options?.auditActor);
 
     savedSales.push(venta);
 

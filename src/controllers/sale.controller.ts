@@ -1,8 +1,18 @@
 import { Request, Response } from "express";
 import { SaleService } from "../services/sale.service";
-import { PedidoModel } from "../entities/implements/PedidoSchema"; // asegúrate de importar esto
+import { PedidoModel } from "../entities/implements/PedidoSchema";
 
-export const getSale = async (req: Request, res: Response) => {
+const buildAuditActor = (res: Response) => {
+  const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+  return {
+    userId: String(auth?.id || "").trim() || undefined,
+    role: String(auth?.role || "").trim() || undefined,
+    name: String(auth?.email || "").trim() || undefined,
+    sellerId: String(auth?.sellerId || "").trim() || undefined,
+  };
+};
+
+export const getSale = async (_req: Request, res: Response) => {
   try {
     const sale = await SaleService.getAllSales();
     res.json(sale);
@@ -15,42 +25,43 @@ export const getSale = async (req: Request, res: Response) => {
 export const registerSale = async (req: Request, res: Response) => {
   const sales = req.body;
 
-  console.log("🛒 Datos recibidos en registerSale:", JSON.stringify(sales, null, 2));
+  console.log("Datos recibidos en registerSale:", JSON.stringify(sales, null, 2));
 
   try {
-    const newSales = await SaleService.registerMultipleSales(sales);
+    const newSales = await SaleService.registerMultipleSales(sales, {
+      auditActor: buildAuditActor(res),
+    });
     res.json({
       status: true,
       newSales,
     });
   } catch (error) {
-    console.error("❌ Error al registrar ventas:", error);
+    console.error("Error al registrar ventas:", error);
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
 
-// Ejemplo de lógica en el controller
 export const getProductsByShippingId = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
     const pedido = await PedidoModel.findById(id)
       .populate({
-        path: 'venta',
+        path: "venta",
         populate: {
-          path: 'producto',
-          model: 'Producto'
-        }
+          path: "producto",
+          model: "Producto",
+        },
       })
       .lean();
 
     if (!pedido) {
-      return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
+      return res.status(404).json({ success: false, message: "Pedido no encontrado" });
     }
     if (!pedido.lugar_origen) {
-  return res.status(400).json({ success: false, message: 'Pedido sin lugar de origen definido' });
-    } 
-    const lugarOrigenId = pedido.lugar_origen.toString(); 
+      return res.status(400).json({ success: false, message: "Pedido sin lugar de origen definido" });
+    }
+    const lugarOrigenId = pedido.lugar_origen.toString();
 
     const ventasNormales = pedido.venta.map((venta: any) => {
       const producto = venta.producto;
@@ -59,19 +70,20 @@ export const getProductsByShippingId = async (req: Request, res: Response) => {
         Object.entries(c.variantes).every(([key, value]) => venta.variantes?.[key] === value)
       );
 
-      const nombreVariante = venta.nombre_variante || Object.values(venta.variantes || {}).join(' / ');
+      const nombreVariante = venta.nombre_variante || Object.values(venta.variantes || {}).join(" / ");
 
       return {
         id_venta: venta._id,
         id_producto: producto._id,
         producto: nombreVariante || producto.nombre_producto,
         precio_unitario: venta.precio_unitario,
+        precio_original: venta.precio_original ?? venta.precio_unitario,
         cantidad: venta.cantidad,
         utilidad: venta.utilidad,
         id_vendedor: producto.id_vendedor,
         variantes: venta.variantes,
         stockActual: combinacion?.stock ?? 0,
-        esTemporal: producto.esTemporal || false
+        esTemporal: producto.esTemporal || false,
       };
     });
 
@@ -80,18 +92,18 @@ export const getProductsByShippingId = async (req: Request, res: Response) => {
       producto: temp.producto,
       cantidad: temp.cantidad,
       precio_unitario: temp.precio_unitario,
+      precio_original: temp.precio_original ?? temp.precio_unitario,
       utilidad: temp.utilidad,
       id_vendedor: temp.id_vendedor,
-      esTemporal: true
+      esTemporal: true,
     }));
 
     return res.json([...ventasNormales, ...productosTemporales]);
   } catch (err) {
     console.error("Error al obtener productos del pedido:", err);
-    return res.status(500).json({ success: false, message: 'Error del servidor' });
+    return res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
-
 
 export const getProductDetailsByProductId = async (req: Request, res: Response) => {
   const id: number = parseInt(req.params.id);
@@ -103,6 +115,7 @@ export const getProductDetailsByProductId = async (req: Request, res: Response) 
     res.status(500).json({ msg: "Error getting product details", error });
   }
 };
+
 export const getProductsBySellerId = async (req: Request, res: Response) => {
   const sellerId = req.params.id;
   try {
@@ -115,14 +128,14 @@ export const getProductsBySellerId = async (req: Request, res: Response) => {
 };
 
 export const updateProducts = async (req: Request, res: Response) => {
-  const shippingId = (req.params.id);
+  const shippingId = req.params.id;
   const prods = req.body;
 
-  console.log("🛠️ Actualizando productos para shippingId:", shippingId);
-  console.log("📦 Productos recibidos para update:", JSON.stringify(prods, null, 2));
+  console.log("Actualizando productos para shippingId:", shippingId);
+  console.log("Productos recibidos para update:", JSON.stringify(prods, null, 2));
 
   try {
-    const updatedProds = await SaleService.updateProducts(shippingId, prods);
+    const updatedProds = await SaleService.updateProducts(shippingId, prods, buildAuditActor(res));
     res.json({
       status: true,
       updatedProds,
@@ -140,7 +153,7 @@ export const updateSales = async (req: Request, res: Response) => {
     res.status(200).json({
       status: "success",
       message: `${salesUpdated.length} sales updated successfully`,
-      data: salesUpdated
+      data: salesUpdated,
     });
   } catch (error) {
     console.error(error);
@@ -165,7 +178,7 @@ export const updateSalesOfProducts = async (req: Request, res: Response) => {
 export const deleteSalesOfProducts = async (req: Request, res: Response) => {
   const salesData = req.body;
   try {
-    const deletedSales = await SaleService.deleteSalesOfProducts(salesData);
+    const deletedSales = await SaleService.deleteSalesOfProducts(salesData, buildAuditActor(res));
     res.json({
       status: true,
       deletedSales,
@@ -178,10 +191,14 @@ export const deleteSalesOfProducts = async (req: Request, res: Response) => {
 
 export const deleteProducts = async (req: Request, res: Response) => {
   const shippingId = req.params.id;
-  const ventaIds = req.body; // string[]
+  const ventaIds = req.body;
 
   try {
-    const deleteProduct = await SaleService.deleteSalesByIdsAndPullFromPedido(shippingId, ventaIds);
+    const deleteProduct = await SaleService.deleteSalesByIdsAndPullFromPedido(
+      shippingId,
+      ventaIds,
+      buildAuditActor(res)
+    );
     res.json({
       status: true,
       deleteProduct,
@@ -192,46 +209,45 @@ export const deleteProducts = async (req: Request, res: Response) => {
   }
 };
 
-
 export const deleteSales = async (req: Request, res: Response) => {
   const sales = req.body.sales;
-  console.log("🗑️ Datos recibidos para eliminar ventas:", JSON.stringify(sales, null, 2));
+  console.log("Datos recibidos para eliminar ventas:", JSON.stringify(sales, null, 2));
   try {
     const saleIds = sales.map((sale: any) => sale.id_venta);
 
     if (!saleIds || saleIds.length === 0) {
-      return res.status(400).json({ msg: 'No sale IDs provided for deletion.' });
+      return res.status(400).json({ msg: "No sale IDs provided for deletion." });
     }
 
-    const deletedSales = await SaleService.deleteSalesByIds(saleIds);
+    const deletedSales = await SaleService.deleteSalesByIds(saleIds, buildAuditActor(res));
     res.json({
       status: true,
-      deletedSales
+      deletedSales,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: 'Error deleting products', error })
+    res.status(500).json({ msg: "Error deleting products", error });
   }
 };
 
 export const getDataPaymentProof = async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id);
   try {
-    const data = await SaleService.getDataPaymentProof(id)
-    res.status(200).json(data)
-  } catch (error) {
-
+    const data = await SaleService.getDataPaymentProof(id);
+    res.status(200).json(data);
+  } catch (_error) {
+    res.status(500).json({ msg: "Error getting payment proof data" });
   }
-}
+};
 
 export const updateSaleById = async (req: Request, res: Response) => {
   const id = req.params.id;
   const fieldsToUpdate = req.body;
 
   try {
-    const updatedSale = await SaleService.updateSaleById(id, fieldsToUpdate);
+    const updatedSale = await SaleService.updateSaleById(id, fieldsToUpdate, buildAuditActor(res));
     if (!updatedSale) {
-      return res.status(404).json({ msg: 'Venta no encontrada' });
+      return res.status(404).json({ msg: "Venta no encontrada" });
     }
 
     res.status(200).json({
@@ -240,7 +256,7 @@ export const updateSaleById = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: 'Error actualizando venta', error });
+    res.status(500).json({ msg: "Error actualizando venta", error });
   }
 };
 
@@ -249,9 +265,9 @@ export const deleteSaleById = async (req: Request, res: Response) => {
   const id_sucursal = req.body.id_sucursal;
 
   try {
-    const deleted = await SaleService.deleteSaleById(id, id_sucursal);
+    const deleted = await SaleService.deleteSaleById(id, id_sucursal, buildAuditActor(res));
     if (!deleted) {
-      return res.status(404).json({ msg: 'Venta no encontrada o ya eliminada' });
+      return res.status(404).json({ msg: "Venta no encontrada o ya eliminada" });
     }
 
     res.status(200).json({
@@ -260,6 +276,6 @@ export const deleteSaleById = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: 'Error eliminando venta', error });
+    res.status(500).json({ msg: "Error eliminando venta", error });
   }
 };

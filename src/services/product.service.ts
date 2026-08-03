@@ -13,9 +13,11 @@ import { Types } from 'mongoose';
 import ExcelJS from "exceljs";
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 import { IngresoModel } from "../entities/implements/IngresoSchema";
 import { ProductVariantKeyService } from "./productVariantKey.service";
 import { createVariantKey } from "../utils/variantKey";
+import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
 
 interface Feature {
   feature: string;
@@ -36,6 +38,9 @@ const buildVariantEntryName = (productName: string, variants: Record<string, str
   return variantLabel ? `${productName} - ${variantLabel}` : productName;
 };
 
+const buildVariantLabel = (variants: Record<string, string>) =>
+  Object.values(normalizeVariantsForEntry(variants)).filter(Boolean).join(" / ");
+
 const normalizeText = (value: unknown) => String(value ?? "").trim();
 
 const buildInventoryVariantKey = (row: {
@@ -51,6 +56,131 @@ const buildInventoryVariantKey = (row: {
 
   const variants = normalizeVariantsForEntry(row.variantes || row.variantes_obj);
   return `${productId}::${JSON.stringify(variants)}`;
+};
+
+const roundMoney = (value: number) => Number(value.toFixed(2));
+
+const normalizePromotionTiers = (tiers: any[] = []) =>
+  tiers
+    .map((tier) => ({
+      minQuantity: Math.max(2, Math.floor(Number(tier?.minQuantity || 0))),
+      unitPrice: roundMoney(Math.max(0, Number(tier?.unitPrice || 0)))
+    }))
+    .filter((tier) => tier.minQuantity >= 2 && tier.unitPrice > 0)
+    .sort((left, right) => left.minQuantity - right.minQuantity);
+
+const isPromotionPayloadInvalid = (simplePrice: number | null, tiers: any[] = []) =>
+  simplePrice !== null && normalizePromotionTiers(tiers).length > 0;
+
+const resolvePromotionPricing = (basePrice: number, promotion?: any, quantity = 1) => {
+  const simplePrice =
+    promotion?.precio_simple === undefined || promotion?.precio_simple === null
+      ? null
+      : roundMoney(Math.max(0, Number(promotion.precio_simple)));
+  const tiers = normalizePromotionTiers(promotion?.escalas || []);
+  const safeQuantity = Math.max(1, Math.floor(Number(quantity || 1)));
+  const matchedTier = [...tiers]
+    .sort((left, right) => right.minQuantity - left.minQuantity)
+    .find((tier) => safeQuantity >= tier.minQuantity);
+  const effectivePrice = matchedTier?.unitPrice ?? simplePrice ?? basePrice;
+  const discountPercent =
+    basePrice > 0 ? roundMoney(((basePrice - effectivePrice) / basePrice) * 100) : 0;
+
+  return {
+    basePrice: roundMoney(Math.max(0, Number(basePrice || 0))),
+    effectivePrice: roundMoney(Math.max(0, Number(effectivePrice || 0))),
+    discountPercent: Math.max(0, discountPercent),
+    simplePrice,
+    tiers,
+    matchedTier,
+    title: String(promotion?.titulo || "").trim() || null,
+    startsAt: promotion?.fecha_inicio || null,
+    endsAt: promotion?.fecha_fin || null,
+    scope: promotion?.scope || null
+  };
+};
+
+const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return safeRows;
+
+  const productIds = Array.from(
+    new Set(
+      safeRows
+        .map((row) => normalizeText(row?.productId || row?._id || row?.id_producto))
+        .filter(Boolean)
+    )
+  ).filter((id) => Types.ObjectId.isValid(id));
+  const variantKeys = Array.from(
+    new Set(
+      safeRows
+        .map((row) => normalizeText(row?.variantKey))
+        .filter(Boolean)
+    )
+  );
+
+  if (!productIds.length || !variantKeys.length) {
+    return safeRows.map((row) => ({
+      ...row,
+      precio_original: Number(row?.precio || row?.price || 0),
+      precio: Number(row?.precio || row?.price || 0),
+      pricingPromotion: null
+    }));
+  }
+
+  const promotions = await ProductPromotionModel.find({
+    id_producto: { $in: productIds.map((id) => new Types.ObjectId(id)) },
+    variantKey: { $in: variantKeys },
+    estado: "active",
+    fecha_inicio: { $lte: new Date() },
+    fecha_fin: { $gte: new Date() },
+    scope: { $in: ["interno", "ambos"] }
+  })
+    .select("id_producto variantKey scope titulo precio_simple escalas fecha_inicio fecha_fin")
+    .lean();
+
+  const promotionMap = new Map(
+    promotions
+      .filter((promotion: any) => {
+        const simplePrice =
+          promotion?.precio_simple === undefined || promotion?.precio_simple === null
+            ? null
+            : roundMoney(Math.max(0, Number(promotion.precio_simple)));
+        return !isPromotionPayloadInvalid(simplePrice, promotion?.escalas || []);
+      })
+      .map((promotion: any) => [
+        `${String(promotion.id_producto)}::${String(promotion.variantKey)}`,
+        promotion
+      ])
+  );
+
+  return safeRows.map((row) => {
+    const productId = normalizeText(row?.productId || row?._id || row?.id_producto);
+    const variantKey = normalizeText(row?.variantKey);
+    const promotion = promotionMap.get(`${productId}::${variantKey}`);
+    const basePrice = Number(row?.precio ?? row?.price ?? 0);
+    const pricing = promotion ? resolvePromotionPricing(basePrice, promotion, quantity) : null;
+
+    return {
+      ...row,
+      precio_original: pricing?.basePrice ?? roundMoney(Math.max(0, basePrice)),
+      precio: pricing?.effectivePrice ?? roundMoney(Math.max(0, basePrice)),
+      discountPercent: pricing?.discountPercent ?? 0,
+      pricingPromotion: pricing
+        ? {
+            label: pricing.title,
+            startsAt: pricing.startsAt,
+            endsAt: pricing.endsAt,
+            tiers: pricing.tiers,
+            simplePrice: pricing.simplePrice,
+            effectivePrice: pricing.effectivePrice,
+            discountPercent: pricing.discountPercent,
+            matchedTier: pricing.matchedTier,
+            scope: pricing.scope
+          }
+        : null
+    };
+  });
 };
 
 const getActiveSellerIdsForBranch = async (sucursalId: string) => {
@@ -93,6 +223,127 @@ const getActiveSellerIdsForBranch = async (sucursalId: string) => {
   };
 };
 
+const findBranchById = (product: any, branchId: string) =>
+  (product?.sucursales || []).find(
+    (branch: any) => String(branch?.id_sucursal?._id || branch?.id_sucursal || "") === String(branchId)
+  );
+
+const variantsEqualInsensitive = (left: Record<string, string>, right: Record<string, string>) => {
+  const normalizedLeft = normalizeVariantsForEntry(left);
+  const normalizedRight = normalizeVariantsForEntry(right);
+  const leftKeys = Object.keys(normalizedLeft);
+  const rightKeys = Object.keys(normalizedRight);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every(
+    (key) =>
+      String(normalizedLeft[key] || "").trim().toLowerCase() ===
+      String(normalizedRight[key] || "").trim().toLowerCase()
+  );
+};
+
+const findCombinationByVariants = (product: any, branchId: string, variants: Record<string, string>) => {
+  const branch = findBranchById(product, branchId);
+  if (!branch) return null;
+  const normalizedVariants = normalizeVariantsForEntry(variants);
+  const combination = (branch?.combinaciones || []).find((candidate: any) =>
+    variantsEqualInsensitive(candidate?.variantes || {}, normalizedVariants)
+  );
+  return combination ? { branch, combination } : null;
+};
+
+const findCombinationByVariantKey = (product: any, branchId: string, variantKey: string) => {
+  const branch = findBranchById(product, branchId);
+  if (!branch) return null;
+  const combination = (branch?.combinaciones || []).find((candidate: any) => {
+    const resolvedKey = String(candidate?.variantKey || createVariantKey(String(product?._id || ""), candidate?.variantes || {}));
+    return resolvedKey === String(variantKey);
+  });
+  return combination ? { branch, combination } : null;
+};
+
+const recordSingleProductAudit = async (params: {
+  eventType: string;
+  sourceModule: string;
+  sourceId?: string;
+  actor?: InventoryAuditActor;
+  product: any;
+  branchId: string;
+  variantKey?: string;
+  variants?: Record<string, string>;
+  stockBefore: number;
+  stockAfter: number;
+  comment?: string;
+  metadata?: Record<string, unknown>;
+}) => {
+  if (Number(params.stockBefore) === Number(params.stockAfter)) return;
+  const variantAttributes = normalizeVariantsForEntry(params.variants || {});
+  await InventoryAuditService.recordEventSafe({
+    eventType: params.eventType,
+    sourceModule: params.sourceModule,
+    sourceId: params.sourceId,
+    actor: params.actor,
+    sellerId: normalizeText(params.product?.id_vendedor),
+    branchId: normalizeText(params.branchId),
+    comment: params.comment,
+    metadata: params.metadata,
+    movements: [
+      {
+        productId: normalizeText(params.product?._id),
+        productNameSnapshot: normalizeText(params.product?.nombre_producto) || "Producto",
+        variantKey:
+          normalizeText(params.variantKey) ||
+          createVariantKey(normalizeText(params.product?._id), variantAttributes),
+        variantLabelSnapshot: buildVariantLabel(variantAttributes),
+        variantAttributesSnapshot: variantAttributes,
+        sellerId: normalizeText(params.product?.id_vendedor),
+        branchId: normalizeText(params.branchId),
+        stockBefore: Number(params.stockBefore || 0),
+        stockAfter: Number(params.stockAfter || 0),
+      },
+    ],
+  });
+};
+
+const recordMultiMovementAudit = async (params: {
+  eventType: string;
+  sourceModule: string;
+  sourceId?: string;
+  actor?: InventoryAuditActor;
+  sellerId?: string;
+  branchId?: string;
+  comment?: string;
+  metadata?: Record<string, unknown>;
+  movements: Array<{
+    productId: string;
+    productNameSnapshot: string;
+    variantKey?: string;
+    variantAttributesSnapshot?: Record<string, string>;
+    stockBefore: number;
+    stockAfter: number;
+    sellerId?: string;
+    branchId?: string;
+  }>;
+}) => {
+  const safeMovements = params.movements.filter(
+    (movement) => Number(movement.stockBefore) !== Number(movement.stockAfter)
+  );
+  if (safeMovements.length === 0) return;
+  await InventoryAuditService.recordEventSafe({
+    eventType: params.eventType,
+    sourceModule: params.sourceModule,
+    sourceId: params.sourceId,
+    actor: params.actor,
+    sellerId: params.sellerId,
+    branchId: params.branchId,
+    comment: params.comment,
+    metadata: params.metadata,
+    movements: safeMovements.map((movement) => ({
+      ...movement,
+      variantLabelSnapshot: buildVariantLabel(movement.variantAttributesSnapshot || {}),
+    })),
+  });
+};
+
 const registerInitialStockEntries = async (product: IProductoDocument) => {
   if (product.esTemporal || !product.id_vendedor) return;
 
@@ -133,7 +384,7 @@ const getAllTemporaryProducts = async () => {
 };
 
 
-const registerProduct = async (product: IProducto): Promise<any> => {
+const registerProduct = async (product: IProducto, auditActor?: InventoryAuditActor): Promise<any> => {
   console.log("🛠 Entrando a ProductService.registerProduct");
   
   try {
@@ -200,6 +451,33 @@ const registerProduct = async (product: IProducto): Promise<any> => {
     }
 
     await registerInitialStockEntries(nuevoProducto);
+    const initialStockMovements = (nuevoProducto.sucursales || []).flatMap((sucursal: any) =>
+      (sucursal.combinaciones || [])
+        .filter((combination: any) => Number(combination?.stock || 0) > 0)
+        .map((combination: any) => ({
+          productId: normalizeText(nuevoProducto._id),
+          productNameSnapshot: normalizeText(nuevoProducto.nombre_producto),
+          variantKey:
+            normalizeText(combination?.variantKey) ||
+            createVariantKey(normalizeText(nuevoProducto._id), normalizeVariantsForEntry(combination?.variantes)),
+          variantAttributesSnapshot: normalizeVariantsForEntry(combination?.variantes),
+          stockBefore: 0,
+          stockAfter: Number(combination?.stock || 0),
+          sellerId: normalizeText(nuevoProducto.id_vendedor),
+          branchId: normalizeText(sucursal?.id_sucursal),
+        }))
+    );
+    await recordMultiMovementAudit({
+      eventType: "initial_stock_registered",
+      sourceModule: "product.register",
+      sourceId: normalizeText(nuevoProducto._id),
+      actor: auditActor,
+      sellerId: normalizeText(nuevoProducto.id_vendedor),
+      movements: initialStockMovements,
+      metadata: {
+        source: "product.register",
+      },
+    });
 
     return nuevoProducto;
   } catch (err: any) {
@@ -378,14 +656,49 @@ const updateStockByVariantCombination = async ({
   productId,
   sucursalId,
   variantes,
-  stock
+  stock,
+  auditActor
 }: {
   productId: string,
   sucursalId: string,
   variantes: Record<string, string>,
-  stock: number
+  stock: number,
+  auditActor?: InventoryAuditActor
 }) => {
-  return await ProductRepository.updateStockByVariantCombination(productId, sucursalId, variantes, stock);
+  const productBefore = await ProductoModel.findById(productId);
+  if (!productBefore) throw new Error("Producto no encontrado");
+
+  const matchBefore = findCombinationByVariants(productBefore, sucursalId, variantes);
+  if (!matchBefore) throw new Error("No se encontró la combinación");
+
+  const stockBefore = Number(matchBefore.combination?.stock || 0);
+  const nextStock = Math.max(0, Math.floor(Number(stock || 0)));
+  const updatedProduct = await ProductRepository.updateStockByVariantCombination(
+    productId,
+    sucursalId,
+    variantes,
+    nextStock
+  );
+
+  await recordSingleProductAudit({
+    eventType: "manual_stock_adjustment",
+    sourceModule: "product.update-subvariant-stock",
+    sourceId: `${productId}:${sucursalId}:${matchBefore.combination?.variantKey || ""}`,
+    actor: auditActor,
+    product: productBefore,
+    branchId: sucursalId,
+    variantKey:
+      normalizeText(matchBefore.combination?.variantKey) ||
+      createVariantKey(productId, normalizeVariantsForEntry(matchBefore.combination?.variantes)),
+    variants: normalizeVariantsForEntry(matchBefore.combination?.variantes),
+    stockBefore,
+    stockAfter: nextStock,
+    metadata: {
+      source: "stock-management",
+    },
+  });
+
+  return updatedProduct;
 };
 const addVariantToProduct = async (
   productId: string,
@@ -394,7 +707,8 @@ const addVariantToProduct = async (
     variantes: Record<string, string>,
     precio: number,
     stock: number
-  }[]
+  }[],
+  auditActor?: InventoryAuditActor
 ): Promise<IProductoDocument | null> => {
   const producto = await ProductoModel.findById(productId);
   if (!producto) throw new Error("Producto no encontrado");
@@ -413,6 +727,16 @@ const addVariantToProduct = async (
     variantKey: (c as any).variantKey || createVariantKey(productId, c.variantes)
   }));
   const entriesToCreate: any[] = [];
+  const auditMovements: Array<{
+    productId: string;
+    productNameSnapshot: string;
+    variantKey?: string;
+    variantAttributesSnapshot?: Record<string, string>;
+    stockBefore: number;
+    stockAfter: number;
+    sellerId?: string;
+    branchId?: string;
+  }> = [];
 
   for (const sucursalPago of sucursalesHabilitadas) {
     const id_sucursal = sucursalPago.id_sucursal.toString();
@@ -439,6 +763,16 @@ const addVariantToProduct = async (
                 vendedor: producto.id_vendedor,
                 sucursal: new Types.ObjectId(id_sucursal),
                 combinacion: variants,
+              });
+              auditMovements.push({
+                productId: normalizeText(producto._id),
+                productNameSnapshot: normalizeText(producto.nombre_producto),
+                variantKey: normalizeText(c.variantKey),
+                variantAttributesSnapshot: variants,
+                stockBefore: 0,
+                stockAfter: stock,
+                sellerId: normalizeText(producto.id_vendedor),
+                branchId: id_sucursal,
               });
             }
             return {
@@ -479,6 +813,16 @@ const addVariantToProduct = async (
               sucursal: new Types.ObjectId(id_sucursal),
               combinacion: variants,
             });
+            auditMovements.push({
+              productId: normalizeText(producto._id),
+              productNameSnapshot: normalizeText(producto.nombre_producto),
+              variantKey: normalizeText(nueva.variantKey),
+              variantAttributesSnapshot: variants,
+              stockBefore: 0,
+              stockAfter: stock,
+              sellerId: normalizeText(producto.id_vendedor),
+              branchId: id_sucursal,
+            });
           }
         }
       }
@@ -496,6 +840,19 @@ const addVariantToProduct = async (
       $push: { ingreso: { $each: entryIds } },
     });
   }
+
+  await recordMultiMovementAudit({
+    eventType: "variant_stock_initialized",
+    sourceModule: "product.add-variant",
+    sourceId: normalizeText(savedProduct?._id),
+    actor: auditActor,
+    sellerId: normalizeText(savedProduct?.id_vendedor),
+    branchId: sucursalId,
+    metadata: {
+      source: "product.add-variant",
+    },
+    movements: auditMovements,
+  });
 
   return savedProduct;
 };
@@ -570,7 +927,8 @@ const getFlatProductList = async (params?: {
   inStock?: boolean;
   q?: string;
 }) => {
-  return await ProductRepository.findFlatProductList(params);
+  const rows = await ProductRepository.findFlatProductList(params);
+  return await enrichRowsWithPromotionPricing(rows);
 };
 
 const getFlatProductListPage = async (params?: {
@@ -582,7 +940,11 @@ const getFlatProductListPage = async (params?: {
   page?: number;
   limit?: number;
 }) => {
-  return await ProductRepository.findFlatProductListPage(params);
+  const result = await ProductRepository.findFlatProductListPage(params);
+  return {
+    ...result,
+    rows: await enrichRowsWithPromotionPricing(result.rows || [])
+  };
 };
 
 const generateInventoryQRReport = async (params: {
@@ -596,10 +958,10 @@ const generateInventoryQRReport = async (params: {
 
   const { sellerIds, sellerNameById } = await getActiveSellerIdsForBranch(params.sucursalId);
   const activeProducts = sellerIds.length
-    ? await ProductRepository.findFlatProductList({
+    ? await enrichRowsWithPromotionPricing(await ProductRepository.findFlatProductList({
         sucursalId: params.sucursalId,
         sellerIds
-      })
+      }))
     : [];
 
   const scannedRows = Array.isArray(params.rows) ? params.rows : [];
@@ -813,25 +1175,60 @@ const updateVariantStockByBranchForSuperadmin = async ({
   sellerId,
   variantKey,
   sucursalId,
-  stock
+  stock,
+  auditActor
 }: {
   productId: string;
   sellerId: string;
   variantKey: string;
   sucursalId: string;
   stock: number;
+  auditActor?: InventoryAuditActor;
 }) => {
   if (!Number.isFinite(Number(stock)) || Number(stock) < 0) {
     throw new Error("El stock debe ser un número mayor o igual a 0");
   }
 
-  return await ProductRepository.updateVariantStockByBranchForSuperadmin({
+  const productBefore = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+  if (!productBefore) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const matchBefore = findCombinationByVariantKey(productBefore, sucursalId, variantKey);
+  if (!matchBefore) {
+    throw new Error("Variante no encontrada en la sucursal seleccionada");
+  }
+
+  const stockBefore = Number(matchBefore.combination?.stock || 0);
+  const nextStock = Math.floor(Number(stock));
+  const result = await ProductRepository.updateVariantStockByBranchForSuperadmin({
     productId,
     sellerId,
     variantKey,
     sucursalId,
-    stock: Math.floor(Number(stock))
+    stock: nextStock
   });
+
+  await recordSingleProductAudit({
+    eventType: "superadmin_manual_stock_adjustment",
+    sourceModule: "product.superadmin.variant-stock",
+    sourceId: `${productId}:${sucursalId}:${variantKey}`,
+    actor: auditActor,
+    product: productBefore,
+    branchId: sucursalId,
+    variantKey,
+    variants: normalizeVariantsForEntry(matchBefore.combination?.variantes),
+    stockBefore,
+    stockAfter: nextStock,
+    metadata: {
+      source: "superadmin-variants",
+    },
+  });
+
+  return result;
 };
 
 const renameVariantForSuperadmin = async ({

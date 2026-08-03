@@ -18,7 +18,7 @@ const getSellerShippings = async (sellerID: string): Promise<IGuiaEnvioDocument[
 
 const getBranchShippings = async (branchID: string): Promise<IGuiaEnvioDocument[]> => {
     if (!Types.ObjectId.isValid(branchID)) {
-        throw new Error("ID de sucursal no vÃ¡lido");
+        throw new Error("ID de sucursal no válido");
     }
 
     const branchObjectID = new Types.ObjectId(branchID);

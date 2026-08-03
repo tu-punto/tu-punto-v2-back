@@ -168,6 +168,29 @@ export const getSeller = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellerDashboard = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const months = Math.max(1, Math.min(12, Number(req.query.months || 6)));
+    const rawSucursalIds = req.query.sucursalIds;
+    const sucursalIds = Array.from(
+      new Set(
+        (Array.isArray(rawSucursalIds) ? rawSucursalIds : String(rawSucursalIds || "").split(","))
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const dashboard = await SellerService.getSellerDashboard(id, { months, sucursalIds });
+    res.json({ ok: true, dashboard });
+  } catch (err: any) {
+    console.error("Error obteniendo dashboard del vendedor:", err);
+    res.status(500).json({
+      ok: false,
+      msg: err?.message || "Error obteniendo dashboard del vendedor"
+    });
+  }
+};
+
 export const registerSeller = async (req: Request, res: Response) => {
   try {
     const sellerPayload = req.body;
@@ -231,11 +254,17 @@ export const autoRenewSellers = async (_req: Request, res: Response) => {
 
 export const paySellerDebt = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { payAll } = req.body;
+  const { payAll, paymentMethod } = req.body;
 
   try {
+    if (paymentMethod !== "efectivo" && paymentMethod !== "qr") {
+      return res.status(400).json({
+        msg: "Metodo de pago invalido. Debe ser 'efectivo' o 'qr'."
+      });
+    }
+
     // Actualizar la deuda del vendedor
-    const pdfBuffer = await SellerPdfService.generateSellerPdfBuffer(id);
+    const pdfBuffer = await SellerPdfService.generateSellerPdfBuffer(id, paymentMethod);
     const updatedSeller = await SellerService.paySellerDebt(id, payAll);
 
     if (!updatedSeller) {

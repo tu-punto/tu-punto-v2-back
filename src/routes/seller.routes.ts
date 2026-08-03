@@ -13,6 +13,7 @@ sellerRouter.post('/register', requireRole("admin"), SellerController.registerSe
 sellerRouter.post('/auto-renew', requireRole("admin"), SellerController.autoRenewSellers);
 sellerRouter.put('/update/:id', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.updateSeller);
 sellerRouter.get('/:id', requireRole("admin", "operator", "seller"), requireSellerOwnership("id"), SellerController.getSeller);
+sellerRouter.get('/:id/dashboard', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.getSellerDashboard);
 sellerRouter.put("/renew/:id", requireRole("admin"), SellerController.renewSeller);
 sellerRouter.post("/:id/payment-request", requireRole("seller"), requireSellerOwnership("id"), upload.single("qr_pago"), SellerController.requestSellerPayment);
 sellerRouter.post("/:id/admin-decline-service", requireRole("admin", "operator"), SellerController.declineSellerService);

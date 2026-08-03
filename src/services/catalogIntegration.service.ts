@@ -2,8 +2,10 @@ import { CategoriaModel } from "../entities/implements/CategoriaSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 import { canAccessSellerProductInfoByCommission } from "../utils";
 import { createVariantKey } from "../utils/variantKey";
+import { ProductPromotionService } from "./productPromotion.service";
 
 type ProductInfoStatus = "empty" | "partial" | "complete";
 
@@ -85,6 +87,17 @@ const buildSnapshot = async () => {
   })
     .select("nombre_producto id_categoria id_vendedor sucursales updatedAt")
     .lean();
+  const activePromotions = await ProductPromotionModel.find({
+    estado: "active",
+    fecha_inicio: { $lte: new Date() },
+    fecha_fin: { $gte: new Date() },
+    scope: { $in: ["catalogo", "ambos"] }
+  })
+    .select("id_producto variantKey scope titulo precio_simple escalas fecha_inicio fecha_fin")
+    .lean();
+  const promotionKeys = new Set(
+    activePromotions.map((promotion: any) => `${String(promotion.id_producto)}::${String(promotion.variantKey)}`)
+  );
 
   const exportedProducts: any[] = [];
   const usedSellerIds = new Set<string>();
@@ -111,15 +124,32 @@ const buildSnapshot = async () => {
         };
 
         if (!existing) {
+          const hasStructuredPromotion = promotionKeys.has(`${productId}::${variantKey}`);
+          const catalogPromotionSnapshot = hasStructuredPromotion
+            ? await ProductPromotionService.getCatalogVariantSnapshot({
+                productId,
+                variantKey
+              })
+            : null;
           variantsByKey.set(variantKey, {
             internalVariantKey: variantKey,
             name: Object.values(variants).filter(Boolean).join(" / ") || product.nombre_producto,
             attributes: variants,
-            price: Math.max(0, Number(combination?.precio || 0)),
+            price: catalogPromotionSnapshot?.effectivePrice ?? Math.max(0, Number(combination?.precio || 0)),
+            originalPrice: catalogPromotionSnapshot?.basePrice ?? Math.max(0, Number(combination?.precio || 0)),
+            discountPercent: catalogPromotionSnapshot?.discountPercent ?? 0,
             infoStatus: status,
             description: toStringValue(combination?.descripcion) || null,
             usage: toStringValue(combination?.uso) || null,
             promotion: combination?.promocion || null,
+            pricingPromotion: catalogPromotionSnapshot
+              ? {
+                  label: catalogPromotionSnapshot.promotionLabel,
+                  startsAt: catalogPromotionSnapshot.startsAt,
+                  endsAt: catalogPromotionSnapshot.endsAt,
+                  tiers: catalogPromotionSnapshot.tiers
+                }
+              : null,
             images: Array.isArray(combination?.imagenes) ? combination.imagenes : [],
             inventory: [branchStock],
             commercialInfoScore: commercialInfoScore(combination)

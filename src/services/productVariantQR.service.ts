@@ -476,7 +476,7 @@ const listVariantQRs = async (params: {
 
     if (sellerId) {
       if (!Types.ObjectId.isValid(sellerId)) {
-        throw new Error("sellerId invÃ¡lido");
+        throw new Error("sellerId inválido");
       }
       productQuery.id_vendedor = new Types.ObjectId(sellerId);
     }

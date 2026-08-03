@@ -110,6 +110,7 @@ const updateProducts = async (_: any, prods: any[]): Promise<any[]> => {
     const fieldsToUpdate: any = {};
     if ('cantidad' in prod) fieldsToUpdate.cantidad = prod.cantidad;
     if ('precio_unitario' in prod) fieldsToUpdate.precio_unitario = prod.precio_unitario;
+    if ('precio_original' in prod) fieldsToUpdate.precio_original = prod.precio_original;
     if ('utilidad' in prod) fieldsToUpdate.utilidad = prod.utilidad;
     if ('quien_paga_delivery' in prod) fieldsToUpdate.quien_paga_delivery = prod.quien_paga_delivery;
     //console.log("📝 Updating venta ID:", prod._id || prod.id_venta);
@@ -142,6 +143,7 @@ const updateSalesOfProducts = async (salesData: any[]): Promise<any[]> => {
       {
         cantidad: sale.cantidad,
         precio_unitario: sale.precio_unitario,
+        precio_original: sale.precio_original,
       },
       { new: true }
     );

@@ -16,6 +16,15 @@ const ComprobantePagoSchema = new Schema<IComprobantePagoDocument>({
     type: String,
     required: true,
   },
+  metodo_pago: {
+    type: String,
+    enum: ["efectivo", "qr"],
+    required: true,
+  },
+  monto_pagado: {
+    type: Number,
+    required: true,
+  },
   total_ventas: {
     type: Number,
     required: true,
