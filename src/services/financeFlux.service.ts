@@ -16,6 +16,7 @@ import { BoxCloseRepository } from "../repositories/boxClose.repository";
 import { uploadFileToAws } from "./bucket.service";
 import { awsFolderNames } from "../config/bucketConfig";
 import { IN_TRANSIT_STATUS, READY_FOR_PICKUP_STATUS } from "../utils/branchTransferStatus";
+import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 
 const assertFlux = (flux: IFlujoFinanciero | null) => {
   if (!flux) throw new Error("Flux not found");
@@ -279,6 +280,7 @@ const registerFinanceFlux = async (flux: IFlujoFinanciero, file?: Express.Multer
     monto: montoFinal,
     ...attachment,
   });
+  await FinanceStatsAggregateService.markDateDirty(normalizedFlux.fecha || new Date());
 };
 
 const payDebt = async (fluxId: string) => {
@@ -396,6 +398,7 @@ const updateFinanceFlux = async (
     ...attachment,
   });
   if (!updatedFlux) throw new Error("Error al actualizar el flujo");
+  await FinanceStatsAggregateService.markDateDirty(payload.fecha || existingFlux.fecha || new Date());
 
   const newDeuda = updatedFlux.esDeuda ? updatedFlux.monto : 0;
   const diff = newDeuda - oldDeuda;
@@ -645,7 +648,16 @@ const getFinancialSummaryForDates = async (fromDate?: Date, toDate?: Date, opts:
 
 const getFinancialSummary = async (opts: CommissionRange = {}) => {
   const { fromDate, toDate } = parseRangeToDates(opts);
-  return await getFinancialSummaryForDates(fromDate, toDate, opts);
+  return await FinanceStatsAggregateService.getSummary({
+    months: opts.months,
+    fromDate,
+    toDate,
+    sucursalIds: opts.sucursalIds,
+    expenseCategories: opts.expenseCategories,
+    includeCommissions: opts.includeCommissions,
+    includeDeliveries: opts.includeDeliveries,
+    deliveryMode: opts.deliveryMode,
+  });
 };
 
 const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
@@ -683,6 +695,20 @@ const getFinancialSummaryRanges = async (opts: CommissionRange = {}) => {
   };
 };
 
+const getFinancialSummaryByBranch = async (opts: CommissionRange = {}) => {
+  const { fromDate, toDate } = parseRangeToDates(opts);
+  return await FinanceStatsAggregateService.getBranchRows({
+    months: opts.months,
+    fromDate,
+    toDate,
+    sucursalIds: opts.sucursalIds,
+    expenseCategories: opts.expenseCategories,
+    includeCommissions: opts.includeCommissions,
+    includeDeliveries: opts.includeDeliveries,
+    deliveryMode: opts.deliveryMode,
+  });
+};
+
 export const FinanceFluxService = {
   getAllFinanceFluxes,
   getDailyServiceIncomeByDateAndSucursal,
@@ -695,6 +721,7 @@ export const FinanceFluxService = {
   updateFinanceFlux,
   getFinancialSummary,
   getFinancialSummaryRanges,
+  getFinancialSummaryByBranch,
   getDebts,
   getCommissionTotal,
   getMerchandiseSoldTotal,

@@ -177,6 +177,30 @@ export const getFinancialSummaryController = async (req: Request, res: Response)
   }
 };
 
+export const getFinancialSummaryByBranchController = async (req: Request, res: Response) => {
+  try {
+    const { range, from, to, includeCommissions, includeDeliveries, deliveryMode } = req.query as any;
+    const sucursalIds = parseStringList(req.query?.sucursalIds);
+    const months = parseStringList(req.query?.months);
+    const expenseCategories = parseStringList(req.query?.expenseCategories);
+
+    const summary = await FinanceFluxService.getFinancialSummaryByBranch({
+      range: typeof range === "string" ? range : undefined,
+      from: typeof from === "string" ? from : undefined,
+      to: typeof to === "string" ? to : undefined,
+      sucursalIds,
+      months,
+      expenseCategories,
+      includeCommissions: parseBoolean(includeCommissions, true),
+      includeDeliveries: parseBoolean(includeDeliveries, true),
+      deliveryMode: deliveryMode === "potential" ? "potential" : "real",
+    });
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ msg: "Error calculando resumen por sucursal", err });
+  }
+};
+
 export const getCommissionController = async (req: Request, res: Response) => {
   try {
     const { range, from, to } = req.query as any;

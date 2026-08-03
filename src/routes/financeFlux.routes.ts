@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as fluxController from "../controllers/financeFlux.controller";
-import { getFinancialSummaryController, getCommissionController, getMerchandiseSoldController } from "../controllers/financeFlux.controller";
+import { getFinancialSummaryController, getFinancialSummaryByBranchController, getCommissionController, getMerchandiseSoldController } from "../controllers/financeFlux.controller";
 import { announcementAttachmentMimeTypes, uploadFinanceFluxAttachment, validateUploadedFiles } from "../middlewares/upload.middleware";
 import { rateLimiters } from "../middlewares/rateLimit.middleware";
 const financeFluxRouter = Router();
@@ -32,6 +32,7 @@ financeFluxRouter.get("/sellerInf/:id", fluxController.getSellerInfo);
 financeFluxRouter.get("/stats/", fluxController.getStatsController);
 
 financeFluxRouter.get("/financial-summary", getFinancialSummaryController);
+financeFluxRouter.get("/financial-summary/branches", getFinancialSummaryByBranchController);
 
 financeFluxRouter.get("/commission", getCommissionController);
 

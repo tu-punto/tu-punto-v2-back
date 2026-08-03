@@ -25,6 +25,7 @@ import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupF
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { InventoryAuditActor } from "./inventoryAudit.service";
+import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -1187,6 +1188,8 @@ const registerShipping = async (shipping: any) => {
       : savedShipping
   );
 
+  await FinanceStatsAggregateService.markDateDirty(savedShipping.fecha_pedido || shipping.fecha_pedido || new Date());
+
   return savedShipping;
 };
 const getShippingById = async (id: string) => {
@@ -1636,6 +1639,8 @@ const updateShipping = async (
     });
   }
 
+  await FinanceStatsAggregateService.markDateDirty((shipping as any)?.fecha_pedido || (resShip as any)?.fecha_pedido || new Date());
+
   return resShip;
 };
 
@@ -1686,6 +1691,7 @@ const deleteShippingById = async (id: string, auditActor?: InventoryAuditActor) 
   }
 
   await ShippingRepository.deleteById(id);
+  await FinanceStatsAggregateService.markDateDirty((pedido as any)?.fecha_pedido || new Date());
   return { success: true };
 };
 

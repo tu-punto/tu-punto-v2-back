@@ -13,6 +13,7 @@ import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/la
 import { TrackingFreezeService } from "./trackingFreeze.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { READY_FOR_PICKUP_STATUS, resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
+import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 
 const getAllExternalSales = async () => {
   return await ExternalSaleRepository.getAllExternalSales();
@@ -602,6 +603,7 @@ const registerExternalSale = async (externalSale: any) => {
         error: error?.message || String(error),
       });
     });
+  await FinanceStatsAggregateService.markDateDirty(record.fecha_pedido || new Date());
   return created;
 };
 
@@ -662,6 +664,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
         error: error?.message || String(error),
       });
     });
+  await FinanceStatsAggregateService.markDateDirty(payload?.fecha_pedido || new Date());
   return created;
 };
 
@@ -669,7 +672,9 @@ const deleteExternalSaleByID = async (id: string) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
   assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
-  return await ExternalSaleRepository.deleteExternalSaleByID(id);
+  const deleted = await ExternalSaleRepository.deleteExternalSaleByID(id);
+  await FinanceStatsAggregateService.markDateDirty(existing.fecha_pedido || new Date());
+  return deleted;
 };
 
 const annulExternalSaleByID = async (params: {
@@ -716,12 +721,14 @@ const annulExternalSaleByID = async (params: {
     });
   }
 
-  return await ExternalSaleRepository.annulExternalSaleByID(params.id, {
+  const annulled = await ExternalSaleRepository.annulExternalSaleByID(params.id, {
     anulado: true,
     anulado_en: moment().tz("America/La_Paz").toDate(),
     anulado_por: params.performedBy,
     motivo_anulacion: reason,
   });
+  await FinanceStatsAggregateService.markDateDirty(existing.fecha_pedido || new Date());
+  return annulled;
 };
 
 const updateExternalSaleByID = async (id: string, externalSale: any) => {
@@ -1041,6 +1048,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
       });
     }
   }
+
+  await FinanceStatsAggregateService.markDateDirty(existing.fecha_pedido || updatePayload.fecha_pedido || new Date());
 
   return updated;
 };

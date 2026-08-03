@@ -10,6 +10,7 @@ import { seedFinanceFluxCategory } from "./seeds/seedFinanceFluxCategory";
 import { NotificationService } from "./services/notification.service";
 import { SellerService } from "./services/seller.service";
 import { validateProductionSecrets } from "./config/secrets";
+import { FinanceStatsAggregateService } from "./services/financeStatsAggregate.service";
 
 const app: Express = express();
 const port = process.env.PORT || process.env.SERVER_PORT || 3000;
@@ -49,6 +50,7 @@ connectToMongoDB().then(async () => {
   app.use(routes);
   NotificationService.startReminderScheduler();
   SellerService.startAutoRenewalScheduler();
+  FinanceStatsAggregateService.startReconcileScheduler();
 
   app.listen(Number(port), "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);

@@ -10,6 +10,7 @@ import { SimplePackageRepository } from "../repositories/simplePackage.repositor
 import { applySellerCommissionCap } from "../utils/commissionCap";
 import { variantFingerprint, variantLabel } from "../utils/variantKey";
 import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
+import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 
 type VariantRecord = Record<string, string>;
 type StockAdjustmentAudit = {
@@ -383,6 +384,8 @@ const registerSale = async (sale: any, options?: { auditActor?: InventoryAuditAc
           action: "register",
         },
       });
+      const pedido = await PedidoModel.findById(saleData.pedido).select("fecha_pedido").lean();
+      await FinanceStatsAggregateService.markDateDirty((pedido as any)?.fecha_pedido || new Date());
     } catch (error) {
       await adjustStockForSale(saleData, cantidad);
       throw error;
@@ -724,6 +727,7 @@ const updateSaleById = async (id: string, fields: any, auditActor?: InventoryAud
   } as any);
 
   await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
+  await FinanceStatsAggregateService.markDateDirty(venta?.pedido?.fecha_pedido || new Date());
   await recordSaleAudit({
     eventType: "sale_stock_adjusted",
     sourceModule: "sale.update",
@@ -763,6 +767,7 @@ const deleteSaleById = async (id: string, id_sucursal?: string, auditActor?: Inv
   });
 
   const deleted = await SaleRepository.deleteSaleById(id);
+  await FinanceStatsAggregateService.markDateDirty(venta?.pedido?.fecha_pedido || new Date());
   await recordSaleAudit({
     eventType: "sale_deleted_stock_restored",
     sourceModule: "sale.delete",
