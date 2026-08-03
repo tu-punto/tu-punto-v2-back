@@ -7,37 +7,37 @@ const productPromotionRouter = Router();
 productPromotionRouter.get(
   "/",
   requireAuth,
-  requireRole("seller"),
+  requireRole("admin", "operator", "seller"),
   ProductPromotionController.listPromotions
 );
 productPromotionRouter.get(
   "/variant-options",
   requireAuth,
-  requireRole("seller"),
+  requireRole("admin", "operator", "seller"),
   ProductPromotionController.listVariantOptions
 );
 productPromotionRouter.post(
   "/",
   requireAuth,
-  requireRole("seller"),
+  requireRole("admin", "operator", "seller"),
   ProductPromotionController.createPromotion
 );
 productPromotionRouter.post(
   "/preview",
   requireAuth,
-  requireRole("seller"),
+  requireRole("admin", "operator", "seller"),
   ProductPromotionController.previewPromotion
 );
 productPromotionRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("seller"),
+  requireRole("admin", "operator", "seller"),
   ProductPromotionController.updatePromotion
 );
 productPromotionRouter.delete(
   "/:id",
   requireAuth,
-  requireRole("seller"),
+  requireRole("admin", "operator", "seller"),
   ProductPromotionController.deletePromotion
 );
 

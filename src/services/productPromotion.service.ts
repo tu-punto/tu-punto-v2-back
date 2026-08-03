@@ -14,7 +14,7 @@ type PromotionTierInput = {
 };
 
 type PromotionInput = {
-  sellerId: string;
+  sellerId?: string;
   productId: string;
   variantKey: string;
   scope: PromotionScope;
@@ -40,6 +40,8 @@ type PricingPreviewInput = {
 };
 
 const text = (value: unknown) => String(value ?? "").trim();
+const resolvePromotionSellerId = (value: unknown) =>
+  String((value as any)?._id || value || "").trim();
 const toNumber = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -86,6 +88,34 @@ const sellerCanUseCatalogScopes = async (sellerId: string) => {
     comision_fija: Number((seller as any)?.comision_fija ?? 0),
     fecha_vigencia: (seller as any)?.fecha_vigencia,
   });
+};
+
+const isManagerRole = (role?: string) => ["admin", "operator", "superadmin"].includes(text(role).toLowerCase());
+
+const resolveTargetSellerId = ({
+  actorRole,
+  actorSellerId,
+  requestedSellerId,
+  requireSelection = true,
+}: {
+  actorRole?: string;
+  actorSellerId?: string;
+  requestedSellerId?: string;
+  requireSelection?: boolean;
+}) => {
+  if (isManagerRole(actorRole)) {
+    const target = text(requestedSellerId);
+    if (!target && requireSelection) {
+      throw new Error("Debes seleccionar un vendedor");
+    }
+    return target || "";
+  }
+
+  const sellerId = text(actorSellerId);
+  if (!sellerId) {
+    throw new Error("sellerId no resuelto");
+  }
+  return sellerId;
 };
 
 const normalizeScopeForSeller = (scope: PromotionScope | undefined, sellerCanUseCatalog: boolean): PromotionScope =>
@@ -179,7 +209,7 @@ const getVariantContext = async ({
 };
 
 const validatePromotionPayload = async (input: PromotionInput, excludeId?: string) => {
-  if (!Types.ObjectId.isValid(input.sellerId)) {
+  if (!input.sellerId || !Types.ObjectId.isValid(input.sellerId)) {
     throw new Error("sellerId invalido");
   }
   if (!Types.ObjectId.isValid(input.productId)) {
@@ -264,7 +294,7 @@ const validatePromotionPayload = async (input: PromotionInput, excludeId?: strin
 
 const mapPromotion = async (promotion: any) => {
   const context = await getVariantContext({
-    sellerId: String(promotion.id_vendedor),
+    sellerId: resolvePromotionSellerId(promotion.id_vendedor),
     productId: String(promotion.id_producto),
     variantKey: String(promotion.variantKey)
   });
@@ -282,7 +312,10 @@ const mapPromotion = async (promotion: any) => {
 
   return {
     id: String(promotion._id),
-    sellerId: String(promotion.id_vendedor),
+    sellerId: resolvePromotionSellerId(promotion.id_vendedor),
+    sellerName: promotion?.id_vendedor && typeof promotion.id_vendedor === "object"
+      ? text(`${promotion.id_vendedor.nombre || ""} ${promotion.id_vendedor.apellido || ""}`) || "Vendedor"
+      : undefined,
     productId: String(promotion.id_producto),
     productName: String(context.product?.nombre_producto || "Producto"),
     variantKey: String(promotion.variantKey),
@@ -399,14 +432,19 @@ const resolveEffectivePricing = async ({
 };
 
 const createPromotion = async (input: PromotionInput) => {
-  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(input.sellerId);
+  const safeSellerId = text(input.sellerId);
+  if (!Types.ObjectId.isValid(safeSellerId)) {
+    throw new Error("sellerId invalido");
+  }
+  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(safeSellerId);
   const nextInput = {
     ...input,
+    sellerId: safeSellerId,
     scope: normalizeScopeForSeller(input.scope, sellerCanUseCatalog),
   };
   const validated = await validatePromotionPayload(nextInput);
   const created = await ProductPromotionModel.create({
-    id_vendedor: new Types.ObjectId(input.sellerId),
+    id_vendedor: new Types.ObjectId(safeSellerId),
     id_producto: new Types.ObjectId(input.productId),
     variantKey: input.variantKey,
     scope: nextInput.scope,
@@ -421,18 +459,31 @@ const createPromotion = async (input: PromotionInput) => {
   return await mapPromotion(created.toObject());
 };
 
-const updatePromotion = async (promotionId: string, sellerId: string, input: Partial<PromotionInput>) => {
-  const current = await ProductPromotionModel.findOne({
-    _id: promotionId,
-    id_vendedor: sellerId
-  });
+const updatePromotion = async (
+  promotionId: string,
+  params: { actorRole?: string; actorSellerId?: string; requestedSellerId?: string },
+  input: Partial<PromotionInput>
+) => {
+  const current = await ProductPromotionModel.findOne({ _id: promotionId });
   if (!current) {
     throw new Error("Promocion no encontrada");
   }
+  const currentSellerId = resolvePromotionSellerId((current as any).id_vendedor);
+  const actorCanManage = isManagerRole(params.actorRole);
+  if (!actorCanManage && currentSellerId !== text(params.actorSellerId)) {
+    throw new Error("Promocion no encontrada");
+  }
+  const targetSellerId = actorCanManage
+    ? resolveTargetSellerId({
+        actorRole: params.actorRole,
+        actorSellerId: params.actorSellerId,
+        requestedSellerId: params.requestedSellerId || currentSellerId,
+      })
+    : currentSellerId;
 
-  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(sellerId);
+  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(targetSellerId);
   const nextPayload: PromotionInput = {
-    sellerId,
+    sellerId: targetSellerId,
     productId: text(input.productId || current.id_producto),
     variantKey: text(input.variantKey || current.variantKey),
     scope: normalizeScopeForSeller((input.scope || current.scope) as PromotionScope, sellerCanUseCatalog),
@@ -461,11 +512,15 @@ const updatePromotion = async (promotionId: string, sellerId: string, input: Par
   return await mapPromotion(current.toObject());
 };
 
-const deletePromotion = async (promotionId: string, sellerId: string) => {
-  const deleted = await ProductPromotionModel.findOneAndDelete({
-    _id: promotionId,
-    id_vendedor: sellerId
-  }).lean();
+const deletePromotion = async (
+  promotionId: string,
+  params: { actorRole?: string; actorSellerId?: string }
+) => {
+  const filter: any = { _id: promotionId };
+  if (!isManagerRole(params.actorRole)) {
+    filter.id_vendedor = text(params.actorSellerId);
+  }
+  const deleted = await ProductPromotionModel.findOneAndDelete(filter).lean();
   if (!deleted) {
     throw new Error("Promocion no encontrada");
   }
@@ -473,7 +528,8 @@ const deletePromotion = async (promotionId: string, sellerId: string) => {
 };
 
 const listPromotions = async (params: {
-  sellerId: string;
+  sellerId?: string;
+  actorRole?: string;
   q?: string;
   scope?: PromotionScope | "all";
   state?: string;
@@ -482,9 +538,16 @@ const listPromotions = async (params: {
 }) => {
   const safePage = Math.max(1, Number(params.page || 1));
   const safeLimit = Math.min(100, Math.max(1, Number(params.limit || 12)));
-  const query: any = { id_vendedor: params.sellerId };
-  const sellerCanUseCatalog = await sellerCanUseCatalogScopes(params.sellerId);
-  if (!sellerCanUseCatalog) {
+  const targetSellerId = text(params.sellerId);
+  const isManager = isManagerRole(params.actorRole);
+  const query: any = {};
+  if (targetSellerId) {
+    query.id_vendedor = targetSellerId;
+  } else if (!isManager) {
+    throw new Error("sellerId no resuelto");
+  }
+  const sellerCanUseCatalog = isManager || !targetSellerId ? true : await sellerCanUseCatalogScopes(targetSellerId);
+  if (!isManager && targetSellerId && !sellerCanUseCatalog) {
     query.scope = "interno";
   } else if (params.scope && params.scope !== "all") {
     query.scope = params.scope;
@@ -494,6 +557,7 @@ const listPromotions = async (params: {
   }
 
   const promotions = await ProductPromotionModel.find(query)
+    .populate("id_vendedor", "nombre apellido")
     .sort({ updatedAt: -1 })
     .lean();
 
