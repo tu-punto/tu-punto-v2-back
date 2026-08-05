@@ -6,6 +6,12 @@ export const USER_TOUR_KEYS = [
   "seller-stock-shipping-guide",
   "seller-stock-deliveries",
   "seller-stock-withdrawal-request",
+  "staff-operator-sales",
+  "staff-stock-ingress",
+  "staff-product-create",
+  "staff-branch-transfer",
+  "staff-variant-create",
+  "staff-external-delivery-create",
 ] as const;
 export type UserTourKey = (typeof USER_TOUR_KEYS)[number];
 export type UserTourStatus = "unseen" | "seen";
