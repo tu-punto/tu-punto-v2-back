@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { SaleService } from "../services/sale.service";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
+import { ActionTraceService } from "../services/actionTrace.service";
+import { getActionTraceActorFromResponse } from "../helpers/actionTrace";
 
 const buildAuditActor = (res: Response) => {
   const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
@@ -10,6 +12,37 @@ const buildAuditActor = (res: Response) => {
     name: String(auth?.email || "").trim() || undefined,
     sellerId: String(auth?.sellerId || "").trim() || undefined,
   };
+};
+
+const traceAction = (
+  res: Response,
+  payload: {
+    actionType: string;
+    sourceModule: string;
+    sourceId?: string;
+    entityType?: string;
+    entityId?: string;
+    entityLabel?: string;
+    summary: string;
+    metadata?: Record<string, unknown>;
+  },
+  status: "success" | "failed" = "success",
+  error?: unknown
+) => {
+  if (status === "failed") {
+    void ActionTraceService.recordFailureFromError({
+      ...payload,
+      actor: getActionTraceActorFromResponse(res),
+      error,
+    });
+    return;
+  }
+
+  void ActionTraceService.recordActionTraceSafe({
+    ...payload,
+    actor: getActionTraceActorFromResponse(res),
+    status: "success",
+  });
 };
 
 export const getSale = async (_req: Request, res: Response) => {
@@ -31,12 +64,33 @@ export const registerSale = async (req: Request, res: Response) => {
     const newSales = await SaleService.registerMultipleSales(sales, {
       auditActor: buildAuditActor(res),
     });
+    traceAction(res, {
+      actionType: "sale.register",
+      sourceModule: "sale.controller",
+      sourceId: Array.isArray(newSales)
+        ? newSales.map((item: any) => String(item?._id || item?.id_venta || "")).filter(Boolean).join(",")
+        : "",
+      entityType: "sale",
+      summary: `Se registraron ${Array.isArray(newSales) ? newSales.length : 0} ventas`,
+      metadata: { count: Array.isArray(newSales) ? newSales.length : 0 },
+    });
     res.json({
       status: true,
       newSales,
     });
   } catch (error) {
     console.error("Error al registrar ventas:", error);
+    traceAction(
+      res,
+      {
+        actionType: "sale.register",
+        sourceModule: "sale.controller",
+        summary: "Falló el registro de ventas",
+        metadata: { payloadCount: Array.isArray(sales) ? sales.length : 0 },
+      },
+      "failed",
+      error
+    );
     res.status(500).json({ msg: "Internal Server Error", error });
   }
 };
@@ -250,12 +304,35 @@ export const updateSaleById = async (req: Request, res: Response) => {
       return res.status(404).json({ msg: "Venta no encontrada" });
     }
 
+    traceAction(res, {
+      actionType: "sale.update",
+      sourceModule: "sale.controller",
+      sourceId: String(id || ""),
+      entityType: "sale",
+      entityId: String(id || ""),
+      summary: `Se actualizó la venta ${id}`,
+      metadata: { fields: Object.keys(fieldsToUpdate || {}) },
+    });
+
     res.status(200).json({
       success: true,
       updatedSale,
     });
   } catch (error) {
     console.error(error);
+    traceAction(
+      res,
+      {
+        actionType: "sale.update",
+        sourceModule: "sale.controller",
+        sourceId: String(id || ""),
+        entityType: "sale",
+        entityId: String(id || ""),
+        summary: `Falló la actualización de la venta ${id}`,
+      },
+      "failed",
+      error
+    );
     res.status(500).json({ msg: "Error actualizando venta", error });
   }
 };
@@ -270,12 +347,34 @@ export const deleteSaleById = async (req: Request, res: Response) => {
       return res.status(404).json({ msg: "Venta no encontrada o ya eliminada" });
     }
 
+    traceAction(res, {
+      actionType: "sale.delete",
+      sourceModule: "sale.controller",
+      sourceId: String(id || ""),
+      entityType: "sale",
+      entityId: String(id || ""),
+      summary: `Se eliminó la venta ${id}`,
+    });
+
     res.status(200).json({
       success: true,
       deletedSale: id,
     });
   } catch (error) {
     console.error(error);
+    traceAction(
+      res,
+      {
+        actionType: "sale.delete",
+        sourceModule: "sale.controller",
+        sourceId: String(id || ""),
+        entityType: "sale",
+        entityId: String(id || ""),
+        summary: `Falló la eliminación de la venta ${id}`,
+      },
+      "failed",
+      error
+    );
     res.status(500).json({ msg: "Error eliminando venta", error });
   }
 };

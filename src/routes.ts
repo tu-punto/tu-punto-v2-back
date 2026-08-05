@@ -34,6 +34,7 @@ import landingLeadRouter from "./routes/landingLead.routes";
 import productPromotionRouter from "./routes/productPromotion.routes";
 import inventoryAuditRouter from "./routes/inventoryAudit.routes";
 import userTourProgressRouter from "./routes/userTourProgress.routes";
+import actionTraceRouter from "./routes/actionTrace.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -88,6 +89,7 @@ router.use("/stock-withdrawals", requireAuth, stockWithdrawalRouter)
 router.use("/attendance", requireAuth, requireRole("admin", "operator"), attendanceRouter)
 router.use("/inventory-audit", requireAuth, requireRole("superadmin"), inventoryAuditRouter)
 router.use("/user-tour-progress", userTourProgressRouter)
+router.use("/action-traces", requireAuth, requireRole("superadmin"), actionTraceRouter)
 
 router.use("/qr", qr);
 
