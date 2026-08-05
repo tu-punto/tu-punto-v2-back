@@ -24,6 +24,7 @@ import qr from "./routes/qr.routes";
 import notificationRouter from "./routes/notification.routes";
 import trackingRouter from "./routes/tracking.routes";
 import serviceAnnouncementRouter from "./routes/serviceAnnouncement.routes";
+import maintenanceModeRouter from "./routes/maintenanceMode.routes";
 import simplePackageRouter from "./routes/simplePackage.routes";
 import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
 import trackingFreezeRouter from "./routes/trackingFreeze.routes";
@@ -75,7 +76,8 @@ router.use("/entry", requireAuth, requireRole("admin", "operator", "seller"), en
 router.use("/user", userRouter);
   router.use("/notification", notificationRouter);
   router.use("/tracking", trackingRouter);
-  router.use("/service-announcements", serviceAnnouncementRouter);
+router.use("/service-announcements", serviceAnnouncementRouter);
+router.use("/maintenance-mode", maintenanceModeRouter);
 router.use("/whats", requireAuth, requireRole("admin"), whatsRouter);
 router.use("/boxClose", requireAuth, requireRole("admin", "operator"), boxCloseRouter);
 router.use("/dailyEffective", requireAuth, requireRole("admin", "operator"), dailyEffectiveRouter);

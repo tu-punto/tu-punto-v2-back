@@ -8,6 +8,7 @@ import {
   sellerHasSystemAccess,
   SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
 } from "../helpers/sellerAccess";
+import { MaintenanceModeService } from "../services/maintenanceMode.service";
 
 type AuthPayload = {
   id?: string;
@@ -26,6 +27,9 @@ const canPassWithPendingPasswordChange = (originalUrl: string) =>
 
 const canBypassSellerAccessCheck = (originalUrl: string) =>
   canPassWithPendingPasswordChange(originalUrl);
+
+const canBypassMaintenanceCheck = (originalUrl: string) =>
+  canPassWithPendingPasswordChange(originalUrl) || originalUrl.includes("/maintenance-mode/status");
 
 const getTokenFromRequest = (req: Request): string | null => {
   const cookieToken = req.cookies?.token;
@@ -91,6 +95,25 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
         return res.status(403).json({
           success: false,
           msg: SELLER_SYSTEM_ACCESS_DENIED_MESSAGE,
+        });
+      }
+    }
+
+    if (!canBypassMaintenanceCheck(req.originalUrl || "")) {
+      const maintenance = await MaintenanceModeService.evaluateMaintenanceForUser({
+        userId: decoded.id,
+        role,
+      });
+
+      if (maintenance.blocked) {
+        return res.status(503).json({
+          success: false,
+          msg: maintenance.message,
+          maintenance: {
+            enabled: maintenance.enabled,
+            message: maintenance.message,
+            subtitle: maintenance.subtitle,
+          },
         });
       }
     }
