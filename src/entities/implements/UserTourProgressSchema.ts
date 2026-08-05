@@ -1,6 +1,12 @@
 import { Document, Schema, Types, model } from "mongoose";
 
-export const USER_TOUR_KEYS = ["seller-welcome"] as const;
+export const USER_TOUR_KEYS = [
+  "seller-welcome",
+  "seller-simple-deliveries",
+  "seller-stock-shipping-guide",
+  "seller-stock-deliveries",
+  "seller-stock-withdrawal-request",
+] as const;
 export type UserTourKey = (typeof USER_TOUR_KEYS)[number];
 export type UserTourStatus = "unseen" | "seen";
 
