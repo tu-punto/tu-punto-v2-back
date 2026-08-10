@@ -682,13 +682,14 @@ export const updatePrice = async (req: Request, res: Response) => {
 
 export const updateSubvariantStock = async (req: Request, res: Response) => {
   //console.log("Updating subvariant stock");
-  const { productId, sucursalId, variantes, stock } = req.body;  try {
+  const { productId, sucursalId, variantes, stock, stockMode } = req.body;  try {
     const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
     const result = await ProductService.updateStockByVariantCombination({
       productId,
       sucursalId,
       variantes,
       stock,
+      stockMode,
       auditActor: {
         userId: String(auth?.id || "").trim() || undefined,
         role: String(auth?.role || "").trim() || undefined,

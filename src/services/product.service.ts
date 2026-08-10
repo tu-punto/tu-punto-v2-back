@@ -657,12 +657,14 @@ const updateStockByVariantCombination = async ({
   sucursalId,
   variantes,
   stock,
+  stockMode,
   auditActor
 }: {
   productId: string,
   sucursalId: string,
   variantes: Record<string, string>,
   stock: number,
+  stockMode?: "absolute" | "delta",
   auditActor?: InventoryAuditActor
 }) => {
   const productBefore = await ProductoModel.findById(productId);
@@ -672,7 +674,15 @@ const updateStockByVariantCombination = async ({
   if (!matchBefore) throw new Error("No se encontró la combinación");
 
   const stockBefore = Number(matchBefore.combination?.stock || 0);
-  const nextStock = Math.max(0, Math.floor(Number(stock || 0)));
+  const normalizedStock = Number(stock || 0);
+  if (!Number.isFinite(normalizedStock)) {
+    throw new Error("El stock debe ser un numero valido");
+  }
+
+  const nextStock =
+    stockMode === "delta"
+      ? Math.max(0, stockBefore + Math.trunc(normalizedStock))
+      : Math.max(0, Math.floor(normalizedStock));
   const updatedProduct = await ProductRepository.updateStockByVariantCombination(
     productId,
     sucursalId,
