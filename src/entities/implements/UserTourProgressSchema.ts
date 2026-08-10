@@ -6,6 +6,8 @@ export const USER_TOUR_KEYS = [
   "seller-stock-shipping-guide",
   "seller-stock-deliveries",
   "seller-stock-withdrawal-request",
+  "seller-catalog-product-info",
+  "seller-promotions-create",
   "staff-operator-sales",
   "staff-stock-ingress",
   "staff-product-create",

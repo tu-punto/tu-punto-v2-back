@@ -493,7 +493,7 @@ const sendExternalGuideMessages = async (id: string) => {
 const sendExternalRowsBestEffort = async (rows: any[]) =>
   sendForRowsBestEffort(rows, "external-guide-whatsapp", {
     includeSeller: true,
-    sellerRows: rows.filter((row: any) => !isSameBranchDelivery(row)),
+    sellerRows: rows,
   });
 
 const sendSimplePackageGuideMessages = async (params: {
