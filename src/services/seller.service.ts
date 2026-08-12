@@ -84,7 +84,7 @@ const resolveSellerBranches = async (
         sucursalName: isMeaningfulText(branch?.sucursalName) ? String(branch?.sucursalName).trim() : "Sucursal",
         alquiler: toNumber(branch?.alquiler),
         exhibicion: toNumber(branch?.exhibicion),
-        delivery: toNumber(branch?.delivery),
+        delivery: 0,
         entrega_simple: toNumber(branch?.entrega_simple),
         activo: branch?.activo !== false,
       };
@@ -101,7 +101,7 @@ const resolveSellerBranches = async (
       sucursalName: resolvedName,
       alquiler: toNumber(branch?.alquiler),
       exhibicion: toNumber(branch?.exhibicion),
-      delivery: toNumber(branch?.delivery),
+      delivery: 0,
       entrega_simple: toNumber(branch?.entrega_simple),
       activo: branch?.activo !== false,
     };
@@ -129,7 +129,7 @@ const buildServiceIncomeDetail = (pagoSucursales: any[] = [], discountPercent = 
       const alquiler = applyDiscount(toNumber(pago?.alquiler), discountPercent);
       const exhibicion = applyDiscount(toNumber(pago?.exhibicion), discountPercent);
       const entregaSimple = applyDiscount(toNumber(pago?.entrega_simple), discountPercent);
-      const delivery = applyDiscount(toNumber(pago?.delivery), discountPercent);
+      const delivery = 0;
       const total = alquiler + exhibicion + entregaSimple + delivery;
 
       return {
@@ -1194,7 +1194,7 @@ const getServicesSummary = async () => {
       const montoAlmacenamiento = pago.alquiler || 0;
       const montoExhibicion = pago.exhibicion || 0;
       const montoEntrega = pago.entrega_simple || 0;
-      const montoDelivery = pago.delivery || 0;
+      const montoDelivery = 0;
 
       resumen[sucursal].Almacenamiento += montoAlmacenamiento;
       resumen[sucursal].Exhibición += montoExhibicion;
