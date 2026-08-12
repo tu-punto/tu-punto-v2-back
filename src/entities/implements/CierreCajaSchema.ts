@@ -17,6 +17,7 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
   bancario_real: Number,
   diferencia_efectivo: Number,
   diferencia_bancario: Number,
+  cambios_externos: Number,
   observaciones: String,
   closed_at: {
     type: Date,

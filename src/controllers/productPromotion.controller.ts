@@ -2,16 +2,21 @@ import { Request, Response } from "express";
 import { ProductPromotionService } from "../services/productPromotion.service";
 
 const getAuthSellerId = (res: Response) => String(res.locals.auth?.sellerId || "").trim();
+const getAuthRole = (res: Response) => String(res.locals.auth?.role || "").trim().toLowerCase();
+const getRequestedSellerId = (req: Request) =>
+  String(req.query?.sellerId || req.body?.sellerId || "").trim();
 
 export const listPromotions = async (req: Request, res: Response) => {
   try {
+    const actorRole = getAuthRole(res);
     const sellerId = getAuthSellerId(res);
-    if (!sellerId) {
+    if (actorRole === "seller" && !sellerId) {
       return res.status(400).json({ success: false, message: "sellerId no resuelto" });
     }
 
     const result = await ProductPromotionService.listPromotions({
-      sellerId,
+      sellerId: actorRole === "seller" ? sellerId : getRequestedSellerId(req) || undefined,
+      actorRole,
       q: String(req.query.q || "").trim() || undefined,
       scope: (String(req.query.scope || "").trim() || "all") as any,
       state: String(req.query.state || "").trim() || undefined,
@@ -27,7 +32,8 @@ export const listPromotions = async (req: Request, res: Response) => {
 
 export const listVariantOptions = async (req: Request, res: Response) => {
   try {
-    const sellerId = getAuthSellerId(res);
+    const actorRole = getAuthRole(res);
+    const sellerId = actorRole === "seller" ? getAuthSellerId(res) : getRequestedSellerId(req);
     if (!sellerId) {
       return res.status(400).json({ success: false, message: "sellerId no resuelto" });
     }
@@ -44,12 +50,8 @@ export const listVariantOptions = async (req: Request, res: Response) => {
 
 export const createPromotion = async (req: Request, res: Response) => {
   try {
-    const sellerId = getAuthSellerId(res);
-    if (!sellerId) {
-      return res.status(400).json({ success: false, message: "sellerId no resuelto" });
-    }
     const promotion = await ProductPromotionService.createPromotion({
-      sellerId,
+      sellerId: getAuthRole(res) === "seller" ? getAuthSellerId(res) : getRequestedSellerId(req),
       productId: String(req.body?.productId || "").trim(),
       variantKey: String(req.body?.variantKey || "").trim(),
       scope: String(req.body?.scope || "interno").trim() as any,
@@ -70,11 +72,11 @@ export const createPromotion = async (req: Request, res: Response) => {
 
 export const updatePromotion = async (req: Request, res: Response) => {
   try {
-    const sellerId = getAuthSellerId(res);
-    if (!sellerId) {
-      return res.status(400).json({ success: false, message: "sellerId no resuelto" });
-    }
-    const promotion = await ProductPromotionService.updatePromotion(String(req.params.id || ""), sellerId, {
+    const promotion = await ProductPromotionService.updatePromotion(String(req.params.id || ""), {
+      actorRole: getAuthRole(res),
+      actorSellerId: getAuthSellerId(res),
+      requestedSellerId: getRequestedSellerId(req),
+    }, {
       productId: req.body?.productId,
       variantKey: req.body?.variantKey,
       scope: req.body?.scope,
@@ -95,11 +97,10 @@ export const updatePromotion = async (req: Request, res: Response) => {
 
 export const deletePromotion = async (req: Request, res: Response) => {
   try {
-    const sellerId = getAuthSellerId(res);
-    if (!sellerId) {
-      return res.status(400).json({ success: false, message: "sellerId no resuelto" });
-    }
-    const result = await ProductPromotionService.deletePromotion(String(req.params.id || ""), sellerId);
+    const result = await ProductPromotionService.deletePromotion(String(req.params.id || ""), {
+      actorRole: getAuthRole(res),
+      actorSellerId: getAuthSellerId(res),
+    });
     return res.json({ success: true, result });
   } catch (error: any) {
     console.error("Error eliminando promocion:", error);
@@ -109,12 +110,8 @@ export const deletePromotion = async (req: Request, res: Response) => {
 
 export const previewPromotion = async (req: Request, res: Response) => {
   try {
-    const sellerId = getAuthSellerId(res);
-    if (!sellerId) {
-      return res.status(400).json({ success: false, message: "sellerId no resuelto" });
-    }
     const preview = await ProductPromotionService.previewPromotion({
-      sellerId,
+      sellerId: getAuthRole(res) === "seller" ? getAuthSellerId(res) : getRequestedSellerId(req),
       productId: String(req.body?.productId || "").trim(),
       variantKey: String(req.body?.variantKey || "").trim(),
       scope: String(req.body?.scope || "interno").trim() as any,

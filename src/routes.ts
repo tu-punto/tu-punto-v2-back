@@ -24,6 +24,7 @@ import qr from "./routes/qr.routes";
 import notificationRouter from "./routes/notification.routes";
 import trackingRouter from "./routes/tracking.routes";
 import serviceAnnouncementRouter from "./routes/serviceAnnouncement.routes";
+import maintenanceModeRouter from "./routes/maintenanceMode.routes";
 import simplePackageRouter from "./routes/simplePackage.routes";
 import stockWithdrawalRouter from "./routes/stockWithdrawal.routes";
 import trackingFreezeRouter from "./routes/trackingFreeze.routes";
@@ -32,6 +33,8 @@ import attendanceRouter from "./routes/attendance.routes";
 import landingLeadRouter from "./routes/landingLead.routes";
 import productPromotionRouter from "./routes/productPromotion.routes";
 import inventoryAuditRouter from "./routes/inventoryAudit.routes";
+import userTourProgressRouter from "./routes/userTourProgress.routes";
+import actionTraceRouter from "./routes/actionTrace.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -74,7 +77,8 @@ router.use("/entry", requireAuth, requireRole("admin", "operator", "seller"), en
 router.use("/user", userRouter);
   router.use("/notification", notificationRouter);
   router.use("/tracking", trackingRouter);
-  router.use("/service-announcements", serviceAnnouncementRouter);
+router.use("/service-announcements", serviceAnnouncementRouter);
+router.use("/maintenance-mode", maintenanceModeRouter);
 router.use("/whats", requireAuth, requireRole("admin"), whatsRouter);
 router.use("/boxClose", requireAuth, requireRole("admin", "operator"), boxCloseRouter);
 router.use("/dailyEffective", requireAuth, requireRole("admin", "operator"), dailyEffectiveRouter);
@@ -84,6 +88,8 @@ router.use("/tracking-freeze", requireAuth, requireRole("superadmin"), trackingF
 router.use("/stock-withdrawals", requireAuth, stockWithdrawalRouter)
 router.use("/attendance", requireAuth, requireRole("admin", "operator"), attendanceRouter)
 router.use("/inventory-audit", requireAuth, requireRole("superadmin"), inventoryAuditRouter)
+router.use("/user-tour-progress", userTourProgressRouter)
+router.use("/action-traces", requireAuth, requireRole("superadmin"), actionTraceRouter)
 
 router.use("/qr", qr);
 

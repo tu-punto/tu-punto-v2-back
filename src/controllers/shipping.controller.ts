@@ -1,6 +1,38 @@
 import { Request, Response } from "express";
 import { ShippingService } from "../services/shipping.service";
 import { CatalogOrderIntegrationService } from "../services/catalogOrderIntegration.service";
+import { ActionTraceService } from "../services/actionTrace.service";
+import { getActionTraceActorFromResponse } from "../helpers/actionTrace";
+
+const traceAction = (
+  res: Response,
+  payload: {
+    actionType: string;
+    sourceModule: string;
+    sourceId?: string;
+    entityType?: string;
+    entityId?: string;
+    summary: string;
+    metadata?: Record<string, unknown>;
+  },
+  status: "success" | "failed" = "success",
+  error?: unknown
+) => {
+  if (status === "failed") {
+    void ActionTraceService.recordFailureFromError({
+      ...payload,
+      actor: getActionTraceActorFromResponse(res),
+      error,
+    });
+    return;
+  }
+
+  void ActionTraceService.recordActionTraceSafe({
+    ...payload,
+    actor: getActionTraceActorFromResponse(res),
+    status: "success",
+  });
+};
 
 export const getShipping = async (req: Request, res: Response) => {
   try {
@@ -147,12 +179,26 @@ export const registerShipping = async (req: Request, res: Response) => {
   const shipping = req.body;
   try {
     const newShipping = await ShippingService.registerShipping(shipping);
+    traceAction(res, {
+      actionType: "shipping.create",
+      sourceModule: "shipping.controller",
+      sourceId: String(newShipping?._id || newShipping?.id || ""),
+      entityType: "shipping",
+      entityId: String(newShipping?._id || newShipping?.id || ""),
+      summary: `Se registró una entrega ${String(newShipping?._id || "")}`,
+    });
     res.json({
       status: true,
       newShipping,
     });
   } catch (error) {
     console.error(error);
+    traceAction(res, {
+      actionType: "shipping.create",
+      sourceModule: "shipping.controller",
+      entityType: "shipping",
+      summary: "Falló el registro de entrega",
+    }, "failed", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -170,9 +216,26 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
         sellerId: String(auth?.sellerId || "").trim() || undefined,
       },
     });
+    traceAction(res, {
+      actionType: "shipping.attach_sales",
+      sourceModule: "shipping.controller",
+      sourceId: String(shippingId || ""),
+      entityType: "shipping",
+      entityId: String(shippingId || ""),
+      summary: `Se adjuntaron ventas al pedido ${String(shippingId || "")}`,
+      metadata: { count: Array.isArray(sales) ? sales.length : 0 },
+    });
     res.json(result);
   } catch (error) {
     console.error(error);
+    traceAction(res, {
+      actionType: "shipping.attach_sales",
+      sourceModule: "shipping.controller",
+      sourceId: String(shippingId || ""),
+      entityType: "shipping",
+      entityId: String(shippingId || ""),
+      summary: `Falló la asociación de ventas al pedido ${String(shippingId || "")}`,
+    }, "failed", error);
     res.status(500).json({ msg: "Shipping Internal Server Error", error });
   }
 };
@@ -207,10 +270,27 @@ const updateShipping = async (req: Request, res: Response) => {
       source: "manual",
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
     });
+    traceAction(res, {
+      actionType: "shipping.update",
+      sourceModule: "shipping.controller",
+      sourceId: String(id || ""),
+      entityType: "shipping",
+      entityId: String(id || ""),
+      summary: `Se actualizó la entrega ${String(id || "")}`,
+      metadata: { fields: Object.keys(newData || {}) },
+    });
     res.json({ success: true, shippingUpdated });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "Internal Server Error";
+    traceAction(res, {
+      actionType: "shipping.update",
+      sourceModule: "shipping.controller",
+      sourceId: String(id || ""),
+      entityType: "shipping",
+      entityId: String(id || ""),
+      summary: `Falló la actualización de la entrega ${String(id || "")}`,
+    }, "failed", error);
     res.status(400).json({ success: false, msg: message, message, error });
   }
 };
@@ -259,9 +339,25 @@ export const deleteShippingById = async (req: Request, res: Response) => {
       name: String(auth?.email || "").trim() || undefined,
       sellerId: String(auth?.sellerId || "").trim() || undefined,
     });
+    traceAction(res, {
+      actionType: "shipping.delete",
+      sourceModule: "shipping.controller",
+      sourceId: String(id || ""),
+      entityType: "shipping",
+      entityId: String(id || ""),
+      summary: `Se eliminó la entrega ${String(id || "")}`,
+    });
     res.json({ success: true });
   } catch (error) {
     console.error("❌ Error al eliminar el pedido:", error);
+    traceAction(res, {
+      actionType: "shipping.delete",
+      sourceModule: "shipping.controller",
+      sourceId: String(id || ""),
+      entityType: "shipping",
+      entityId: String(id || ""),
+      summary: `Falló la eliminación de la entrega ${String(id || "")}`,
+    }, "failed", error);
     res.status(500).json({ success: false, msg: "No se pudo eliminar el pedido" });
   }
 };
@@ -288,12 +384,30 @@ export const generateQRForShipping = async (req: Request, res: Response) => {
 
   try {
     const qrData = await ShippingService.generateShippingQR(id, forceRegenerate);
+    traceAction(res, {
+      actionType: "shipping.qr_generate",
+      sourceModule: "shipping.controller",
+      sourceId: String(id || ""),
+      entityType: "shipping",
+      entityId: String(id || ""),
+      summary: `Se generó el QR de la entrega ${String(id || "")}`,
+      metadata: { forceRegenerate },
+    });
     res.json({
       success: true,
       qrData
     });
   } catch (error) {
     console.error(error);
+    traceAction(res, {
+      actionType: "shipping.qr_generate",
+      sourceModule: "shipping.controller",
+      sourceId: String(id || ""),
+      entityType: "shipping",
+      entityId: String(id || ""),
+      summary: `Falló la generación del QR de la entrega ${String(id || "")}`,
+      metadata: { forceRegenerate },
+    }, "failed", error);
     res.status(500).json({ error: "Error al generar el QR" });
   }
 };
@@ -327,11 +441,25 @@ export const resolveShippingByQRPayload = async (req: Request, res: Response) =>
   try {
     const shipping = await ShippingService.resolveShippingByQRPayload(payload);
     if (!shipping) {
+      traceAction(res, {
+        actionType: "shipping.qr_resolve",
+        sourceModule: "shipping.controller",
+        summary: "No se encontró pedido para un QR",
+      }, "failed", new Error("shipping not found"));
       return res.status(404).json({
         success: false,
         message: "No se encontró pedido para ese QR"
       });
     }
+
+    traceAction(res, {
+      actionType: "shipping.qr_resolve",
+      sourceModule: "shipping.controller",
+      sourceId: String((shipping as any)?._id || (shipping as any)?.id || payload || ""),
+      entityType: "shipping",
+      entityId: String((shipping as any)?._id || (shipping as any)?.id || ""),
+      summary: "Se resolvió un QR de entrega",
+    });
 
     res.json({
       success: true,
@@ -339,6 +467,11 @@ export const resolveShippingByQRPayload = async (req: Request, res: Response) =>
     });
   } catch (error) {
     console.error(error);
+    traceAction(res, {
+      actionType: "shipping.qr_resolve",
+      sourceModule: "shipping.controller",
+      summary: "Falló la resolución de un QR de entrega",
+    }, "failed", error);
     res.status(500).json({
       success: false,
       message: "Error al resolver QR de envío",
@@ -369,6 +502,16 @@ export const transitionShippingStatusByQRController = async (req: Request, res: 
       note
     });
 
+    traceAction(res, {
+      actionType: "shipping.status_change",
+      sourceModule: "shipping.controller",
+      sourceId: String(shippingId || shippingCode || payload || ""),
+      entityType: "shipping",
+      entityId: String(shippingId || ""),
+      summary: "Se cambió el estado de una entrega",
+      metadata: { toStatus, note: note || null },
+    });
+
     res.json({
       success: true,
       result
@@ -376,6 +519,15 @@ export const transitionShippingStatusByQRController = async (req: Request, res: 
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "Error al cambiar estado por QR";
+    traceAction(res, {
+      actionType: "shipping.status_change",
+      sourceModule: "shipping.controller",
+      sourceId: String(shippingId || shippingCode || payload || ""),
+      entityType: "shipping",
+      entityId: String(shippingId || ""),
+      summary: "Falló el cambio de estado de una entrega",
+      metadata: { toStatus, note: note || null },
+    }, "failed", error);
     res.status(400).json({
       success: false,
       message,
@@ -422,9 +574,28 @@ export const markSellerWithdrawalController = async (req: Request, res: Response
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
     });
 
+    traceAction(res, {
+      actionType: "shipping.seller_withdrawal",
+      sourceModule: "shipping.controller",
+      summary: "Se marcó un retiro por vendedor",
+      metadata: {
+        shippingCount: Array.isArray(shippingIds) ? shippingIds.length : 0,
+        externalSaleCount: Array.isArray(externalSaleIds) ? externalSaleIds.length : 0,
+      },
+    });
+
     res.json(result);
   } catch (error: any) {
     console.error(error);
+    traceAction(res, {
+      actionType: "shipping.seller_withdrawal",
+      sourceModule: "shipping.controller",
+      summary: "Falló el marcado de retiro por vendedor",
+      metadata: {
+        shippingCount: Array.isArray(shippingIds) ? shippingIds.length : 0,
+        externalSaleCount: Array.isArray(externalSaleIds) ? externalSaleIds.length : 0,
+      },
+    }, "failed", error);
     res.status(500).json({
       success: false,
       message: error?.message || "Error al marcar retiro por vendedor",

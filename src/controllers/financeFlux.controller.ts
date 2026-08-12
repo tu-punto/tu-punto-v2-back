@@ -2,6 +2,38 @@ import { Request, Response } from "express";
 import { FinanceFluxService } from "../services/financeFlux.service";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VendedorModel } from "../entities/implements/VendedorSchema";
+import { ActionTraceService } from "../services/actionTrace.service";
+import { getActionTraceActorFromResponse } from "../helpers/actionTrace";
+
+const traceAction = (
+  res: Response,
+  payload: {
+    actionType: string;
+    sourceModule: string;
+    sourceId?: string;
+    entityType?: string;
+    entityId?: string;
+    summary: string;
+    metadata?: Record<string, unknown>;
+  },
+  status: "success" | "failed" = "success",
+  error?: unknown
+) => {
+  if (status === "failed") {
+    void ActionTraceService.recordFailureFromError({
+      ...payload,
+      actor: getActionTraceActorFromResponse(res),
+      error,
+    });
+    return;
+  }
+
+  void ActionTraceService.recordActionTraceSafe({
+    ...payload,
+    actor: getActionTraceActorFromResponse(res),
+    status: "success",
+  });
+};
 
 const parseStringList = (value: unknown) => {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
@@ -70,9 +102,27 @@ export const registerFinanceFlux = async (req: Request, res: Response) => {
       ...req.body,
       founder: await getAuthenticatedResponsibleName(res),
     };
-    const createdFlux = await FinanceFluxService.registerFinanceFlux(fluxPayload, req.file as Express.Multer.File | undefined);
+    const createdFlux: any = await FinanceFluxService.registerFinanceFlux(fluxPayload, req.file as Express.Multer.File | undefined);
+    traceAction(res, {
+      actionType: "finance_flux.create",
+      sourceModule: "financeFlux.controller",
+      sourceId: String(createdFlux?._id || createdFlux?.id || ""),
+      entityType: "finance_flux",
+      entityId: String(createdFlux?._id || createdFlux?.id || ""),
+      summary: `Se registró un flujo financiero ${String(createdFlux?._id || "")}`,
+      metadata: {
+        tipo: String(createdFlux?.tipo || fluxPayload?.tipo || ""),
+        monto: Number(createdFlux?.monto || fluxPayload?.monto || 0),
+      },
+    });
     res.json({ ok: true, createdFlux });
   } catch (err) {
+    traceAction(res, {
+      actionType: "finance_flux.create",
+      sourceModule: "financeFlux.controller",
+      entityType: "finance_flux",
+      summary: "Falló el registro de flujo financiero",
+    }, "failed", err);
     res.status(500).json({ msg: "Error registrando flujo", err });
   }
 };
@@ -81,8 +131,24 @@ export const payDebt = async (req: Request, res: Response) => {
   try {
     const fluxIdParam = req.params.id;
     await FinanceFluxService.payDebt(fluxIdParam);
+    traceAction(res, {
+      actionType: "finance_debt.pay",
+      sourceModule: "financeFlux.controller",
+      sourceId: String(fluxIdParam || ""),
+      entityType: "finance_flux",
+      entityId: String(fluxIdParam || ""),
+      summary: `Se pagó la deuda del flujo ${String(fluxIdParam || "")}`,
+    });
     res.json({ ok: true });
   } catch (err: any) {
+    traceAction(res, {
+      actionType: "finance_debt.pay",
+      sourceModule: "financeFlux.controller",
+      sourceId: String(req.params.id || ""),
+      entityType: "finance_flux",
+      entityId: String(req.params.id || ""),
+      summary: `Falló el pago de deuda del flujo ${String(req.params.id || "")}`,
+    }, "failed", err);
     res.status(400).json({ ok: false, error: err.message });
   }
 };
@@ -104,8 +170,25 @@ export const updateFinanceFlux = async (req: Request, res: Response) => {
     const updates = req.body;
 
     const updatedFlux = await FinanceFluxService.updateFinanceFlux(fluxId, updates, req.file as Express.Multer.File | undefined);
+    traceAction(res, {
+      actionType: "finance_flux.update",
+      sourceModule: "financeFlux.controller",
+      sourceId: String(fluxId || ""),
+      entityType: "finance_flux",
+      entityId: String(fluxId || ""),
+      summary: `Se actualizó un flujo financiero ${String(fluxId || "")}`,
+      metadata: { fields: Object.keys(updates || {}) },
+    });
     res.json({ ok: true, updatedFlux });
   } catch (err: any) {
+    traceAction(res, {
+      actionType: "finance_flux.update",
+      sourceModule: "financeFlux.controller",
+      sourceId: String(req.params.id || ""),
+      entityType: "finance_flux",
+      entityId: String(req.params.id || ""),
+      summary: `Falló la actualización del flujo ${String(req.params.id || "")}`,
+    }, "failed", err);
     res.status(400).json({ ok: false, error: err.message });
   }
 };
