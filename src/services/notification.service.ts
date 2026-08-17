@@ -53,6 +53,7 @@ type ShippingLike = {
   hora_entrega_acordada?: unknown;
   hora_entrega_real?: unknown;
   public_tracking_ready_for_pickup_at?: unknown;
+  public_tracking_ready_for_pickup_whatsapp_sent_at?: unknown;
   lugar_entrega?: unknown;
   buyer_tracking_code?: unknown;
   shipping_qr_code?: unknown;
@@ -516,7 +517,11 @@ const handleShippingStatusChange = async (params: {
       return;
     }
 
-    if (READY_FOR_PICKUP_STATUSES.has(toStatus) && params.after?.public_tracking_ready_for_pickup_at) {
+    if (
+      READY_FOR_PICKUP_STATUSES.has(toStatus) &&
+      params.after?.public_tracking_ready_for_pickup_at &&
+      !params.after?.public_tracking_ready_for_pickup_whatsapp_sent_at
+    ) {
       await sendBuyerPush({
         shippingId,
         trackingCode,

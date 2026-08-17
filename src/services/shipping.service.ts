@@ -22,6 +22,7 @@ import { ExternalSaleService } from "./external.service";
 import { OrderGuideService } from "./orderGuide.service";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
+import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { InventoryAuditActor } from "./inventoryAudit.service";
@@ -36,6 +37,7 @@ const READY_FOR_PICKUP_VISUAL_STATUS = "LISTO PARA RECOGER";
 const IN_TRANSIT_STATUS = "En camino";
 const INTERNAL_SALE_STATUS = "interno";
 const VISUAL_IN_TRANSIT_THRESHOLD_MINUTES = 30;
+const ALLOWED_DESTINATION_EDIT_ROLES = new Set(["admin", "operator", "superadmin"]);
 
 let cachedTemporaryCategoryId = "";
 
@@ -1374,6 +1376,7 @@ const updateShipping = async (
     source?: "qr" | "manual" | "system";
     changedBy?: string;
     note?: string;
+    actorRole?: string;
   }
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
@@ -1397,8 +1400,9 @@ const updateShipping = async (
       Object.prototype.hasOwnProperty.call(newData, "destino_sucursal")
     );
 
-  if (simplePackageDestinationEditRequested && !isSameBusinessDay((shipping as any)?.fecha_pedido)) {
-    throw new Error("Solo se puede cambiar la sucursal destino el mismo dia que se creo el pedido");
+  const actorRole = String(options?.actorRole || "").trim().toLowerCase();
+  if (simplePackageDestinationEditRequested && !ALLOWED_DESTINATION_EDIT_ROLES.has(actorRole)) {
+    throw new Error("No tienes permiso para cambiar la sucursal destino");
   }
 
   normalizeOrderPaymentData(newData, shipping);
@@ -1408,6 +1412,21 @@ const updateShipping = async (
       ? null
       : await resolveSimplePackageDestination(shipping)
     : null;
+
+  if (simplePackageDestinationEditRequested) {
+    const nextOriginBranchId = resolveOriginBranchId(shipping) || resolvePaymentBranchId(shipping);
+    const nextDestinationBranchId = resolveBranchId(newData?.destino_sucursal_id ?? newData?.destino_sucursal) || nextOriginBranchId;
+    const nextStatus = resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId);
+    const alreadyReady = String((shipping as any)?.estado_pedido || "") === READY_FOR_PICKUP_STATUS;
+    const existingReadyAt = (shipping as any)?.public_tracking_ready_for_pickup_at;
+    newData.estado_pedido = nextStatus;
+    newData.public_tracking_ready_for_pickup_at =
+      nextStatus === READY_FOR_PICKUP_STATUS
+        ? alreadyReady && existingReadyAt
+          ? existingReadyAt
+          : moment().tz("America/La_Paz").toDate()
+        : null;
+  }
 
   if (simplePackageDestination?.id) {
     newData.tipo_destino = "sucursal";
@@ -1550,13 +1569,21 @@ const updateShipping = async (
     );
   }
 
-  if (resShip && toStatus === READY_FOR_PICKUP_STATUS && toStatus !== fromStatus) {
-    void OrderGuideWhatsappService.sendPickupReadyMessage(resShip).catch((error) => {
+  if (resShip && toStatus === READY_FOR_PICKUP_STATUS && toStatus !== fromStatus && !(shipping as any)?.public_tracking_ready_for_pickup_whatsapp_sent_at) {
+    try {
+      await OrderGuideWhatsappService.sendPickupReadyMessage(resShip);
+      await ShippingRepository.updateShipping(
+        {
+          public_tracking_ready_for_pickup_whatsapp_sent_at: moment().tz("America/La_Paz").toDate(),
+        } as any,
+        shippingId
+      );
+    } catch (error) {
       console.error("[shipping-service] pickup-whatsapp:error", {
         shippingId,
-        error: error?.message || String(error),
+        error: (error as any)?.message || String(error),
       });
-    });
+    }
   }
 
   const simplePackageSourceId = String(

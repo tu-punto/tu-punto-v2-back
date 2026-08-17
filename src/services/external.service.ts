@@ -55,6 +55,8 @@ const roundCurrency = (value: number): number => +Number(value || 0).toFixed(2);
 const toObjectIdOrUndefined = (value?: string) =>
   value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : undefined;
 
+const ALLOWED_DESTINATION_EDIT_ROLES = new Set(["admin", "operator", "superadmin"]);
+
 const getOptionalNonNegativeAmount = (value: unknown): number | null => {
   if (value === undefined || value === null || String(value).trim() === "") return null;
   const parsed = roundCurrency(toNumber(value, NaN));
@@ -731,7 +733,7 @@ const annulExternalSaleByID = async (params: {
   return annulled;
 };
 
-const updateExternalSaleByID = async (id: string, externalSale: any) => {
+const updateExternalSaleByID = async (id: string, externalSale: any, options?: { actorRole?: string }) => {
   const existing = await ExternalSaleRepository.getExternalSaleByID(id);
   if (!existing) return null;
   if ((existing as any).anulado === true) {
@@ -752,6 +754,15 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const destinationEditRequested =
     Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal_id") ||
     Object.prototype.hasOwnProperty.call(externalSale, "destino_sucursal");
+  const originEditRequested =
+    Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal_id") ||
+    Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal");
+  const routeEditRequested = destinationEditRequested || originEditRequested;
+  const actorRole = String(options?.actorRole || "").trim().toLowerCase();
+
+  if (routeEditRequested && !ALLOWED_DESTINATION_EDIT_ROLES.has(actorRole)) {
+    throw new Error("No tienes permiso para cambiar la ruta de sucursal");
+  }
 
   if (serviceOrigin === "simple_package" && buyerNameEditRequested) {
     throw new Error("Por ahora no se puede editar el comprador de pedidos simples");
@@ -760,10 +771,6 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   if ((paymentEditRequested || buyerNameEditRequested) && !isSameBusinessDay(existing.fecha_pedido)) {
     throw new Error("Solo se puede editar el cobro o el comprador el mismo dia que se creo la entrega");
   }
-  if (destinationEditRequested && !isSameBusinessDay(existing.fecha_pedido)) {
-    throw new Error("Solo se puede cambiar la sucursal destino el mismo dia que se creo la entrega");
-  }
-
   const buyerName = toTrimmed(externalSale.comprador ?? existing.comprador);
   const buyerPhone = toTrimmed(externalSale.telefono_comprador ?? existing.telefono_comprador);
 
@@ -776,6 +783,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     externalSale.destino_sucursal_id ?? externalSale.destino_sucursal ?? existingDestinationBranchId ?? nextOriginBranchId
   );
   const shouldRecalculateRoutePricing =
+    routeEditRequested ||
     serviceOrigin === "external" &&
     (
       Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal_id") ||
@@ -792,6 +800,18 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   let price = toNumber(existing.precio_paquete ?? existing.precio_total, 0);
   let branchRoutePrice = roundCurrency(toNumber(existing.precio_entre_sucursal ?? existing.cargo_delivery, 0));
   let nextBranchRoute = null as Awaited<ReturnType<typeof resolveExternalBranchRoutePricing>> | null;
+  const nextStatus = routeEditRequested
+    ? resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId)
+    : normalizeOrderStatus(
+        externalSale.estado_pedido ?? existing.estado_pedido,
+        externalSale.delivered === true || existing.delivered === true
+      );
+  const nextReadyAt =
+    nextStatus === READY_FOR_PICKUP_STATUS
+      ? (routeEditRequested || !existing.public_tracking_ready_for_pickup_at
+          ? moment().tz("America/La_Paz").toDate()
+          : existing.public_tracking_ready_for_pickup_at)
+      : null;
 
   if (shouldRecalculateRoutePricing) {
     nextBranchRoute = await resolveExternalBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
@@ -838,7 +858,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     serviceOrigin === "simple_package" ? simplePackageFinancials.totalServicePrice : amountToCharge;
   const paid = normalizePaidStatus(externalSale.esta_pagado ?? existing.esta_pagado);
   const status = normalizeOrderStatus(
-    externalSale.estado_pedido ?? existing.estado_pedido,
+    nextStatus,
     externalSale.delivered === true || existing.delivered === true
   );
   const delivered = status === "Entregado";
@@ -944,6 +964,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
     late_pickup_fee: persistedLatePickupFee,
     is_external: true,
     service_origin: serviceOrigin,
+    public_tracking_ready_for_pickup_at: nextReadyAt,
   };
 
   if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
@@ -1020,13 +1041,18 @@ const updateExternalSaleByID = async (id: string, externalSale: any) => {
   const previousSellerAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
   const updated = await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
 
-  if (updated && status === READY_FOR_PICKUP_STATUS && status !== existing.estado_pedido) {
-    void OrderGuideWhatsappService.sendPickupReadyMessage(updated).catch((error) => {
+  if (updated && status === READY_FOR_PICKUP_STATUS && status !== existing.estado_pedido && !existing.public_tracking_ready_for_pickup_whatsapp_sent_at) {
+    try {
+      await OrderGuideWhatsappService.sendPickupReadyMessage(updated);
+      await ExternalSaleRepository.updateExternalSaleByID(id, {
+        public_tracking_ready_for_pickup_whatsapp_sent_at: moment().tz("America/La_Paz").toDate(),
+      } as any);
+    } catch (error) {
       console.error("[external-service] pickup-whatsapp:error", {
         externalSaleId: id,
-        error: error?.message || String(error),
+        error: (error as any)?.message || String(error),
       });
-    });
+    }
   }
 
   if (serviceOrigin === "external" && paymentEditRequested && updated) {

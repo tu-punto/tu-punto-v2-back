@@ -166,9 +166,11 @@ export const annulExternalSaleByID = async (req: Request, res: Response) => {
 export const updateExternalSaleByID = async (req: Request, res: Response) => {
     const { id } = req.params;
     const updateData = req.body;
+    const auth = res.locals.auth as { role?: string } | undefined;
+    const role = String(auth?.role || "").toLowerCase();
     
     try {
-        const updatedSale = await ExternalSaleService.updateExternalSaleByID(id, updateData);
+        const updatedSale = await ExternalSaleService.updateExternalSaleByID(id, updateData, { actorRole: role });
         
         if (!updatedSale) {
             return res.status(404).json({

@@ -269,6 +269,7 @@ const updateShipping = async (req: Request, res: Response) => {
       currentBranchId: currentBranchIdFromBody || auth?.sucursalId,
       source: "manual",
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
+      actorRole: role,
     });
     traceAction(res, {
       actionType: "shipping.update",

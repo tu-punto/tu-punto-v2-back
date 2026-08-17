@@ -197,6 +197,10 @@ const PedidoSchema = new Schema({
     type: Date,
     required: false,
   },
+  public_tracking_ready_for_pickup_whatsapp_sent_at: {
+    type: Date,
+    required: false,
+  },
   public_tracking_frozen: {
     type: Boolean,
     default: false,

@@ -284,6 +284,10 @@ const VentaExternaSchema = new Schema({
         type: Date,
         required: false,
     },
+    public_tracking_ready_for_pickup_whatsapp_sent_at: {
+        type: Date,
+        required: false,
+    },
     public_tracking_schedule_base_at: {
         type: Date,
         required: false,

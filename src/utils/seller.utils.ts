@@ -21,7 +21,6 @@ const isActiveBranchPayment = (payment: PagoSucursal) => payment?.activo !== fal
 export const calcSucursalSubtotal = (p: PagoSucursal): number =>
   (p.alquiler ?? 0) +
   (p.exhibicion ?? 0) +
-  (p.delivery ?? 0) +
   (p.entrega_simple ?? 0);
 
 export const calcSellerDebt = (sellerLike: {
@@ -41,7 +40,6 @@ export const calcPagoMensual = (seller: {
         tot +
         Number(p.alquiler ?? 0) +
         Number(p.exhibicion ?? 0) +
-        Number(p.delivery ?? 0) +
         Number(p.entrega_simple ?? 0),
       0
     );
