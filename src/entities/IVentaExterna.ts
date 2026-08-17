@@ -59,6 +59,8 @@ export interface IVentaExterna {
     qr_impreso_at?: Date;
     public_tracking_received_at?: Date;
     public_tracking_schedule_base_at?: Date;
+    public_tracking_ready_for_pickup_at?: Date;
+    public_tracking_ready_for_pickup_whatsapp_sent_at?: Date;
     public_tracking_frozen?: boolean;
     public_tracking_frozen_status?: string;
     public_tracking_frozen_at?: Date;
