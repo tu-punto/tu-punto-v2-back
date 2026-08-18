@@ -782,6 +782,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   const nextDestinationBranchId = toTrimmed(
     externalSale.destino_sucursal_id ?? externalSale.destino_sucursal ?? existingDestinationBranchId ?? nextOriginBranchId
   );
+  const explicitRequestedStatus = String(externalSale.estado_pedido ?? "").trim();
   const shouldRecalculateRoutePricing =
     routeEditRequested ||
     serviceOrigin === "external" &&
@@ -801,7 +802,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   let branchRoutePrice = roundCurrency(toNumber(existing.precio_entre_sucursal ?? existing.cargo_delivery, 0));
   let nextBranchRoute = null as Awaited<ReturnType<typeof resolveExternalBranchRoutePricing>> | null;
   const nextStatus = routeEditRequested
-    ? resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId)
+    ? explicitRequestedStatus || resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId)
     : normalizeOrderStatus(
         externalSale.estado_pedido ?? existing.estado_pedido,
         externalSale.delivered === true || existing.delivered === true
