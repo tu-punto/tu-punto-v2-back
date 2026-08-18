@@ -1405,6 +1405,7 @@ const updateShipping = async (
     throw new Error("No tienes permiso para cambiar la sucursal destino");
   }
 
+  const explicitRequestedStatus = normalizeStatusValue(newData?.estado_pedido);
   normalizeOrderPaymentData(newData, shipping);
   await normalizeShippingBranches(newData, shipping);
   const simplePackageDestination = isSimplePackageOrder
@@ -1416,7 +1417,8 @@ const updateShipping = async (
   if (simplePackageDestinationEditRequested) {
     const nextOriginBranchId = resolveOriginBranchId(shipping) || resolvePaymentBranchId(shipping);
     const nextDestinationBranchId = resolveBranchId(newData?.destino_sucursal_id ?? newData?.destino_sucursal) || nextOriginBranchId;
-    const nextStatus = resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId);
+    const recalculatedStatus = resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId);
+    const nextStatus = explicitRequestedStatus || recalculatedStatus;
     const alreadyReady = String((shipping as any)?.estado_pedido || "") === READY_FOR_PICKUP_STATUS;
     const existingReadyAt = (shipping as any)?.public_tracking_ready_for_pickup_at;
     newData.estado_pedido = nextStatus;
