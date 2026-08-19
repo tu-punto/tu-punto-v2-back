@@ -566,6 +566,7 @@ type ShippingDashboardParams = {
   sellerId?: string;
   client?: string;
   guide?: string;
+  externalSellerSearch?: string;
   destinationMode?: "any" | "branch" | "other";
   destinationQuery?: string;
 };
@@ -980,6 +981,21 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       },
     ];
     externalFilter.$and = [...(externalFilter.$and || []), { _id: { $in: [] } }];
+  }
+
+  const externalSellerSearch = normalizeTextValue(params.externalSellerSearch);
+  if (sellerId === "__EXTERNO__" && externalSellerSearch) {
+    const externalSellerRegex = new RegExp(escapeRegex(externalSellerSearch), "i");
+    externalFilter.$and = [
+      ...(externalFilter.$and || []),
+      {
+        $or: [
+          { vendedor: externalSellerRegex },
+          { telefono_vendedor: externalSellerRegex },
+          { carnet_vendedor: externalSellerRegex },
+        ],
+      },
+    ];
   }
 
   const [internalRowsLight, vendorOptionsInternalRowsLight, externalRowsLight] = await Promise.all([

@@ -96,6 +96,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
       ? String(auth?.sellerId || requestedSellerId || "").trim() || undefined
       : requestedSellerId;
     const client = (req.query.client as string | undefined) || undefined;
+    const externalSellerSearch = (req.query.externalSellerSearch as string | undefined) || undefined;
     const guide = (req.query.guide as string | undefined) || undefined;
     const destinationMode = (req.query.destinationMode as "any" | "branch" | "other" | undefined) || "any";
     const destinationQuery = (req.query.destinationQuery as string | undefined) || undefined;
@@ -120,6 +121,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
         sellerId,
         tab,
         category,
+        externalSellerSearch: externalSellerSearch || "",
         destinationMode,
         destinationQuery: destinationQuery || "",
         client: client || "",
@@ -141,6 +143,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
       ignoreBranchVisibility,
       sellerId,
       client,
+      externalSellerSearch,
       guide,
       destinationMode,
       destinationQuery,
