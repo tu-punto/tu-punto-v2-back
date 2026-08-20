@@ -36,7 +36,6 @@ const WAITING_RAW_STATUS = "En Espera";
 const READY_FOR_PICKUP_VISUAL_STATUS = "LISTO PARA RECOGER";
 const IN_TRANSIT_STATUS = "En camino";
 const INTERNAL_SALE_STATUS = "interno";
-const VISUAL_IN_TRANSIT_THRESHOLD_MINUTES = 30;
 const ALLOWED_DESTINATION_EDIT_ROLES = new Set(["admin", "operator", "superadmin"]);
 
 let cachedTemporaryCategoryId = "";
@@ -566,6 +565,7 @@ type ShippingDashboardParams = {
   sellerId?: string;
   client?: string;
   guide?: string;
+  externalSellerSearch?: string;
   destinationMode?: "any" | "branch" | "other";
   destinationQuery?: string;
 };
@@ -581,8 +581,6 @@ const resolveExternalOriginBranchId = (row: any) =>
 
 const resolveExternalDestinationBranchId = (row: any) =>
   normalizeTextValue(row?.destino_sucursal?._id || row?.destino_sucursal || row?.sucursal?._id || row?.sucursal);
-
-const isInternalSaleLike = (row: any) => normalizeStatusValue(row?.estado_pedido).toLowerCase() === INTERNAL_SALE_STATUS;
 
 const isSimplePackageLike = (row: any) =>
   Boolean(row?.simple_package_order || row?.simple_package_source_id || normalizeTextLower(row?.service_origin) === "simple_package");
@@ -601,35 +599,21 @@ const matchesDashboardCategory = (
   return !isPackage;
 };
 
-const isRegularInternalOrderLike = (row: any) => !isInternalSaleLike(row) && !isSimplePackageLike(row);
-
-const getScheduledMomentLike = (row: any) => {
-  const value = row?.hora_entrega_acordada;
-  if (!value) return null;
-  const parsed = moment.parseZone(value);
-  return parsed.isValid() ? parsed : null;
-};
-
-const shouldDisplayAsInTransitLike = (row: any, now: moment.Moment) => {
-  const status = normalizeStatusValue(row?.estado_pedido);
-  if (status === IN_TRANSIT_STATUS) return true;
-  if (status !== WAITING_RAW_STATUS) return false;
-  if (!isRegularInternalOrderLike(row)) return false;
-
-  const scheduledAt = getScheduledMomentLike(row);
-  if (!scheduledAt) return false;
-
-  return now.isSameOrAfter(scheduledAt.clone().subtract(VISUAL_IN_TRANSIT_THRESHOLD_MINUTES, "minutes"));
-};
-
 const matchesDestinationFilter = (row: any, params: ShippingDashboardParams, knownBranchNames: Set<string>) => {
   const mode = params.destinationMode || "any";
   const query = normalizeTextLower(params.destinationQuery);
   const destination = normalizeTextValue(row?.lugar_entrega);
   const normalizedDestination = normalizeTextLower(destination);
+  const destinationType = normalizeTextLower(row?.tipo_destino);
 
   if (mode === "any") return true;
   if (mode === "branch") {
+    if (!query) return true;
+    return normalizedDestination.includes(query);
+  }
+
+  if (destinationType === "sucursal") return false;
+  if (destinationType === "otro_lugar") {
     if (!query) return true;
     return normalizedDestination.includes(query);
   }
@@ -679,28 +663,30 @@ const classifyDashboardRow = (
         (originId === currentBranchId || destinationId === currentBranchId)
       );
   const interbranch = Boolean(originId && destinationId && originId !== destinationId);
-  const branchTransferManaged = isExternal || isSimplePackageLike(row);
+  const deliveryLike = isDeliveryLikeShipping(row);
+  const branchTransferManaged = interbranch && !deliveryLike;
   const pendingSend =
     !isAnnulled &&
     status === SEND_TO_BRANCH_STATUS &&
     branchTransferManaged &&
-    interbranch &&
     (ignoreBranchVisibility || originId === currentBranchId);
   const inTransit =
     !isAnnulled &&
     !pendingSend &&
-    ((status === IN_TRANSIT_STATUS &&
-      (ignoreBranchVisibility
-        ? true
-        : branchTransferManaged
+    status === IN_TRANSIT_STATUS &&
+    branchTransferManaged &&
+    (ignoreBranchVisibility
+      ? true
+      : currentBranchId
         ? destinationId === currentBranchId || originId === currentBranchId
-        : true)) ||
-      shouldDisplayAsInTransitLike(row, now));
+        : true);
   const ready =
     !isAnnulled &&
     !delivered &&
     !pendingSend &&
     !inTransit &&
+    !deliveryLike &&
+    !interbranch &&
     (status === WAITING_RAW_STATUS || status === READY_FOR_PICKUP_VISUAL_STATUS);
   const visibleInAll = !isAnnulled && !delivered && (ignoreBranchVisibility || related);
 
@@ -980,6 +966,21 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       },
     ];
     externalFilter.$and = [...(externalFilter.$and || []), { _id: { $in: [] } }];
+  }
+
+  const externalSellerSearch = normalizeTextValue(params.externalSellerSearch);
+  if (sellerId === "__EXTERNO__" && externalSellerSearch) {
+    const externalSellerRegex = new RegExp(escapeRegex(externalSellerSearch), "i");
+    externalFilter.$and = [
+      ...(externalFilter.$and || []),
+      {
+        $or: [
+          { vendedor: externalSellerRegex },
+          { telefono_vendedor: externalSellerRegex },
+          { carnet_vendedor: externalSellerRegex },
+        ],
+      },
+    ];
   }
 
   const [internalRowsLight, vendorOptionsInternalRowsLight, externalRowsLight] = await Promise.all([
