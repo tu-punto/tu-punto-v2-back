@@ -1,4 +1,6 @@
 import { ProductoModel } from '../entities/implements/ProductoSchema';
+import { VentaModel } from '../entities/implements/VentaSchema';
+import { StockWithdrawalRequestModel } from '../entities/implements/StockWithdrawalRequestSchema';
 import { IVentaDocument } from '../entities/documents/IVentaDocument';
 import { IProducto } from '../entities/IProducto';
 import { IProductoDocument } from '../entities/documents/IProductoDocument';
@@ -415,6 +417,7 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
 
   pipeline.push(
     { $unwind: { path: "$sucursales.combinaciones", preserveNullAndEmptyArrays: true } },
+    { $match: { "sucursales.combinaciones.hidden_for_sellers": { $ne: true } } },
     ...(inStock ? [{ $match: { "sucursales.combinaciones.stock": { $gt: 0 } } }] : []),
     {
       $lookup: {
@@ -532,7 +535,7 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
 
   const variantLabelExpression = {
     $reduce: {
-      input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+      input: { $objectToArray: { $ifNull: ["$sucursales.combinaciones.variantes", {}] } },
       initialValue: "",
       in: {
         $cond: [
@@ -559,6 +562,7 @@ const buildSellerProductInfoPipeline = (params: SellerProductInfoParams): any[] 
 
   pipeline.push(
     { $unwind: "$sucursales.combinaciones" },
+    { $match: { "sucursales.combinaciones.hidden_for_sellers": { $ne: true } } },
     {
       $addFields: {
         _variantLabel: variantLabelExpression,
@@ -792,7 +796,7 @@ const findSuperadminVariantInventoryPage = async (params: SuperadminVariantInven
 
   const variantLabelExpression = {
     $reduce: {
-      input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+      input: { $objectToArray: { $ifNull: ["$sucursales.combinaciones.variantes", {}] } },
       initialValue: "",
       in: {
         $cond: [
@@ -855,6 +859,7 @@ const findSuperadminVariantInventoryPage = async (params: SuperadminVariantInven
         variantLabel: { $first: "$_variantLabel" },
         displayName: { $first: "$_displayName" },
         variantAttributes: { $first: "$sucursales.combinaciones.variantes" },
+        price: { $first: "$sucursales.combinaciones.precio" },
         categoryId: { $first: "$id_categoria" },
         totalStock: { $sum: "$sucursales.combinaciones.stock" },
         branchStocks: {
@@ -911,6 +916,7 @@ const findSuperadminVariantInventoryPage = async (params: SuperadminVariantInven
     displayName: String(row.displayName || row.productName || ""),
     variantAttributes: normalizeVariantRecord(row.variantAttributes),
     categoryName: row.categoryName ? String(row.categoryName) : null,
+    price: Number(row.price || 0),
     totalStock: Number(row.totalStock || 0),
     branchStocks: Array.isArray(row.branchStocks)
       ? row.branchStocks.map((branch: any) => ({
@@ -943,7 +949,7 @@ const findSellerProductInfoStatusBySellerIds = async (
 
   const variantLabelExpression = {
     $reduce: {
-      input: { $objectToArray: "$sucursales.combinaciones.variantes" },
+      input: { $objectToArray: { $ifNull: ["$sucursales.combinaciones.variantes", {}] } },
       initialValue: "",
       in: {
         $cond: [
@@ -1438,6 +1444,210 @@ const deleteVariantForSuperadmin = async ({
   };
 };
 
+const deleteVariantForSeller = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+}) => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const targetBranches =
+    scope === "branch"
+      ? producto.sucursales.filter((item) => String(item.id_sucursal) === String(sucursalId || ""))
+      : producto.sucursales;
+
+  if (!targetBranches.length) {
+    throw new Error("No se encontró la sucursal objetivo");
+  }
+
+  const hideOnly = async () => {
+    let affectedCount = 0;
+    const affectedBranchIds = new Set<string>();
+
+    for (const branch of targetBranches) {
+      const combination = branch.combinaciones.find((item: any) => variantMatchesKey(String(producto._id), item, variantKey));
+      if (!combination) {
+        if (scope === "branch") {
+          throw new Error("La variante no existe en la sucursal seleccionada");
+        }
+        continue;
+      }
+
+      combination.hidden_for_sellers = true;
+      affectedCount += 1;
+      affectedBranchIds.add(String(branch.id_sucursal));
+    }
+
+    if (!affectedCount) {
+      throw new Error("No se encontró la variante solicitada");
+    }
+
+    producto.markModified("sucursales");
+    await producto.save();
+
+    return {
+      productId: String(producto._id),
+      hiddenProduct: false,
+      hiddenForSeller: true,
+      affectedBranchIds: Array.from(affectedBranchIds)
+    };
+  };
+
+  if (scope === "branch") {
+    return await hideOnly();
+  }
+
+  const references = await Promise.all([
+    VentaModel.countDocuments({ producto: producto._id, variantKey }).exec(),
+    StockWithdrawalRequestModel.countDocuments({
+      "items.product": producto._id,
+      "items.variantKey": variantKey,
+    }).exec(),
+  ]);
+  const referenceCount = references.reduce((sum, value) => sum + Number(value || 0), 0);
+
+  if (referenceCount > 0) {
+    return await hideOnly();
+  }
+
+  return await deleteVariantForSuperadmin({
+    productId,
+    sellerId,
+    variantKey,
+    scope: "all"
+  });
+};
+
+const duplicateVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  sourceVariantKey,
+  sucursalId,
+  scope,
+  variantAttributes,
+  price,
+  stock,
+}: {
+  productId: string;
+  sellerId: string;
+  sourceVariantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+  variantAttributes: Record<string, string>;
+  price?: number;
+  stock?: number;
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para duplicar solo una sucursal");
+  }
+
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const normalizedVariantAttributes = normalizeVariantRecord(variantAttributes);
+  const targetBranches =
+    scope === "branch"
+      ? producto.sucursales.filter((item) => String(item.id_sucursal) === String(sucursalId || ""))
+      : producto.sucursales;
+
+  if (!targetBranches.length) {
+    throw new Error("No se encontró la sucursal objetivo");
+  }
+
+  const nextVariantKey = createVariantKey(String(producto._id), normalizedVariantAttributes);
+  const duplicatedBranchIds = new Set<string>();
+  let duplicatedCount = 0;
+
+  for (const branch of targetBranches) {
+    const sourceCombination = branch.combinaciones.find((item: any) =>
+      variantMatchesKey(String(producto._id), item, sourceVariantKey)
+    );
+
+    if (!sourceCombination) {
+      if (scope === "branch") {
+        throw new Error("La variante de origen no existe en la sucursal seleccionada");
+      }
+      continue;
+    }
+
+    if (variantRecordsEqual(sourceCombination.variantes, normalizedVariantAttributes)) {
+      throw new Error("Debes cambiar al menos un atributo para duplicar la variante");
+    }
+
+    const hasDuplicate = branch.combinaciones.some((item: any) =>
+      variantMatchesKey(String(producto._id), item, nextVariantKey) ||
+      variantRecordsEqual(item.variantes, normalizedVariantAttributes)
+    );
+
+    if (hasDuplicate) {
+      throw new Error("Ya existe una variante con esos valores en una de las sucursales objetivo");
+    }
+
+    branch.combinaciones.push({
+      variantes: normalizedVariantAttributes,
+      variantKey: nextVariantKey,
+      precio: Number.isFinite(Number(price)) ? Number(price) : Number(sourceCombination.precio || 0),
+      stock: Number.isFinite(Number(stock)) ? Math.max(0, Math.floor(Number(stock))) : Number(sourceCombination.stock || 0),
+      hidden_for_sellers: false,
+      catalog_reservations: [],
+      imagenes: Array.isArray(sourceCombination.imagenes)
+        ? sourceCombination.imagenes.map((image: any) => ({
+            url: String(image?.url || ""),
+            key: image?.key ? String(image.key) : undefined,
+          }))
+        : [],
+      descripcion: sourceCombination.descripcion || "",
+      uso: sourceCombination.uso || "",
+      promocion: sourceCombination.promocion
+        ? {
+            titulo: sourceCombination.promocion.titulo,
+            descripcion: sourceCombination.promocion.descripcion,
+            fechaInicio: sourceCombination.promocion.fechaInicio,
+            fechaFin: sourceCombination.promocion.fechaFin,
+          }
+        : undefined,
+    });
+
+    duplicatedBranchIds.add(String(branch.id_sucursal));
+    duplicatedCount += 1;
+  }
+
+  if (!duplicatedCount) {
+    throw new Error("No se encontró la variante de origen");
+  }
+
+  producto.markModified("sucursales");
+  await producto.save();
+
+  return {
+    productId: String(producto._id),
+    sourceVariantKey,
+    variantKey: nextVariantKey,
+    duplicatedBranches: Array.from(duplicatedBranchIds),
+  };
+};
+
 export const ProductRepository = {
   findAll,
   findById,
@@ -1464,7 +1674,9 @@ export const ProductRepository = {
   findVariantImagesBySeller,
   updateVariantStockByBranchForSuperadmin,
   renameVariantForSuperadmin,
-  deleteVariantForSuperadmin
+  deleteVariantForSuperadmin,
+  deleteVariantForSeller,
+  duplicateVariantForSuperadmin
   
 };
 

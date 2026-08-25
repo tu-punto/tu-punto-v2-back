@@ -1128,6 +1128,80 @@ export const deleteVariantForSuperadmin = async (req: Request, res: Response) =>
   }
 };
 
+export const deleteVariantForSeller = async (req: Request, res: Response) => {
+  try {
+    const authUserId = String(res.locals.auth?.id || "").trim();
+    const sellerId = await resolveSellerIdByAuthUser(authUserId);
+    if (!sellerId) {
+      return res.status(403).json({
+        success: false,
+        message: "No autorizado para este vendedor"
+      });
+    }
+
+    const payload = req.body || {};
+    const result: any = await ProductService.deleteVariantForSeller({
+      productId: String(payload.productId || "").trim(),
+      sellerId,
+      variantKey: String(payload.variantKey || "").trim(),
+      sucursalId: String(payload.sucursalId || "").trim() || undefined,
+      scope: parseVariantScope(payload.scope)
+    });
+
+    const hiddenForSeller = result?.hiddenForSeller === true;
+    const deletedProduct = result?.deletedProduct === true;
+
+    return res.json({
+      success: true,
+      message: hiddenForSeller
+        ? (result?.affectedBranchIds?.length === 1
+            ? "Variante ocultada en la sucursal"
+            : "Variante ocultada en todas las sucursales")
+        : (deletedProduct
+            ? "Producto eliminado completamente porque no quedaron variantes"
+            : "Variante eliminada correctamente"),
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en deleteVariantForSeller:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al eliminar la variante"
+    });
+  }
+};
+
+export const duplicateVariantForSuperadmin = async (req: Request, res: Response) => {
+  try {
+    const payload = req.body || {};
+    const result = await ProductService.duplicateVariantForSuperadmin({
+      productId: String(payload.productId || "").trim(),
+      sellerId: String(payload.sellerId || "").trim(),
+      sourceVariantKey: String(payload.sourceVariantKey || payload.variantKey || "").trim(),
+      sucursalId: String(payload.sucursalId || "").trim() || undefined,
+      scope: parseVariantScope(payload.scope),
+      variantAttributes:
+        payload.variantAttributes && typeof payload.variantAttributes === "object" && !Array.isArray(payload.variantAttributes)
+          ? payload.variantAttributes
+          : {},
+      price: Number(payload.price),
+      stock: Number(payload.stock),
+    });
+
+    return res.json({
+      success: true,
+      message: "Variante duplicada correctamente",
+      result,
+    });
+  } catch (error: any) {
+    console.error("Error en duplicateVariantForSuperadmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Error al duplicar la variante",
+    });
+  }
+};
+
 export const updateVariantExtrasBySeller = async (req: Request, res: Response) => {
   try {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
@@ -1354,6 +1428,8 @@ export const ProductController = {
   updateVariantStockByBranchForSuperadmin,
   renameVariantForSuperadmin,
   deleteVariantForSuperadmin,
+  deleteVariantForSeller,
+  duplicateVariantForSuperadmin,
   getProductQR,
   regenerateProductQR,
   findProductByQR,

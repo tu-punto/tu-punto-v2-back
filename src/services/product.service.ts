@@ -1373,6 +1373,67 @@ const deleteVariantForSuperadmin = async ({
   });
 };
 
+const deleteVariantForSeller = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para eliminar solo una sucursal");
+  }
+
+  return await ProductRepository.deleteVariantForSeller({
+    productId,
+    sellerId,
+    variantKey,
+    sucursalId,
+    scope
+  });
+};
+
+const duplicateVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  sourceVariantKey,
+  sucursalId,
+  scope,
+  variantAttributes,
+  price,
+  stock,
+}: {
+  productId: string;
+  sellerId: string;
+  sourceVariantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+  variantAttributes: Record<string, string>;
+  price?: number;
+  stock?: number;
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para duplicar solo una sucursal");
+  }
+
+  return await ProductRepository.duplicateVariantForSuperadmin({
+    productId,
+    sellerId,
+    sourceVariantKey,
+    sucursalId,
+    scope,
+    variantAttributes,
+    price,
+    stock,
+  });
+};
+
 export const ProductService = {
   getAllProducts,
   registerProduct,
@@ -1402,6 +1463,8 @@ export const ProductService = {
   getSellerVariantImages,
   updateVariantStockByBranchForSuperadmin,
   renameVariantForSuperadmin,
-  deleteVariantForSuperadmin
+  deleteVariantForSuperadmin,
+  deleteVariantForSeller,
+  duplicateVariantForSuperadmin
 };
 

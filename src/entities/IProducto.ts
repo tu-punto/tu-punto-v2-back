@@ -19,8 +19,14 @@ export interface IPromocionVariante {
 export interface ICombinacion {
   variantes: Record<string, string>; // ejemplo: { "Color": "Rojo", "Talla": "L" }
   variantKey?: string;
+  hidden_for_sellers?: boolean;
   precio: number;
   stock: number;
+  catalog_reservations?: {
+    orderId: string;
+    quantity: number;
+    createdAt?: Date;
+  }[];
 
   imagenes?: IImagenVariante[]; 
   descripcion?: string;

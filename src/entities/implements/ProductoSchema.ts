@@ -12,6 +12,10 @@ const CombinacionSchema = new Schema({
     type: String,
     required: false
   },
+  hidden_for_sellers: {
+    type: Boolean,
+    default: false
+  },
   precio: { type: Number, required: true },
   stock: { type: Number, required: true },
   catalog_reservations: [
