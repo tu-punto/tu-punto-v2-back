@@ -522,6 +522,16 @@ const getSeller = async (sellerId: string) => {
     console.error(`Seller with id ${sellerId} not found`);
     return null;
   }
+  const sellerUser = seller?.user
+    ? await UserModel.findById(seller.user).select("last_login_at").lean()
+    : await UserModel.findOne({
+        $or: [
+          { vendedor: (seller as any)._id },
+          { email: (seller as any).mail },
+        ],
+      })
+        .select("last_login_at")
+        .lean();
   const sales = await SaleService.getRawSalesBySellerId(sellerId);
   const simplePackageSales = await SimplePackageService.getSellerAccountingSimplePackages(sellerId);
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
@@ -530,7 +540,13 @@ const getSeller = async (sellerId: string) => {
   const metrics_breakdown = buildSellerMetricsBreakdown(sales, simplePackageSales, debts as IFinanceFlux[]);
   const normalizedSeller = await normalizeSellerBranchesForInput(seller);
 
-  return { ...normalizedSeller, pago_mensual: calcPagoMensual(normalizedSeller), ...metrics, metrics_breakdown };
+  return {
+    ...normalizedSeller,
+    last_login_at: (sellerUser as any)?.last_login_at || null,
+    pago_mensual: calcPagoMensual(normalizedSeller),
+    ...metrics,
+    metrics_breakdown,
+  };
 };
 
 const buildInitialSellerPassword = (seller: any) => {
