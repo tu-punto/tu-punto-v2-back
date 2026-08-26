@@ -7,6 +7,7 @@ import {
   type JibbleSummaryDaily,
   type JibbleTimesheetSummary,
 } from "./jibble.service";
+import { includesNormalized } from "../utils/search";
 
 const TIMEZONE = String(process.env.ATTENDANCE_TIMEZONE || "America/La_Paz");
 const WEEKDAY_EXPECTED_MINUTES = Number(process.env.ATTENDANCE_WEEKDAY_EXPECTED_MINUTES || 9 * 60);
@@ -538,7 +539,7 @@ export const AttendanceService = {
 
     if (search) {
       filteredRows = filteredRows.filter((row) =>
-        [row.fullName, row.email, row.groupName, row.status].some((value) => toLower(value).includes(search))
+        [row.fullName, row.email, row.groupName, row.status].some((value) => includesNormalized(value, search))
       );
     }
 

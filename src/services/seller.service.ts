@@ -30,6 +30,7 @@ import { SimplePackageService } from "./simplePackage.service";
 import { uploadFileToAws } from "./bucket.service";
 import { hashPassword } from "../helpers/auth";
 import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
+import { includesNormalized } from "../utils/search";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -200,11 +201,8 @@ type SellerListFilters = {
 };
 
 const matchesSellerFullName = (sellerData: any, q?: string) => {
-  const normalizedQuery = String(q || "").trim().toLowerCase();
-  if (!normalizedQuery) return true;
-
   const fullName = `${sellerData?.nombre || ""} ${sellerData?.apellido || ""}`.trim().toLowerCase();
-  return fullName.includes(normalizedQuery);
+  return includesNormalized(fullName, q);
 };
 
 const getAllSellers = async (params?: SellerListFilters) => {

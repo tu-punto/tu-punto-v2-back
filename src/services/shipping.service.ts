@@ -1966,6 +1966,15 @@ const getDailySalesHistory = async (
     return true;
   });
 
+  const buildHistorySearchText = (...values: unknown[]) => {
+    const items = values
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(items)).join(" | ");
+  };
+
   const resumenPedidos = pedidosFiltrados.map(p => {
     const ventasNormales = (Array.isArray(p.venta) ? p.venta : []).filter((v: any) =>
       v && typeof v === 'object' &&
@@ -1992,6 +2001,11 @@ const getDailySalesHistory = async (
         ? Number((p as any)?.subtotal_qr || 0) + Number((p as any)?.subtotal_efectivo || 0)
         : montoBase;
 
+    const productosBusqueda = buildHistorySearchText(
+      ventasNormales.map((v: any) => v?.producto?.nombre_producto || v?.nombre_producto || v?.nombre_variante || v?.producto || v?.productNameSnapshot || v?.variantLabelSnapshot || ""),
+      ventasTemporales.map((v: any) => v?.producto || v?.nombre_producto || v?.nombre_variante || v?.productNameSnapshot || v?.variantLabelSnapshot || "")
+    );
+
     return {
       _id: p._id,
       fecha: getHistoryDate(p),
@@ -2000,7 +2014,8 @@ const getDailySalesHistory = async (
       monto_total: montoTotal,
       subtotal_efectivo: p.subtotal_efectivo || 0,
       subtotal_qr: p.subtotal_qr || 0,
-      esta_pagado: p.esta_pagado
+      esta_pagado: p.esta_pagado,
+      productos_busqueda: productosBusqueda,
     };
   });
 
@@ -2040,6 +2055,16 @@ const getDailySalesHistory = async (
           : true);
 
     if (shouldIncludeSellerPayment) {
+      const productosBusqueda = buildHistorySearchText(
+        sale?.productNameSnapshot,
+        sale?.variantLabelSnapshot,
+        sale?.title,
+        sale?.name,
+        Array.isArray(sale?.items)
+          ? sale.items.map((item: any) => item?.name || item?.productName || item?.variantLabel || item?.title || "")
+          : []
+      );
+
       rows.push({
         _id: `${sale._id}-seller-payment`,
         external_sale_id: sale._id,
@@ -2052,10 +2077,21 @@ const getDailySalesHistory = async (
         subtotal_qr: sellerPaymentTotals.subtotalQr,
         esta_pagado: sale.esta_pagado,
         is_external: true,
+        productos_busqueda: productosBusqueda,
       });
     }
 
     if (shouldIncludeBuyerPayment) {
+      const productosBusqueda = buildHistorySearchText(
+        sale?.productNameSnapshot,
+        sale?.variantLabelSnapshot,
+        sale?.title,
+        sale?.name,
+        Array.isArray(sale?.items)
+          ? sale.items.map((item: any) => item?.name || item?.productName || item?.variantLabel || item?.title || "")
+          : []
+      );
+
       rows.push({
         _id: `${sale._id}-buyer-payment`,
         external_sale_id: sale._id,
@@ -2068,6 +2104,7 @@ const getDailySalesHistory = async (
         subtotal_qr: paymentTotals.subtotalQr,
         esta_pagado: sale.esta_pagado,
         is_external: true,
+        productos_busqueda: productosBusqueda,
       });
     }
 
