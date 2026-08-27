@@ -1,9 +1,11 @@
 import { Router } from "express";
 import {
+  deletePendingBoxCloseOperationController,
   getBoxCloseByIdController,
   getBoxClosingsController,
   getPendingBoxCloseOperationsController,
   getBoxCloseSummaryController,
+  registerPendingBoxCloseOperationController,
   registerBranchTransferBoxCloseOperationController,
   registerBoxCloseController,
   updateBoxCloseController,
@@ -18,10 +20,12 @@ boxCloseRouter.get("/summary", requireRole("superadmin"), getBoxCloseSummaryCont
 boxCloseRouter.get("/pending-operations", getPendingBoxCloseOperationsController);
 
 boxCloseRouter.post("/register", registerBoxCloseController);
+boxCloseRouter.post("/pending-operation", registerPendingBoxCloseOperationController);
 boxCloseRouter.post("/branch-transfer-operation", registerBranchTransferBoxCloseOperationController);
 
 boxCloseRouter.get("/:id", getBoxCloseByIdController);
 
 boxCloseRouter.patch("/:id", updateBoxCloseController);
+boxCloseRouter.delete("/pending-operation/:sourceKey", deletePendingBoxCloseOperationController);
 
 export default boxCloseRouter;

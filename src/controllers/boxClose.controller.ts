@@ -128,3 +128,35 @@ export const registerBranchTransferBoxCloseOperationController = async (req: Req
   }
 };
 
+export const registerPendingBoxCloseOperationController = async (req: Request, res: Response) => {
+  try {
+    const result = await BoxCloseService.registerPendingBoxCloseOperation({
+      sourceKey: String(req.body?.sourceKey || "").trim(),
+      branchId: String(req.body?.branchId || "").trim(),
+      businessDate: String(req.body?.businessDate || "").trim(),
+      operation: req.body?.operation || {},
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error registrando operacion pendiente de cierre", error);
+    res.status(500).json({ success: false, message: "No se pudo registrar la operacion pendiente" });
+  }
+};
+
+export const deletePendingBoxCloseOperationController = async (req: Request, res: Response) => {
+  try {
+    const { sourceKey } = req.params;
+    const result = await BoxCloseService.deletePendingBoxCloseOperation(sourceKey);
+
+    if (!result.success) {
+      return res.status(404).json({ success: false, message: "Operacion pendiente no encontrada" });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error eliminando operacion pendiente de cierre", error);
+    res.status(500).json({ success: false, message: "No se pudo eliminar la operacion pendiente" });
+  }
+};
+
