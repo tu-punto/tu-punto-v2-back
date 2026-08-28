@@ -2005,6 +2005,21 @@ const getDailySalesHistory = async (
       ventasNormales.map((v: any) => v?.producto?.nombre_producto || v?.nombre_producto || v?.nombre_variante || v?.producto || v?.productNameSnapshot || v?.variantLabelSnapshot || ""),
       ventasTemporales.map((v: any) => v?.producto || v?.nombre_producto || v?.nombre_variante || v?.productNameSnapshot || v?.variantLabelSnapshot || "")
     );
+    const busquedaGlobal = buildHistorySearchText(
+      p?.cliente,
+      p?.telefono_cliente,
+      p?.carnet_cliente,
+      p?.numero_guia,
+      p?.lugar_entrega,
+      p?.estado_pedido,
+      p?.tipo_de_pago,
+      p?.sucursal?.nombre,
+      p?.sucursalName,
+      productosBusqueda,
+      montoTotal,
+      p?.subtotal_efectivo,
+      p?.subtotal_qr
+    );
 
     return {
       _id: p._id,
@@ -2016,6 +2031,7 @@ const getDailySalesHistory = async (
       subtotal_qr: p.subtotal_qr || 0,
       esta_pagado: p.esta_pagado,
       productos_busqueda: productosBusqueda,
+      busqueda_global: busquedaGlobal,
     };
   });
 
@@ -2063,6 +2079,21 @@ const getDailySalesHistory = async (
         Array.isArray(sale?.items)
           ? sale.items.map((item: any) => item?.name || item?.productName || item?.variantLabel || item?.title || "")
           : []
+        );
+      const busquedaGlobal = buildHistorySearchText(
+        sale?.comprador,
+        sale?.vendedor,
+        sale?.cliente,
+        sale?.productNameSnapshot,
+        sale?.variantLabelSnapshot,
+        sale?.title,
+        sale?.name,
+        sale?.estado_pedido,
+        sale?.tipo_de_pago,
+        sale?.origen_sucursal?.nombre,
+        sale?.destino_sucursal?.nombre,
+        productosBusqueda,
+        sellerPaymentTotals.montoTotal
       );
 
       rows.push({
@@ -2078,6 +2109,7 @@ const getDailySalesHistory = async (
         esta_pagado: sale.esta_pagado,
         is_external: true,
         productos_busqueda: productosBusqueda,
+        busqueda_global: busquedaGlobal,
       });
     }
 
@@ -2090,6 +2122,21 @@ const getDailySalesHistory = async (
         Array.isArray(sale?.items)
           ? sale.items.map((item: any) => item?.name || item?.productName || item?.variantLabel || item?.title || "")
           : []
+      );
+      const busquedaGlobal = buildHistorySearchText(
+        sale?.comprador,
+        sale?.vendedor,
+        sale?.cliente,
+        sale?.productNameSnapshot,
+        sale?.variantLabelSnapshot,
+        sale?.title,
+        sale?.name,
+        sale?.estado_pedido,
+        sale?.tipo_de_pago,
+        sale?.origen_sucursal?.nombre,
+        sale?.destino_sucursal?.nombre,
+        productosBusqueda,
+        buyerAmount
       );
 
       rows.push({
@@ -2105,6 +2152,7 @@ const getDailySalesHistory = async (
         esta_pagado: sale.esta_pagado,
         is_external: true,
         productos_busqueda: productosBusqueda,
+        busqueda_global: busquedaGlobal,
       });
     }
 
