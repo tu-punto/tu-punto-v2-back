@@ -47,6 +47,7 @@ export interface IVendedor {
     fecha_pago_asignada?: Date;
     declinacion_servicio_fecha?: Date;
     declinacion_servicio_fecha_limite_retiro?: Date;
+    declinacion_servicio_retiro_fecha?: Date;
     declinacion_servicio_origen?: "seller" | "admin";
     declinacion_servicio_motivo_principal?: string;
     declinacion_servicio_motivo_principal_otro?: string;

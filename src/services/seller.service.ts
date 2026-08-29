@@ -640,14 +640,36 @@ const updateSeller = async (id: string, data: any) => {
   if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
 
   const normalizedData = await normalizeSellerServiceValues(data.newData);
-  const previousBranches = vendedor.pago_sucursales || [];
-  const nextBranches = normalizedData.pago_sucursales || [];
+  const hasPickupField = Object.prototype.hasOwnProperty.call(
+    normalizedData,
+    "declinacion_servicio_retiro_realizado"
+  );
+  const updatePayload: any = { ...normalizedData };
 
-  if (normalizedData.pago_sucursales) {
+  if (hasPickupField) {
+    if (normalizedData.declinacion_servicio_retiro_realizado) {
+      updatePayload.declinacion_servicio_retiro_fecha =
+        normalizedData.declinacion_servicio_retiro_fecha || new Date();
+    } else {
+      delete updatePayload.declinacion_servicio_retiro_fecha;
+    }
+  }
+
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = updatePayload.pago_sucursales || [];
+
+  if (updatePayload.pago_sucursales) {
     await handleSucursalRemovals(id, previousBranches, nextBranches);
   }
 
-  const actualizado = await SellerRepository.updateSeller(id, normalizedData);
+  const actualizado = hasPickupField && !normalizedData.declinacion_servicio_retiro_realizado
+    ? await SellerRepository.updateSeller(id, {
+        $set: updatePayload,
+        $unset: {
+          declinacion_servicio_retiro_fecha: "",
+        },
+      } as any)
+    : await SellerRepository.updateSeller(id, updatePayload);
 
   const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
   if (nuevasSucursales.length > 0) {
@@ -852,6 +874,7 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
+      declinacion_servicio_retiro_fecha: "",
     },
   } as any);
 
@@ -1079,6 +1102,9 @@ const declineSellerService = async (
     declinacion_servicio_probabilidad_retorno: String(options?.probabilidad_retorno || "").trim() || undefined,
     declinacion_servicio_omitir_motivo_principal: options?.omitir_motivo_principal === true,
     declinacion_servicio_omitir_probabilidad_retorno: options?.omitir_probabilidad_retorno === true,
+    declinacion_servicio_retiro_realizado: false,
+    declinacion_servicio_retiro_observaciones: "",
+    declinacion_servicio_retiro_fecha: undefined,
   } as any);
 };
 
@@ -1094,12 +1120,15 @@ const cancelSellerServiceDecline = async (id: string) => {
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
+      declinacion_servicio_retiro_fecha: "",
       declinacion_servicio_origen: "",
       declinacion_servicio_motivo_principal: "",
       declinacion_servicio_motivo_principal_otro: "",
       declinacion_servicio_probabilidad_retorno: "",
       declinacion_servicio_omitir_motivo_principal: "",
       declinacion_servicio_omitir_probabilidad_retorno: "",
+      declinacion_servicio_retiro_realizado: "",
+      declinacion_servicio_retiro_observaciones: "",
     },
   } as any);
 };

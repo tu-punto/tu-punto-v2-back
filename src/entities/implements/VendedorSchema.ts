@@ -132,6 +132,9 @@ export const VendedorSchema = new Schema({
   declinacion_servicio_fecha_limite_retiro: {
     type: Date,
   },
+  declinacion_servicio_retiro_fecha: {
+    type: Date,
+  },
   declinacion_servicio_origen: {
     type: String,
     enum: ["seller", "admin"],
@@ -152,6 +155,13 @@ export const VendedorSchema = new Schema({
   declinacion_servicio_omitir_probabilidad_retorno: {
     type: Boolean,
     default: false,
+  },
+  declinacion_servicio_retiro_realizado: {
+    type: Boolean,
+    default: false,
+  },
+  declinacion_servicio_retiro_observaciones: {
+    type: String,
   },
   comprobante_entrada: [{
     type: Types.ObjectId,
