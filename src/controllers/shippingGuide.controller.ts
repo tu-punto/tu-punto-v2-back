@@ -66,6 +66,7 @@ export const uploadShipping = async (req: Request, res: Response) => {
             vendedor: new Types.ObjectId(vendedorId),
             sucursal: new Types.ObjectId(sucursalId),
             descripcion: req.body.descripcion,
+            observaciones: req.body.observaciones,
             fecha_subida: new Date(),
             lista_productos_keys: [],
         }
@@ -106,5 +107,20 @@ export const markAsDelivered = async (req: Request, res: Response) => {
     } catch (error) {
         console.log(error);
         res.status(500).json({ error: "Internal Server Error" })
+    }
+}
+
+export const updateObservations = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const observaciones = String(req.body?.observaciones || "");
+        const updatedShipping = await ShippingGuideService.updateObservations(id, observaciones);
+        res.json({
+            status: true,
+            updatedShipping
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 }

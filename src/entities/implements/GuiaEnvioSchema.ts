@@ -29,6 +29,10 @@ const GuiaEnvioSchema = new Schema({
         type: [String],
         default: []
     },
+    observaciones: {
+        type: String,
+        default: ''
+    },
     isRecogido: {
         type: Boolean,
         default: false

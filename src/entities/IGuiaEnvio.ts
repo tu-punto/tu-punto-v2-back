@@ -9,5 +9,6 @@ export interface IGuiaEnvio {
     fecha_subida: Date;
     imagen_key?: string;
     lista_productos_keys?: string[];
+    observaciones?: string;
     isRecogido?: boolean;
 }

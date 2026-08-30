@@ -1147,19 +1147,13 @@ export const deleteVariantForSeller = async (req: Request, res: Response) => {
       sucursalId: String(payload.sucursalId || "").trim() || undefined,
       scope: parseVariantScope(payload.scope)
     });
-
-    const hiddenForSeller = result?.hiddenForSeller === true;
     const deletedProduct = result?.deletedProduct === true;
 
     return res.json({
       success: true,
-      message: hiddenForSeller
-        ? (result?.affectedBranchIds?.length === 1
-            ? "Variante ocultada en la sucursal"
-            : "Variante ocultada en todas las sucursales")
-        : (deletedProduct
-            ? "Producto eliminado completamente porque no quedaron variantes"
-            : "Variante eliminada correctamente"),
+      message: deletedProduct
+        ? "Producto eliminado completamente porque no quedaron variantes"
+        : "Variante eliminada correctamente",
       result
     });
   } catch (error: any) {

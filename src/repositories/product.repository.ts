@@ -1533,6 +1533,46 @@ const deleteVariantForSeller = async ({
   });
 };
 
+const deleteVariantForSellerPhysical = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+}) => {
+  const producto = await ProductoModel.findOne({
+    _id: productId,
+    id_vendedor: sellerId
+  });
+
+  if (!producto) {
+    throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  const targetBranches =
+    scope === "branch"
+      ? producto.sucursales.filter((item) => String(item.id_sucursal) === String(sucursalId || ""))
+      : producto.sucursales;
+
+  if (!targetBranches.length) {
+    throw new Error("No se encontrÃ³ la sucursal objetivo");
+  }
+
+  return await deleteVariantForSuperadmin({
+    productId,
+    sellerId,
+    variantKey,
+    sucursalId,
+    scope
+  });
+};
+
 const duplicateVariantForSuperadmin = async ({
   productId,
   sellerId,
@@ -1675,7 +1715,7 @@ export const ProductRepository = {
   updateVariantStockByBranchForSuperadmin,
   renameVariantForSuperadmin,
   deleteVariantForSuperadmin,
-  deleteVariantForSeller,
+  deleteVariantForSeller: deleteVariantForSellerPhysical,
   duplicateVariantForSuperadmin
   
 };
