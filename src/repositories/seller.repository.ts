@@ -12,6 +12,7 @@ const VendedorModel = mongoose.model<IVendedorDocument>(
   "Vendedor",
   VendedorSchema
 );
+const SELLER_SETTLED_ORDER_STATUSES = ["Entregado", "interno"] as const;
 
 type SellerListQueryParams = {
   sellerId?: string;
@@ -123,6 +124,7 @@ const markSalesAsDeposited = async (sellerId: string): Promise<void> => {
           {
             $project: {
               estado_pedido: 1,
+              simple_package_order: 1,
             },
           },
         ],
@@ -130,7 +132,8 @@ const markSalesAsDeposited = async (sellerId: string): Promise<void> => {
     },
     {
       $match: {
-        "pedidoInfo.estado_pedido": { $ne: "En Espera" },
+        "pedidoInfo.estado_pedido": { $in: [...SELLER_SETTLED_ORDER_STATUSES] },
+        "pedidoInfo.simple_package_order": { $ne: true },
       },
     },
     {
@@ -298,7 +301,7 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
               service_origin: "simple_package",
               is_external: true,
               deposito_realizado: { $ne: true },
-              $or: [{ delivered: true }, { estado_pedido: "Entregado" }, { estado_pedido: "interno" }],
+              estado_pedido: { $in: [...SELLER_SETTLED_ORDER_STATUSES] },
             }
           },
           {
@@ -400,7 +403,7 @@ const buildSellerMetricsStages = () => [
             service_origin: "simple_package",
             is_external: true,
             deposito_realizado: { $ne: true },
-            $or: [{ delivered: true }, { estado_pedido: "Entregado" }, { estado_pedido: "interno" }],
+            estado_pedido: { $in: [...SELLER_SETTLED_ORDER_STATUSES] },
           },
         },
         {
