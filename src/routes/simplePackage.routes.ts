@@ -7,6 +7,7 @@ import {
   getSimplePackageEscalationStatus,
   getSimplePackagesList,
   getSellerAccountingSimplePackages,
+  getSellerHistorySimplePackages,
   getUploadedSimplePackageSellers,
   printSimplePackageGuidesController,
   registerSimplePackages,
@@ -22,6 +23,7 @@ const simplePackageRouter = Router();
 simplePackageRouter.get("/list", getSimplePackagesList);
 simplePackageRouter.get("/uploaded-sellers", getUploadedSimplePackageSellers);
 simplePackageRouter.get("/seller-accounting", getSellerAccountingSimplePackages);
+simplePackageRouter.get("/seller-history", getSellerHistorySimplePackages);
 simplePackageRouter.get("/branch-prices", getSimplePackageBranchPrices);
 simplePackageRouter.get("/escalation-config", getPackageEscalationConfig);
 simplePackageRouter.get("/escalation-status", getSimplePackageEscalationStatus);

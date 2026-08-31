@@ -235,6 +235,22 @@ const getSellerAccountingSimplePackages = async (sellerId: string) => {
     .lean();
 };
 
+const getSellerHistorySimplePackages = async (sellerId: string) => {
+  if (!Types.ObjectId.isValid(sellerId)) return [];
+
+  return await VentaExternaModel.find({
+    ...SIMPLE_PACKAGE_FILTER,
+    id_vendedor: new Types.ObjectId(sellerId),
+    is_external: true,
+    anulado: { $ne: true },
+    estado_pedido: { $ne: "En Espera" },
+  })
+    .sort({ fecha_pedido: -1, numero_paquete: 1 })
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" })
+    .lean();
+};
+
 const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => {
   if (!Types.ObjectId.isValid(sellerId)) return { modifiedCount: 0 };
 
@@ -299,5 +315,6 @@ export const SimplePackageRepository = {
   deleteSimplePackageByID,
   getUploadedSimplePackageSellers,
   getSellerAccountingSimplePackages,
+  getSellerHistorySimplePackages,
   markSellerAccountingSimplePackagesDeposited,
 };
