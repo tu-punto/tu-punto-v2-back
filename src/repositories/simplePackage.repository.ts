@@ -1,10 +1,21 @@
 import { Types } from "mongoose";
 import moment from "moment-timezone";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
 import { IVentaExterna } from "../entities/IVentaExterna";
 import { IVentaExternaDocument } from "../entities/documents/IVentaExternaDocument";
 
 const SIMPLE_PACKAGE_FILTER = { service_origin: "simple_package" };
+const SELLER_ACCOUNTING_ALLOWED_STATUSES = ["Entregado", "interno"] as const;
+
+const buildSellerAccountingSimplePackageMatch = (sellerId: string) => ({
+  ...SIMPLE_PACKAGE_FILTER,
+  id_vendedor: new Types.ObjectId(sellerId),
+  is_external: true,
+  deposito_realizado: { $ne: true },
+  estado_pedido: { $in: [...SELLER_ACCOUNTING_ALLOWED_STATUSES] },
+  saldo_por_paquete: { $gt: 0 },
+});
 
 const getSimplePackageByID = async (id: string): Promise<IVentaExternaDocument | null> => {
   if (!Types.ObjectId.isValid(id)) return null;
@@ -217,12 +228,22 @@ const getUploadedSimplePackageSellers = async (originBranchId?: string) => {
 const getSellerAccountingSimplePackages = async (sellerId: string) => {
   if (!Types.ObjectId.isValid(sellerId)) return [];
 
+  return await VentaExternaModel.find(buildSellerAccountingSimplePackageMatch(sellerId))
+    .sort({ fecha_pedido: -1, numero_paquete: 1 })
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" })
+    .lean();
+};
+
+const getSellerHistorySimplePackages = async (sellerId: string) => {
+  if (!Types.ObjectId.isValid(sellerId)) return [];
+
   return await VentaExternaModel.find({
     ...SIMPLE_PACKAGE_FILTER,
     id_vendedor: new Types.ObjectId(sellerId),
     is_external: true,
-    deposito_realizado: { $ne: true },
-    $or: [{ delivered: true }, { estado_pedido: "Entregado" }],
+    anulado: { $ne: true },
+    estado_pedido: { $in: [...SELLER_ACCOUNTING_ALLOWED_STATUSES] },
   })
     .sort({ fecha_pedido: -1, numero_paquete: 1 })
     .populate({ path: "origen_sucursal", select: "_id nombre" })
@@ -233,18 +254,53 @@ const getSellerAccountingSimplePackages = async (sellerId: string) => {
 const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => {
   if (!Types.ObjectId.isValid(sellerId)) return { modifiedCount: 0 };
 
-  return await VentaExternaModel.updateMany(
+  const rows = await VentaExternaModel.find(buildSellerAccountingSimplePackageMatch(sellerId))
+    .select("_id pedido_ref")
+    .lean();
+
+  if (!rows.length) {
+    return { modifiedCount: 0, orderModifiedCount: 0 };
+  }
+
+  const packageIds = rows
+    .map((row: any) => row?._id)
+    .filter(Boolean);
+  const orderIds = Array.from(
+    new Set(
+      rows
+        .map((row: any) => String(row?.pedido_ref || "").trim())
+        .filter((id) => Types.ObjectId.isValid(id))
+    )
+  ).map((id) => new Types.ObjectId(id));
+
+  const packageResult = await VentaExternaModel.updateMany(
     {
-      ...SIMPLE_PACKAGE_FILTER,
-      id_vendedor: new Types.ObjectId(sellerId),
-      is_external: true,
-      seller_balance_applied: true,
+      _id: { $in: packageIds },
       deposito_realizado: { $ne: true },
     },
     {
       $set: { deposito_realizado: true },
     }
   );
+
+  let orderModifiedCount = 0;
+  if (orderIds.length) {
+    const orderResult = await PedidoModel.updateMany(
+      {
+        _id: { $in: orderIds },
+        pagado_al_vendedor: { $ne: true },
+      },
+      {
+        $set: { pagado_al_vendedor: true },
+      }
+    );
+    orderModifiedCount = orderResult.modifiedCount || 0;
+  }
+
+  return {
+    modifiedCount: packageResult.modifiedCount || 0,
+    orderModifiedCount,
+  };
 };
 
 const getSellerPaymentAuditSimplePackages = async (params?: {
@@ -324,6 +380,7 @@ export const SimplePackageRepository = {
   deleteSimplePackageByID,
   getUploadedSimplePackageSellers,
   getSellerAccountingSimplePackages,
+  getSellerHistorySimplePackages,
   markSellerAccountingSimplePackagesDeposited,
   getSellerPaymentAuditSimplePackages,
 };

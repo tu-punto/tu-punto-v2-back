@@ -637,6 +637,10 @@ const getSellerAccountingSimplePackages = async (sellerId: string) => {
   }));
 };
 
+const getSellerHistorySimplePackages = async (sellerId: string) => {
+  return await SimplePackageRepository.getSellerHistorySimplePackages(sellerId);
+};
+
 const getSimplePackageBranchPrices = async (originBranchId?: string) => {
   return await SimplePackageBranchPriceRepository.listBranchPrices(originBranchId);
 };
@@ -1199,4 +1203,5 @@ export const SimplePackageService = {
   markSellerAccountingSimplePackagesDeposited,
   getSellerPaymentAuditSimplePackagesReport,
   generateSellerPaymentAuditSimplePackagesWorkbook,
+  getSellerHistorySimplePackages,
 };

@@ -222,6 +222,29 @@ export const getSellerPaymentAuditSimplePackagesReport = async (req: Request, re
   }
 };
 
+export const getSellerHistorySimplePackages = async (req: Request, res: Response) => {
+  try {
+    const actor = resolveActor(res);
+    const targetSellerId =
+      actor.role === "seller"
+        ? actor.sellerId
+        : String(req.query.sellerId || req.params.sellerId || "").trim();
+
+    if (!targetSellerId) {
+      return res.json({ success: true, rows: [] });
+    }
+
+    const rows = await SimplePackageService.getSellerHistorySimplePackages(targetSellerId);
+    return res.json({ success: true, rows });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "No se pudo obtener el historial de paquetes simples",
+    });
+  }
+};
+
 export const updateSimplePackageByID = async (req: Request, res: Response) => {
   try {
     const actor = resolveActor(res);
