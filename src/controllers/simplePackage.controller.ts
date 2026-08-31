@@ -160,6 +160,68 @@ export const getSellerAccountingSimplePackages = async (req: Request, res: Respo
   }
 };
 
+export const getSellerPaymentAuditSimplePackagesReport = async (req: Request, res: Response) => {
+  try {
+    const sellerId = String(req.query.sellerId || "").trim() || undefined;
+    const fromRaw = String(req.query.from || "").trim();
+    const toRaw = String(req.query.to || "").trim();
+    const includeResolved =
+      String(req.query.includeResolved || "").trim().toLowerCase() === "true";
+    const format = String(req.query.format || "").trim().toLowerCase();
+
+    const from = fromRaw ? new Date(fromRaw) : undefined;
+    const to = toRaw ? new Date(toRaw) : undefined;
+
+    if (from && Number.isNaN(from.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "El parametro from no es una fecha valida",
+      });
+    }
+
+    if (to && Number.isNaN(to.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "El parametro to no es una fecha valida",
+      });
+    }
+
+    if (format === "xlsx" || format === "excel") {
+      const result = await SimplePackageService.generateSellerPaymentAuditSimplePackagesWorkbook({
+        sellerId,
+        from,
+        to,
+        includeResolved,
+      });
+
+      res.set({
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      });
+
+      return res.send(result.buffer);
+    }
+
+    const report = await SimplePackageService.getSellerPaymentAuditSimplePackagesReport({
+      sellerId,
+      from,
+      to,
+      includeResolved,
+    });
+
+    return res.json({
+      success: true,
+      ...report,
+    });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "No se pudo generar el reporte de auditoria de pagos",
+    });
+  }
+};
+
 export const updateSimplePackageByID = async (req: Request, res: Response) => {
   try {
     const actor = resolveActor(res);

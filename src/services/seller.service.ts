@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import { SellerRepository } from "../repositories/seller.repository";
 import { ProductRepository } from "../repositories/product.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
@@ -25,6 +26,7 @@ import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 import { FinanceFluxService } from "./financeFlux.service";
 import { IFinanceFlux } from "../entities/IFinanceFlux";
 import { PaymentProofService } from "./paymentProof.service";
+import { PaymentProofRepository } from "../repositories/paymentProof.repository";
 import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 import { SimplePackageService } from "./simplePackage.service";
 import { uploadFileToAws } from "./bucket.service";
@@ -1373,6 +1375,190 @@ const getSellerPaymentProofs = async (sellerId: string) => {
   }
 };
 
+const getSimplePackageClientsList = async () => {
+  const sellers = await SellerRepository.findSimplePackageClients();
+
+  return await Promise.all(
+    (sellers || []).map(async (seller: any) => {
+      const branches = Array.isArray(seller?.pago_sucursales)
+        ? await resolveSellerBranches(seller.pago_sucursales)
+        : [];
+      const simplePackageBranches = branches.filter(
+        (branch: any) => Number(branch?.entrega_simple ?? 0) > 0
+      );
+
+      return {
+        sellerId: String(seller?._id || ""),
+        sellerName: `${String(seller?.nombre || "").trim()} ${String(seller?.apellido || "").trim()}`.trim(),
+        sellerBrand: String(seller?.marca || "").trim(),
+        sellerDisplayName:
+          [String(seller?.marca || "").trim(), `${String(seller?.nombre || "").trim()} ${String(seller?.apellido || "").trim()}`.trim()]
+            .filter(Boolean)
+            .join(" - ") || "Vendedor",
+        phone: String(seller?.telefono || "").trim(),
+        email: String(seller?.mail || "").trim(),
+        fechaVigencia: seller?.fecha_vigencia || null,
+        fechaSolicitudPago: seller?.fecha_solicitud_pago || null,
+        fechaPagoAsignada: seller?.fecha_pago_asignada || null,
+        saldoPendiente: Number(seller?.saldo_pendiente || 0),
+        deuda: Number(seller?.deuda || 0),
+        emiteFactura: seller?.emite_factura === true,
+        simplePackageBranchCount: simplePackageBranches.length,
+        totalEntregaSimple: Number(
+          simplePackageBranches.reduce(
+            (sum: number, branch: any) => sum + Number(branch?.entrega_simple || 0),
+            0
+          ).toFixed(2)
+        ),
+        branches: simplePackageBranches.map((branch: any) => ({
+          branchId: String(branch?.id_sucursal || ""),
+          branchName: String(branch?.sucursalName || "Sucursal"),
+          entregaSimple: Number(branch?.entrega_simple || 0),
+          activo: branch?.activo !== false,
+          fechaIngreso: branch?.fecha_ingreso || null,
+          fechaSalida: branch?.fecha_salida || null,
+          comentario: String(branch?.comentario || "").trim(),
+        })),
+      };
+    })
+  );
+};
+
+const getPaymentRequestClientsSinceJuly2026 = async () => {
+  const from = moment.tz("2026-07-01 00:00:00", PAYMENT_TZ).toDate();
+  const to = moment.tz(PAYMENT_TZ).endOf("day").toDate();
+  const proofs = await PaymentProofRepository.findByDateRange({ from, to });
+  const grouped = new Map<
+    string,
+    {
+      sellerId: string;
+      sellerName: string;
+      proofCount: number;
+      proofs: Array<{
+        paymentProofId: string;
+        fechaEmision: Date | null;
+        fecha: string;
+        hora: string;
+        metodoPago: string;
+        pdfUrl: string;
+      }>;
+    }
+  >();
+
+  for (const proof of proofs || []) {
+    const sellerData: any = proof?.vendedor || {};
+    const sellerId = String(sellerData?._id || proof?.vendedor || "").trim();
+    const sellerName = `${String(sellerData?.nombre || "").trim()} ${String(sellerData?.apellido || "").trim()}`.trim() || "Vendedor";
+    const issuedAt = (proof as any)?.fecha_emision || (proof as any)?.createdAt || null;
+    const current = grouped.get(sellerId) || {
+      sellerId,
+      sellerName,
+      proofCount: 0,
+      proofs: [],
+    };
+
+    current.proofCount += 1;
+    current.proofs.push({
+      paymentProofId: String((proof as any)?._id || "").trim(),
+      fechaEmision: issuedAt,
+      fecha: issuedAt ? moment.tz(issuedAt, PAYMENT_TZ).format("YYYY-MM-DD") : "",
+      hora: issuedAt ? moment.tz(issuedAt, PAYMENT_TZ).format("HH:mm:ss") : "",
+      metodoPago: String((proof as any)?.metodo_pago || "").trim() || "No registrado",
+      pdfUrl: String((proof as any)?.comprobante_entrada_pdf || "").trim(),
+    });
+    grouped.set(sellerId, current);
+  }
+
+  const summaryRows = Array.from(grouped.values())
+    .map((item) => ({
+      sellerId: item.sellerId,
+      sellerName: item.sellerName,
+      proofCount: item.proofCount,
+    }))
+    .sort((a, b) => b.proofCount - a.proofCount || a.sellerName.localeCompare(b.sellerName, "es"));
+
+  const detailRows = Array.from(grouped.values())
+    .flatMap((item) =>
+      item.proofs.map((proof, index) => ({
+        sellerId: item.sellerId,
+        sellerName: item.sellerName,
+        proofCountForSeller: item.proofCount,
+        proofSequenceForSeller: index + 1,
+        paymentProofId: proof.paymentProofId,
+        fechaEmision: proof.fechaEmision,
+        fecha: proof.fecha,
+        hora: proof.hora,
+        metodoPago: proof.metodoPago,
+        pdfUrl: proof.pdfUrl,
+      }))
+    )
+    .sort((a, b) => {
+      const sellerCompare = a.sellerName.localeCompare(b.sellerName, "es");
+      if (sellerCompare !== 0) return sellerCompare;
+      return String(a.fechaEmision || "").localeCompare(String(b.fechaEmision || ""));
+    });
+
+  return {
+    source: "payment_proofs",
+    dateRange: {
+      from: "2026-07-01",
+      to: moment.tz(PAYMENT_TZ).format("YYYY-MM-DD"),
+    },
+    totalSellers: summaryRows.length,
+    totalProofs: detailRows.length,
+    summaryRows,
+    detailRows,
+  };
+};
+
+const generatePaymentRequestClientsSinceJuly2026Workbook = async () => {
+  const report = await getPaymentRequestClientsSinceJuly2026();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Codex";
+  workbook.created = new Date();
+
+  const summarySheet = workbook.addWorksheet("Resumen");
+  summarySheet.columns = [
+    { header: "sellerId", key: "sellerId", width: 28 },
+    { header: "sellerName", key: "sellerName", width: 36 },
+    { header: "proofCount", key: "proofCount", width: 16 },
+  ];
+  summarySheet.addRows(report.summaryRows);
+  summarySheet.getRow(1).font = { bold: true };
+  summarySheet.views = [{ state: "frozen", ySplit: 1 }];
+  summarySheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, report.summaryRows.length + 1), column: summarySheet.columns.length },
+  };
+
+  const detailSheet = workbook.addWorksheet("Detalle");
+  detailSheet.columns = [
+    { header: "sellerId", key: "sellerId", width: 28 },
+    { header: "sellerName", key: "sellerName", width: 36 },
+    { header: "proofCountForSeller", key: "proofCountForSeller", width: 18 },
+    { header: "proofSequenceForSeller", key: "proofSequenceForSeller", width: 18 },
+    { header: "paymentProofId", key: "paymentProofId", width: 28 },
+    { header: "fecha", key: "fecha", width: 14 },
+    { header: "hora", key: "hora", width: 12 },
+    { header: "metodoPago", key: "metodoPago", width: 16 },
+    { header: "pdfUrl", key: "pdfUrl", width: 80 },
+  ];
+  detailSheet.addRows(report.detailRows);
+  detailSheet.getRow(1).font = { bold: true };
+  detailSheet.views = [{ state: "frozen", ySplit: 1 }];
+  detailSheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, report.detailRows.length + 1), column: detailSheet.columns.length },
+  };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return {
+    buffer: Buffer.from(buffer as ArrayBuffer),
+    filename: `seller_payment_proofs_since_2026-07-01_${report.dateRange.to}.xlsx`,
+    report,
+  };
+};
+
 const getSellerDashboard = async (sellerId: string, options?: { months?: number; sucursalIds?: string[] }) => {
   const seller = await SellerRepository.findById(sellerId);
   if (!seller) {
@@ -1656,5 +1842,8 @@ export const SellerService = {
   getRenewalMonthlyPaymentSummary,
   getClientsStatusList,
   getSellerPaymentProofs,
+  getSimplePackageClientsList,
+  getPaymentRequestClientsSinceJuly2026,
+  generatePaymentRequestClientsSinceJuly2026Workbook,
   getSellerDashboard,
 };

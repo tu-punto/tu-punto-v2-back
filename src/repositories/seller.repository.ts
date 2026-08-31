@@ -591,6 +591,61 @@ const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
   };
 };
 
+const findSimplePackageClients = async () => {
+  return await VendedorModel.find(
+    {
+      "pago_sucursales.entrega_simple": { $gt: 0 },
+    },
+    {
+      nombre: 1,
+      apellido: 1,
+      marca: 1,
+      telefono: 1,
+      mail: 1,
+      fecha_vigencia: 1,
+      fecha_solicitud_pago: 1,
+      fecha_pago_asignada: 1,
+      pago_sucursales: 1,
+      saldo_pendiente: 1,
+      deuda: 1,
+      emite_factura: 1,
+    }
+  )
+    .lean<IVendedor[]>()
+    .exec();
+};
+
+const findPaymentRequestClientsByDateRange = async (params: {
+  from: Date;
+  to: Date;
+}) => {
+  return await VendedorModel.find(
+    {
+      fecha_solicitud_pago: {
+        $gte: params.from,
+        $lte: params.to,
+      },
+    },
+    {
+      nombre: 1,
+      apellido: 1,
+      marca: 1,
+      telefono: 1,
+      mail: 1,
+      fecha_vigencia: 1,
+      fecha_solicitud_pago: 1,
+      fecha_pago_asignada: 1,
+      pago_sucursales: 1,
+      saldo_pendiente: 1,
+      deuda: 1,
+      emite_factura: 1,
+      qr_pago_url: 1,
+    }
+  )
+    .lean<IVendedor[]>()
+    .exec();
+};
+
 export const SellerRepository = {
   findAll,
   findAllBasic,
@@ -617,4 +672,6 @@ export const SellerRepository = {
   markSalesAsDeposited,
   findWithDebtsAndSales,
   findWithDebtsAndSalesPage,
+  findSimplePackageClients,
+  findPaymentRequestClientsByDateRange,
 };

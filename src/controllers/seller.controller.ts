@@ -427,3 +427,49 @@ export const getSellerPaymentProofs = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const getSimplePackageClientsList = async (_req: Request, res: Response) => {
+  try {
+    const rows = await SellerService.getSimplePackageClientsList();
+    res.json({
+      success: true,
+      total: rows.length,
+      rows,
+    });
+  } catch (err) {
+    console.error("Error obteniendo clientes con entregas simples:", err);
+    res.status(500).json({
+      success: false,
+      msg: "Error obteniendo clientes con entregas simples",
+      err,
+    });
+  }
+};
+
+export const getPaymentRequestClientsSinceJuly2026 = async (_req: Request, res: Response) => {
+  try {
+    const format = String(_req.query.format || "").trim().toLowerCase();
+
+    if (format === "xlsx" || format === "excel") {
+      const result = await SellerService.generatePaymentRequestClientsSinceJuly2026Workbook();
+      res.set({
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      });
+      return res.send(result.buffer);
+    }
+
+    const report = await SellerService.getPaymentRequestClientsSinceJuly2026();
+    res.json({
+      success: true,
+      ...report,
+    });
+  } catch (err) {
+    console.error("Error obteniendo clientes que solicitaron pago desde julio 2026:", err);
+    res.status(500).json({
+      success: false,
+      msg: "Error obteniendo clientes que solicitaron pago desde julio 2026",
+      err,
+    });
+  }
+};

@@ -7,6 +7,8 @@ const sellerRouter = Router();
 
 sellerRouter.get('/summary/services', requireRole("admin"), SellerController.getServicesSummary);
 sellerRouter.get('/clients/status', requireRole("admin"), SellerController.getClientsStatusList);
+sellerRouter.get('/clients/simple-package', requireRole("admin", "operator", "superadmin"), SellerController.getSimplePackageClientsList);
+sellerRouter.get('/clients/payment-requests-since-july-2026', requireRole("admin", "operator", "superadmin"), SellerController.getPaymentRequestClientsSinceJuly2026);
 sellerRouter.get('/basic', requireRole("admin", "operator", "seller"), SellerController.getSellersBasic);
 sellerRouter.get('/', requireRole("admin", "operator", "seller"), SellerController.getSellers);
 sellerRouter.post('/register', requireRole("admin"), SellerController.registerSeller);
