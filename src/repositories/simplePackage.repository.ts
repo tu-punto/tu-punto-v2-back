@@ -243,7 +243,7 @@ const getSellerHistorySimplePackages = async (sellerId: string) => {
     id_vendedor: new Types.ObjectId(sellerId),
     is_external: true,
     anulado: { $ne: true },
-    estado_pedido: { $ne: "En Espera" },
+    estado_pedido: { $in: [...SELLER_ACCOUNTING_ALLOWED_STATUSES] },
   })
     .sort({ fecha_pedido: -1, numero_paquete: 1 })
     .populate({ path: "origen_sucursal", select: "_id nombre" })
