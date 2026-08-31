@@ -85,6 +85,8 @@ const resolveSellerBranches = async (
         sucursalName: isMeaningfulText(branch?.sucursalName) ? String(branch?.sucursalName).trim() : "Sucursal",
         alquiler: toNumber(branch?.alquiler),
         exhibicion: toNumber(branch?.exhibicion),
+        comision_porcentual: toNumber(branch?.comision_porcentual),
+        comision_fija: toNumber(branch?.comision_fija),
         delivery: 0,
         entrega_simple: toNumber(branch?.entrega_simple),
         activo: branch?.activo !== false,
@@ -102,9 +104,31 @@ const resolveSellerBranches = async (
       sucursalName: resolvedName,
       alquiler: toNumber(branch?.alquiler),
       exhibicion: toNumber(branch?.exhibicion),
+      comision_porcentual: toNumber(branch?.comision_porcentual),
+      comision_fija: toNumber(branch?.comision_fija),
       delivery: 0,
       entrega_simple: toNumber(branch?.entrega_simple),
       activo: branch?.activo !== false,
+    };
+  });
+};
+
+const applyBranchExitOnRenewal = (branches: any[] = [], finalVigencia?: Date) => {
+  const today = dayjs().endOf("day");
+  return branches.map((branch) => {
+    const exitDate = branch?.fecha_salida ? dayjs(branch.fecha_salida).endOf("day") : null;
+    if (!today.isValid() || !exitDate?.isValid()) {
+      return branch;
+    }
+
+    const shouldDeactivate = exitDate.isSame(today, "day") || exitDate.isBefore(today, "day");
+    if (!shouldDeactivate) {
+      return branch;
+    }
+
+    return {
+      ...branch,
+      activo: false,
     };
   });
 };
@@ -840,8 +864,14 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
   let montoNuevo = 0;
   const monthsToRenew = Math.max(1, Math.floor(toNumber(data.meses_renovacion || 1)));
   const discountPercent = normalizeDiscountPercent(data.descuento_porcentaje);
+  const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
+  const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
 
   if (data.pago_sucursales) {
+    data.pago_sucursales = applyBranchExitOnRenewal(
+      await resolveSellerBranches(data.pago_sucursales),
+      finalVigencia
+    );
     montoNuevo = calcSellerDebt(data);
     const discountedMonthlyAmount = buildServiceIncomeDetail(
       data.pago_sucursales,
@@ -860,8 +890,6 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     await handleSucursalRemovals(id, previousBranches, nextBranches);
   }
 
-  const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
-  const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
   const updateData = {
     ...data,
     fecha_vigencia: finalVigencia,

@@ -287,6 +287,32 @@ const getExternalSalesHistoryCandidates = async (
         .populate({ path: "destino_sucursal", select: "_id nombre" });
 }
 
+const getExternalSalesBySellerAndDateRange = async (
+    sellerId: string,
+    from?: Date,
+    to?: Date
+): Promise<IVentaExternaDocument[]> => {
+    if (!Types.ObjectId.isValid(sellerId)) return [];
+
+    const match: any = {
+        ...EXTERNAL_SERVICE_FILTER,
+        ...ACTIVE_EXTERNAL_FILTER,
+        id_vendedor: new Types.ObjectId(sellerId),
+    };
+
+    if (from || to) {
+        match.fecha_pedido = {};
+        if (from) match.fecha_pedido.$gte = from;
+        if (to) match.fecha_pedido.$lte = to;
+    }
+
+    return await VentaExternaModel.find(match)
+        .sort({ fecha_pedido: 1, numero_paquete: 1 })
+        .populate('sucursal')
+        .populate({ path: "origen_sucursal", select: "_id nombre" })
+        .populate({ path: "destino_sucursal", select: "_id nombre" });
+}
+
 const registerExternalSale = async (externalSale: IVentaExterna): Promise<IVentaExternaDocument> => {
     const newSale = new VentaExternaModel(externalSale);
     const saved = await newSale.save();
@@ -351,6 +377,7 @@ export const ExternalSaleRepository = {
     getExternalContactSuggestions,
     getExternalSaleByID,
     getExternalSalesByDateRange,
+    getExternalSalesBySellerAndDateRange,
     getExternalSalesHistoryCandidates,
     registerExternalSale,
     registerExternalSales,

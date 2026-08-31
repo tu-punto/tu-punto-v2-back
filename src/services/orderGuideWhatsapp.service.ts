@@ -104,6 +104,20 @@ const isSameBranchDelivery = (row: any) => {
 
 const getGuide = (row: any) => toTrimmed(row?.numero_guia);
 
+const sameExternalSellerIdentity = (left: any, right: any) => {
+  const leftCarnet = toTrimmed(left?.carnet_vendedor);
+  const rightCarnet = toTrimmed(right?.carnet_vendedor);
+  if (leftCarnet && rightCarnet) return leftCarnet === rightCarnet;
+
+  const leftPhone = normalizeWhatsAppPhone(left?.telefono_vendedor);
+  const rightPhone = normalizeWhatsAppPhone(right?.telefono_vendedor);
+  if (leftPhone && rightPhone) return leftPhone === rightPhone;
+
+  const leftName = normalizeName(left?.vendedor);
+  const rightName = normalizeName(right?.vendedor);
+  return Boolean(leftName && rightName && leftName === rightName);
+};
+
 const getBranchLocationButtonValue = (branchName: string) => {
   const normalized = normalizeName(branchName);
   const matchedValue = BRANCH_LOCATION_LINKS.find((entry) =>
@@ -367,9 +381,10 @@ const ensureGuides = (rows: any[]) => {
 
 const sendForRows = async (
   rows: any[],
-  options: { includeSeller?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
+  options: { includeSeller?: boolean; includeBuyer?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
 ) => {
   const includeSeller = options.includeSeller !== false;
+  const includeBuyer = options.includeBuyer !== false;
   const buyerMode = options.buyerMode || "auto";
   const sellerRows = includeSeller
     ? (Array.isArray(options.sellerRows) ? options.sellerRows : rows).filter(Boolean)
@@ -379,6 +394,7 @@ const sendForRows = async (
     disabled: GUIDE_WHATSAPP_MESSAGES_DISABLED,
     orderIds: rows.map((row) => String(row?._id || "")).filter(Boolean),
     includeSeller,
+    includeBuyer,
     sellerRowsCount: sellerRows.length,
     buyerMode,
   });
@@ -403,28 +419,7 @@ const sendForRows = async (
     }
 
     for (const row of rows) {
-      attempts.push({
-        type: "buyer",
-        template: toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE,
-        orderId: String(row?._id || ""),
-        guide: getGuide(row),
-        phone: row?.telefono_comprador,
-        success: false,
-        skipped: true,
-        reason: "Envios de WhatsApp deshabilitados por configuracion",
-      });
-    }
-  } else {
-    if (sellerRows.length) {
-      const sellerAttempt = await sendSellerTemplate(sellerRows);
-      attempts.push(sellerAttempt);
-    }
-
-    for (const row of rows) {
-      if (buyerMode === "force" || canSendBuyerNow(row)) {
-        const buyerAttempt = await sendBuyerTemplate(row);
-        attempts.push(buyerAttempt);
-      } else {
+      if (includeBuyer) {
         attempts.push({
           type: "buyer",
           template: toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE,
@@ -433,8 +428,33 @@ const sendForRows = async (
           phone: row?.telefono_comprador,
           success: false,
           skipped: true,
-          reason: "Se enviara cuando el pedido quede listo para recoger",
+          reason: "Envios de WhatsApp deshabilitados por configuracion",
         });
+      }
+    }
+  } else {
+    if (sellerRows.length) {
+      const sellerAttempt = await sendSellerTemplate(sellerRows);
+      attempts.push(sellerAttempt);
+    }
+
+    if (includeBuyer) {
+      for (const row of rows) {
+        if (buyerMode === "force" || canSendBuyerNow(row)) {
+          const buyerAttempt = await sendBuyerTemplate(row);
+          attempts.push(buyerAttempt);
+        } else {
+          attempts.push({
+            type: "buyer",
+            template: toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE,
+            orderId: String(row?._id || ""),
+            guide: getGuide(row),
+            phone: row?.telefono_comprador,
+            success: false,
+            skipped: true,
+            reason: "Se enviara cuando el pedido quede listo para recoger",
+          });
+        }
       }
     }
   }
@@ -458,7 +478,7 @@ const sendForRows = async (
 const sendForRowsBestEffort = async (
   rows: any[],
   context = "order-guide-whatsapp",
-  options: { includeSeller?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
+  options: { includeSeller?: boolean; includeBuyer?: boolean; buyerMode?: "auto" | "force"; sellerRows?: any[] } = {}
 ) => {
   try {
     logGuideWhatsapp(context, "bestEffort:start", {
@@ -480,19 +500,101 @@ const sendForRowsBestEffort = async (
   }
 };
 
-const sendExternalGuideMessages = async (id: string) => {
-  logGuideWhatsapp("external-guide-whatsapp", "manual-send:start", { id });
-  const row = await ExternalSaleRepository.getExternalSaleByID(id);
+const buildDayRange = (value?: unknown) => {
+  const base = value ? new Date(value as any) : new Date();
+  if (Number.isNaN(base.getTime())) return { from: undefined, to: undefined };
+
+  const from = new Date(base);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(base);
+  to.setHours(23, 59, 59, 999);
+  return { from, to };
+};
+
+const resolveExternalGuideWhatsappRows = async (params: {
+  id: string;
+  target: "seller" | "buyer";
+  mode?: "single" | "grouped";
+}) => {
+  const row = await ExternalSaleRepository.getExternalSaleByID(params.id);
   if (!row) {
-    logGuideWhatsapp("external-guide-whatsapp", "manual-send:missing-order", { id });
     throw new Error("Pedido externo no encontrado");
   }
-  return sendForRows([row as IVentaExterna], { includeSeller: true, buyerMode: "auto" });
+
+  if (params.target === "buyer") {
+    return { row, rows: [row as IVentaExterna] };
+  }
+
+  const mode = params.mode === "grouped" ? "grouped" : "single";
+  if (mode === "single") {
+    return { row, rows: [row as IVentaExterna] };
+  }
+
+  const { from, to } = buildDayRange((row as any)?.fecha_pedido);
+   const rowsByDay = await ExternalSaleRepository.getExternalSalesByDateRange(from, to);
+   const rows = (rowsByDay || []).filter((candidate: any) => sameExternalSellerIdentity(candidate, row));
+   return { row, rows: rows.length ? rows : [row as IVentaExterna] };
+};
+
+const getExternalGuideWhatsappPreview = async (params: {
+  id: string;
+  target: "seller" | "buyer";
+  mode?: "single" | "grouped";
+}) => {
+  const resolved = await resolveExternalGuideWhatsappRows(params);
+  const rows = resolved.rows.map((item: any) => ({
+    id: String(item?._id || ""),
+    guia: getGuide(item),
+    numero_paquete: Number(item?.numero_paquete || 0),
+    comprador: toTrimmed(item?.comprador),
+    telefono_comprador: toTrimmed(item?.telefono_comprador),
+    vendedor: toTrimmed(item?.vendedor),
+    fecha_pedido: item?.fecha_pedido || null,
+  }));
+
+  return {
+    success: true,
+    target: params.target,
+    mode: params.mode === "grouped" ? "grouped" : "single",
+    row: {
+      id: String(resolved.row?._id || ""),
+      guia: getGuide(resolved.row),
+      vendedor: toTrimmed((resolved.row as any)?.vendedor),
+      comprador: toTrimmed((resolved.row as any)?.comprador),
+      fecha_pedido: (resolved.row as any)?.fecha_pedido || null,
+    },
+    rows,
+  };
+};
+
+const sendExternalGuideMessages = async (params: { id: string; target?: "seller" | "buyer"; mode?: "single" | "grouped"; selectedGuideIds?: string[] } | string) => {
+  const normalized = typeof params === "string" ? { id: params, target: "buyer" as const, mode: "single" as const } : params;
+  logGuideWhatsapp("external-guide-whatsapp", "manual-send:start", normalized as any);
+  const resolved = await resolveExternalGuideWhatsappRows({
+    id: normalized.id,
+    target: normalized.target || "buyer",
+    mode: normalized.mode,
+  });
+
+  const selectedGuideIds = Array.isArray((normalized as any).selectedGuideIds)
+    ? (normalized as any).selectedGuideIds.map((id: any) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const rowsToSend = selectedGuideIds.length
+    ? resolved.rows.filter((row: any) => selectedGuideIds.includes(String(row?._id || "").trim()))
+    : resolved.rows;
+
+  return sendForRows(rowsToSend as any[], {
+    includeSeller: normalized.target === "seller",
+    includeBuyer: normalized.target !== "seller",
+    buyerMode: normalized.target === "buyer" ? "force" : "auto",
+    sellerRows: normalized.target === "seller" ? (rowsToSend as any[]) : [],
+  });
 };
 
 const sendExternalRowsBestEffort = async (rows: any[]) =>
   sendForRowsBestEffort(rows, "external-guide-whatsapp", {
     includeSeller: true,
+    includeBuyer: true,
     sellerRows: rows,
   });
 
@@ -554,6 +656,7 @@ const sendPickupReadyMessage = async (row: any) => {
 };
 
 export const OrderGuideWhatsappService = {
+  getExternalGuideWhatsappPreview,
   sendExternalGuideMessages,
   sendExternalRowsBestEffort,
   sendSimplePackageGuideMessages,

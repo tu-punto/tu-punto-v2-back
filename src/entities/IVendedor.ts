@@ -26,6 +26,8 @@ export interface IVendedor {
       exhibicion: number;
       delivery: number;
       entrega_simple: number;
+      comision_porcentual?: number;
+      comision_fija?: number;
       fecha_ingreso: Date;
       fecha_salida?: Date;
       comentario?: string;
@@ -34,6 +36,7 @@ export interface IVendedor {
 
     comision_porcentual: number;
     comision_fija: number;
+    comision_diferente_por_sucursal?: boolean;
     amortizacion?: number | null;
     precio_paquete?: number | null;
     fecha: Date;

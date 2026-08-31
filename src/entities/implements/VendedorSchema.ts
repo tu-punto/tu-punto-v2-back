@@ -65,6 +65,14 @@ export const VendedorSchema = new Schema({
       type: Number,
       default: 0
     },
+    comision_porcentual: {
+      type: Number,
+      default: 0
+    },
+    comision_fija: {
+      type: Number,
+      default: 0
+    },
     fecha_ingreso: {
       type: Date, 
       default: Date.now
@@ -88,6 +96,10 @@ export const VendedorSchema = new Schema({
   comision_fija: {
     type: Number,
     default: 0
+  },
+  comision_diferente_por_sucursal: {
+    type: Boolean,
+    default: false
   },
   amortizacion: {
     type: Number,
