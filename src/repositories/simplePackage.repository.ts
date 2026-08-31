@@ -14,6 +14,7 @@ const buildSellerAccountingSimplePackageMatch = (sellerId: string) => ({
   is_external: true,
   deposito_realizado: { $ne: true },
   estado_pedido: { $in: [...SELLER_ACCOUNTING_ALLOWED_STATUSES] },
+  saldo_por_paquete: { $gt: 0 },
 });
 
 const getSimplePackageByID = async (id: string): Promise<IVentaExternaDocument | null> => {

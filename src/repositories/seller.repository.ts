@@ -297,13 +297,14 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
         pipeline: [
           {
             $match: {
-              $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
-              service_origin: "simple_package",
-              is_external: true,
-              deposito_realizado: { $ne: true },
-              estado_pedido: { $in: [...SELLER_SETTLED_ORDER_STATUSES] },
-            }
-          },
+            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+            service_origin: "simple_package",
+            is_external: true,
+            deposito_realizado: { $ne: true },
+            estado_pedido: { $in: [...SELLER_SETTLED_ORDER_STATUSES] },
+            saldo_por_paquete: { $gt: 0 },
+          }
+        },
           {
             $project: {
               saldo_por_paquete: { $ifNull: ["$saldo_por_paquete", 0] },
@@ -404,6 +405,7 @@ const buildSellerMetricsStages = () => [
             is_external: true,
             deposito_realizado: { $ne: true },
             estado_pedido: { $in: [...SELLER_SETTLED_ORDER_STATUSES] },
+            saldo_por_paquete: { $gt: 0 },
           },
         },
         {
