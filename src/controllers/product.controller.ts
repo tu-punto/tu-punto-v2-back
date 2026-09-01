@@ -1121,7 +1121,8 @@ export const deleteVariantForSuperadmin = async (req: Request, res: Response) =>
     });
   } catch (error: any) {
     console.error("Error en deleteVariantForSuperadmin:", error);
-    return res.status(500).json({
+    const statusCode = Number(error?.statusCode || error?.status || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error?.message || "Error al eliminar la variante"
     });
@@ -1158,7 +1159,8 @@ export const deleteVariantForSeller = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error en deleteVariantForSeller:", error);
-    return res.status(500).json({
+    const statusCode = Number(error?.statusCode || error?.status || 500);
+    return res.status(statusCode).json({
       success: false,
       message: error?.message || "Error al eliminar la variante"
     });

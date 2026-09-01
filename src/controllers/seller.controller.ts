@@ -32,6 +32,8 @@ export const getSellers = async (req: Request, res: Response) => {
     const statusQuery = String(req.query.status || "").trim().toLowerCase();
     const pendingPaymentQuery = String(req.query.pendingPayment || "").trim().toLowerCase();
     const assignedPaymentDayQuery = String(req.query.assignedPaymentDay || "").trim().toLowerCase();
+    const assignedPaymentDateQuery = String(req.query.assignedPaymentDate || "").trim();
+    const assignedPaymentDate = /^\d{4}-\d{2}-\d{2}$/.test(assignedPaymentDateQuery) ? assignedPaymentDateQuery : undefined;
     const sortByQuery = String(req.query.sortBy || "").trim();
     const sortOrderQuery = String(req.query.sortOrder || "").trim().toLowerCase();
     const usePagination = req.query.page !== undefined || req.query.pageSize !== undefined;
@@ -82,6 +84,7 @@ export const getSellers = async (req: Request, res: Response) => {
         status,
         pendingPayment,
         assignedPaymentDay,
+        assignedPaymentDate,
         sortBy,
         sortOrder,
         page,
@@ -95,6 +98,7 @@ export const getSellers = async (req: Request, res: Response) => {
       status,
       pendingPayment,
       assignedPaymentDay,
+      assignedPaymentDate,
       sortBy,
       sortOrder,
       page,

@@ -213,6 +213,7 @@ type SellerListFilters = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
+  assignedPaymentDate?: string;
   sortBy?:
     | "nombre"
     | "estado"
@@ -252,6 +253,8 @@ const getAllSellers = async (params?: SellerListFilters) => {
     sellerId: params?.sellerId,
     q: params?.q,
     status: params?.status,
+    assignedPaymentDay: params?.assignedPaymentDay,
+    assignedPaymentDate: params?.assignedPaymentDate,
   });
 
   const processedSellers = sellersWithData.map((sellerData: any) => {

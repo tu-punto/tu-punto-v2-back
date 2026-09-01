@@ -20,6 +20,7 @@ type SellerListQueryParams = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
+  assignedPaymentDate?: string;
   sortBy?:
     | "nombre"
     | "estado"
@@ -207,7 +208,12 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
     ];
   }
 
-  if (params?.assignedPaymentDay === "sin_solicitud") {
+  if (params?.assignedPaymentDate) {
+    const date = dayjs(params.assignedPaymentDate);
+    if (date.isValid()) {
+      match.fecha_pago_asignada = { $gte: date.startOf("day").toDate(), $lte: date.endOf("day").toDate() };
+    }
+  } else if (params?.assignedPaymentDay === "sin_solicitud") {
     match.$and = [
       ...(Array.isArray(match.$and) ? match.$and : []),
       {

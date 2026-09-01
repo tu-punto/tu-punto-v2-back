@@ -336,6 +336,19 @@ const variantMatchesKey = (
   return createVariantKey(productId, normalizeVariantRecord(combinacion.variantes)) === targetVariantKey;
 };
 
+const createVariantDeleteError = (message: string) => Object.assign(new Error(message), { statusCode: 400 });
+
+const hasAnyVariantStockAboveZero = (producto: any, variantKey: string) => {
+  for (const branch of producto?.sucursales || []) {
+    for (const combination of branch?.combinaciones || []) {
+      if (!variantMatchesKey(String(producto._id), combination, variantKey)) continue;
+      if (Number(combination?.stock || 0) > 0) return true;
+    }
+  }
+
+  return false;
+};
+
 const variantRecordsEqual = (
   left: Record<string, string> | Map<string, string> | undefined | null,
   right: Record<string, string> | Map<string, string> | undefined | null
@@ -1553,6 +1566,12 @@ const deleteVariantForSellerPhysical = async ({
 
   if (!producto) {
     throw new Error("Producto no encontrado para el vendedor seleccionado");
+  }
+
+  if (hasAnyVariantStockAboveZero(producto, variantKey)) {
+    throw createVariantDeleteError(
+      "No se puede eliminar la variante: debe tener stock 0 en todas las sucursales del cliente."
+    );
   }
 
   const targetBranches =

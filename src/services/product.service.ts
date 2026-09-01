@@ -44,6 +44,9 @@ const notifyCriticalStockIfNeeded = async (
 ) => {
   if (!beforeProduct || !afterProduct) return;
 
+  const sellerId = String(afterProduct?.id_vendedor || beforeProduct?.id_vendedor || "").trim();
+  if (!sellerId || !Types.ObjectId.isValid(sellerId)) return;
+
   const beforeBranch = (beforeProduct.sucursales || []).find(
     (branch: any) => String(branch?.id_sucursal || "") === String(sucursalId || "")
   );
@@ -56,7 +59,10 @@ const notifyCriticalStockIfNeeded = async (
   const beforeCombinations = Array.isArray(beforeBranch.combinaciones) ? beforeBranch.combinaciones : [];
   const afterCombinations = Array.isArray(afterBranch.combinaciones) ? afterBranch.combinaciones : [];
 
-  const recipients = await UserModel.find({ role: { $in: ["admin", "operator", "seller", "superadmin"] } })
+  const recipients = await UserModel.find({
+    role: "seller",
+    vendedor: new Types.ObjectId(sellerId),
+  })
     .select("_id")
     .lean();
   const userIds = recipients.map((user: any) => String(user?._id || "")).filter(Boolean);
@@ -87,7 +93,7 @@ const notifyCriticalStockIfNeeded = async (
       type: "critical_stock",
       title: stockAfter <= 0 ? "Stock agotado" : "Stock critico",
       body: `${productName} - ${variantLabel} quedo en ${stockAfter} unidades${branchName ? ` en ${branchName}` : ""}.`,
-      role: "admin",
+      role: "seller",
       data: {
         productId,
         sucursalId,
