@@ -118,13 +118,19 @@ const resolveSellerBranches = async (
 
 const applyBranchExitOnRenewal = (branches: any[] = [], finalVigencia?: Date) => {
   const today = dayjs().endOf("day");
+  const renewalEnd = finalVigencia ? dayjs(finalVigencia).endOf("day") : null;
   return branches.map((branch) => {
     const exitDate = branch?.fecha_salida ? dayjs(branch.fecha_salida).endOf("day") : null;
     if (!today.isValid() || !exitDate?.isValid()) {
       return branch;
     }
 
-    const shouldDeactivate = exitDate.isSame(today, "day") || exitDate.isBefore(today, "day");
+    // Una sucursal que termina dentro del periodo renovado no debe volver a cobrarse
+    // ni seguir apareciendo como activa en el desglose.
+    const shouldDeactivate =
+      exitDate.isSame(today, "day") ||
+      exitDate.isBefore(today, "day") ||
+      Boolean(renewalEnd && (exitDate.isSame(renewalEnd, "day") || exitDate.isBefore(renewalEnd, "day")));
     if (!shouldDeactivate) {
       return branch;
     }
