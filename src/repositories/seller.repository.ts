@@ -596,6 +596,22 @@ const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
   };
 };
 
+const getActivePaymentRequestBalances = async () => {
+  return await VendedorModel.aggregate([
+    { $match: { fecha_pago_asignada: { $type: "date" } } },
+    ...buildSellerMetricsStages(),
+    { $project: { fecha_pago_asignada: 1, pago_pendiente: 1 } },
+  ]).exec();
+};
+
+const getActivePaymentRequestDays = async () => {
+  const rows = await VendedorModel.aggregate([
+    { $match: { fecha_pago_asignada: { $type: "date" } } },
+    { $group: { _id: { $dayOfMonth: "$fecha_pago_asignada" } } },
+  ]).exec();
+  return rows.map((row: any) => Number(row._id)).filter((day) => [8, 18, 28].includes(day));
+};
+
 const findSimplePackageClients = async () => {
   return await VendedorModel.find(
     {
@@ -677,6 +693,8 @@ export const SellerRepository = {
   markSalesAsDeposited,
   findWithDebtsAndSales,
   findWithDebtsAndSalesPage,
+  getActivePaymentRequestBalances,
+  getActivePaymentRequestDays,
   findSimplePackageClients,
   findPaymentRequestClientsByDateRange,
 };

@@ -309,6 +309,25 @@ export const requestSellerPayment = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellerPaymentLimit = async (req: Request, res: Response) => {
+  try {
+    const isSuperadmin = String(res.locals.auth?.role || "").toLowerCase() === "superadmin";
+    const data = await SellerService.getSellerPaymentLimitSummary(isSuperadmin);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, msg: error?.message || "No se pudo obtener el cupo de pagos" });
+  }
+};
+
+export const updateSellerPaymentLimit = async (req: Request, res: Response) => {
+  try {
+    const data = await SellerService.updateSellerPaymentLimit(req.body?.limit, String(res.locals.auth?.id || ""));
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(400).json({ success: false, msg: error?.message || "No se pudo actualizar el limite" });
+  }
+};
+
 export const declineSellerService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

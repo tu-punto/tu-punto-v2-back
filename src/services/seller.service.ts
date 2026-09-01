@@ -33,6 +33,7 @@ import { uploadFileToAws } from "./bucket.service";
 import { hashPassword } from "../helpers/auth";
 import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 import { includesNormalized } from "../utils/search";
+import { SellerPaymentLimitModel } from "../entities/implements/SellerPaymentLimitSchema";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -445,6 +446,78 @@ const getAssignedPaymentDate = (date = new Date()) => {
   if (day <= 17) return assignAtLocalNoon(18);
   if (day <= 27) return assignAtLocalNoon(28);
   return base.clone().add(1, "month").date(8).hour(12).minute(0).second(0).millisecond(0).toDate();
+};
+
+const PAYMENT_LIMIT_KEY = "global";
+const SELLER_VISIBLE_LIMIT_BUFFER = 20000;
+
+const getSellerPaymentLimit = async () => {
+  const config = await SellerPaymentLimitModel.findOne({ configKey: PAYMENT_LIMIT_KEY }).lean();
+  const limit = Number(config?.limit);
+  return Number.isFinite(limit) && limit >= 0 ? limit : null;
+};
+
+const nextPaymentDate = (date: Date) => {
+  const base = moment.tz(date, PAYMENT_TZ).startOf("day");
+  return getAssignedPaymentDate(base.add(1, "day").toDate());
+};
+
+const assignPaymentDateWithinLimit = async (sellerId: string) => {
+  const limit = await getSellerPaymentLimit();
+  if (limit === null) return getAssignedPaymentDate();
+
+  const requests = await SellerRepository.getActivePaymentRequestBalances();
+  const currentRows = await getAllSellers({ sellerId });
+  const sellerPayment = Math.max(0, Number((currentRows as any[])?.[0]?.pago_pendiente || 0));
+  const totals = new Map<string, number>();
+  for (const row of requests) {
+    const assigned = row?.fecha_pago_asignada ? new Date(row.fecha_pago_asignada) : null;
+    if (!assigned || String(row._id) === sellerId) continue;
+    const key = moment.tz(assigned, PAYMENT_TZ).format("YYYY-MM-DD");
+    totals.set(key, (totals.get(key) || 0) + Math.max(0, Number(row.pago_pendiente || 0)));
+  }
+
+  let candidate = getAssignedPaymentDate();
+  for (let index = 0; index < 120; index += 1) {
+    const key = moment.tz(candidate, PAYMENT_TZ).format("YYYY-MM-DD");
+    if ((totals.get(key) || 0) + sellerPayment <= limit) return candidate;
+    candidate = nextPaymentDate(candidate);
+  }
+  throw new Error("No se encontro una fecha de pago disponible");
+};
+
+const getSellerPaymentLimitSummary = async (includeRealValues: boolean) => {
+  const limit = await getSellerPaymentLimit();
+  const requestedDays = await SellerRepository.getActivePaymentRequestDays();
+  const rows = await SellerRepository.getActivePaymentRequestBalances();
+  const totals = new Map<string, number>();
+  rows.forEach((row: any) => {
+    if (!row?.fecha_pago_asignada) return;
+    const key = moment.tz(row.fecha_pago_asignada, PAYMENT_TZ).format("YYYY-MM-DD");
+    totals.set(key, (totals.get(key) || 0) + Math.max(0, Number(row.pago_pendiente || 0)));
+  });
+  const visibleLimit = limit === null ? null : limit + SELLER_VISIBLE_LIMIT_BUFFER;
+  return {
+    limit: includeRealValues ? limit : undefined,
+    visibleLimit,
+    availableDays: requestedDays,
+    dates: Array.from(totals.entries()).map(([date, total]) => ({
+      date,
+      total: includeRealValues ? total : Math.max(0, total + SELLER_VISIBLE_LIMIT_BUFFER),
+      remaining: limit === null ? null : Math.max(0, (includeRealValues ? limit : visibleLimit!) - (includeRealValues ? total : total + SELLER_VISIBLE_LIMIT_BUFFER)),
+    })),
+  };
+};
+
+const updateSellerPaymentLimit = async (limitValue: unknown, actorUserId: string) => {
+  const limit = Number(limitValue);
+  if (!Number.isFinite(limit) || limit < 0) throw new Error("El limite debe ser un numero igual o mayor a cero");
+  await SellerPaymentLimitModel.findOneAndUpdate(
+    { configKey: PAYMENT_LIMIT_KEY },
+    { $set: { limit, updatedBy: Types.ObjectId.isValid(actorUserId) ? new Types.ObjectId(actorUserId) : undefined }, $setOnInsert: { configKey: PAYMENT_LIMIT_KEY } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  return getSellerPaymentLimitSummary(true);
 };
 
 const buildSellerMetricsBreakdown = (sales: any[], simplePackageSales: any[], debts: IFinanceFlux[]) => {
@@ -1059,7 +1132,7 @@ const requestSellerPayment = async (
 
   const update: any = {
     fecha_solicitud_pago: new Date(),
-    fecha_pago_asignada: getAssignedPaymentDate(),
+    fecha_pago_asignada: await assignPaymentDateWithinLimit(id),
   };
 
   if (file) {
@@ -1833,6 +1906,8 @@ export const SellerService = {
   startAutoRenewalScheduler,
   paySellerDebt,
   requestSellerPayment,
+  getSellerPaymentLimitSummary,
+  updateSellerPaymentLimit,
   declineSellerService,
   cancelSellerServiceDecline,
   createSellerRecoveryCharge,
