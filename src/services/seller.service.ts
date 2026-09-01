@@ -462,33 +462,7 @@ const nextPaymentDate = (date: Date) => {
   return getAssignedPaymentDate(base.add(1, "day").toDate());
 };
 
-const assignPaymentDateWithinLimit = async (sellerId: string) => {
-  const limit = await getSellerPaymentLimit();
-  if (limit === null) return getAssignedPaymentDate();
-
-  const requests = await SellerRepository.getActivePaymentRequestBalances();
-  const currentRows = await getAllSellers({ sellerId });
-  const sellerPayment = Math.max(0, Number((currentRows as any[])?.[0]?.pago_pendiente || 0));
-  const totals = new Map<string, number>();
-  for (const row of requests) {
-    const assigned = row?.fecha_pago_asignada ? new Date(row.fecha_pago_asignada) : null;
-    if (!assigned || String(row._id) === sellerId) continue;
-    const key = moment.tz(assigned, PAYMENT_TZ).format("YYYY-MM-DD");
-    totals.set(key, (totals.get(key) || 0) + Math.max(0, Number(row.pago_pendiente || 0)));
-  }
-
-  let candidate = getAssignedPaymentDate();
-  for (let index = 0; index < 120; index += 1) {
-    const key = moment.tz(candidate, PAYMENT_TZ).format("YYYY-MM-DD");
-    if ((totals.get(key) || 0) + sellerPayment <= limit) return candidate;
-    candidate = nextPaymentDate(candidate);
-  }
-  throw new Error("No se encontro una fecha de pago disponible");
-};
-
-const getSellerPaymentLimitSummary = async (includeRealValues: boolean) => {
-  const limit = await getSellerPaymentLimit();
-  const requestedDays = await SellerRepository.getActivePaymentRequestDays();
+const getPaymentRequestTotals = async () => {
   const rows = await SellerRepository.getActivePaymentRequestBalances();
   const totals = new Map<string, number>();
   rows.forEach((row: any) => {
@@ -496,10 +470,41 @@ const getSellerPaymentLimitSummary = async (includeRealValues: boolean) => {
     const key = moment.tz(row.fecha_pago_asignada, PAYMENT_TZ).format("YYYY-MM-DD");
     totals.set(key, (totals.get(key) || 0) + Math.max(0, Number(row.pago_pendiente || 0)));
   });
+  return totals;
+};
+
+const getNextAvailablePaymentDate = (limit: number | null, totals: Map<string, number>) => {
+  let candidate = getAssignedPaymentDate();
+  for (let index = 0; index < 120; index += 1) {
+    const key = moment.tz(candidate, PAYMENT_TZ).format("YYYY-MM-DD");
+    // El ultimo cobro puede exceder el limite: la fecha se bloquea despues de superarlo.
+    if (limit === null || (totals.get(key) || 0) <= limit) return candidate;
+    candidate = nextPaymentDate(candidate);
+  }
+  throw new Error("No se encontro una fecha de pago disponible");
+};
+
+const assignPaymentDateWithinLimit = async (_sellerId: string) => {
+  const limit = await getSellerPaymentLimit();
+  return getNextAvailablePaymentDate(limit, await getPaymentRequestTotals());
+};
+
+const getSellerPaymentLimitSummary = async (includeRealValues: boolean) => {
+  const limit = await getSellerPaymentLimit();
+  const requestedDays = await SellerRepository.getActivePaymentRequestDays();
+  const totals = await getPaymentRequestTotals();
   const visibleLimit = limit === null ? null : limit + SELLER_VISIBLE_LIMIT_BUFFER;
+  const nextAvailableDate = getNextAvailablePaymentDate(limit, totals);
+  const nextAvailableKey = moment.tz(nextAvailableDate, PAYMENT_TZ).format("YYYY-MM-DD");
+  const nextAvailableTotal = totals.get(nextAvailableKey) || 0;
   return {
     limit: includeRealValues ? limit : undefined,
     visibleLimit,
+    visibleAvailableAmount: visibleLimit === null ? null : Math.max(0, visibleLimit - nextAvailableTotal),
+    nextAvailableDate,
+    occupiedDates: limit === null ? [] : Array.from(totals.entries())
+      .filter(([, total]) => total > limit)
+      .map(([date]) => date),
     availableDays: requestedDays,
     dates: Array.from(totals.entries()).map(([date, total]) => ({
       date,
