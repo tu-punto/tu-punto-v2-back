@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import { SellerRepository } from "../repositories/seller.repository";
 import { ProductRepository } from "../repositories/product.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
@@ -25,11 +26,14 @@ import { IVendedorDocument } from "../entities/documents/IVendedorDocument";
 import { FinanceFluxService } from "./financeFlux.service";
 import { IFinanceFlux } from "../entities/IFinanceFlux";
 import { PaymentProofService } from "./paymentProof.service";
+import { PaymentProofRepository } from "../repositories/paymentProof.repository";
 import { getSellerLifecycleStatus } from "../helpers/sellerAccess";
 import { SimplePackageService } from "./simplePackage.service";
 import { uploadFileToAws } from "./bucket.service";
 import { hashPassword } from "../helpers/auth";
 import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
+import { includesNormalized } from "../utils/search";
+import { SellerPaymentLimitModel } from "../entities/implements/SellerPaymentLimitSchema";
 const saveFlux = async (flux: IFlujoFinanciero) =>
   await FinanceFluxRepository.registerFinanceFlux(flux);
 
@@ -84,6 +88,8 @@ const resolveSellerBranches = async (
         sucursalName: isMeaningfulText(branch?.sucursalName) ? String(branch?.sucursalName).trim() : "Sucursal",
         alquiler: toNumber(branch?.alquiler),
         exhibicion: toNumber(branch?.exhibicion),
+        comision_porcentual: toNumber(branch?.comision_porcentual),
+        comision_fija: toNumber(branch?.comision_fija),
         delivery: 0,
         entrega_simple: toNumber(branch?.entrega_simple),
         activo: branch?.activo !== false,
@@ -101,9 +107,37 @@ const resolveSellerBranches = async (
       sucursalName: resolvedName,
       alquiler: toNumber(branch?.alquiler),
       exhibicion: toNumber(branch?.exhibicion),
+      comision_porcentual: toNumber(branch?.comision_porcentual),
+      comision_fija: toNumber(branch?.comision_fija),
       delivery: 0,
       entrega_simple: toNumber(branch?.entrega_simple),
       activo: branch?.activo !== false,
+    };
+  });
+};
+
+const applyBranchExitOnRenewal = (branches: any[] = [], finalVigencia?: Date) => {
+  const today = dayjs().endOf("day");
+  const renewalEnd = finalVigencia ? dayjs(finalVigencia).endOf("day") : null;
+  return branches.map((branch) => {
+    const exitDate = branch?.fecha_salida ? dayjs(branch.fecha_salida).endOf("day") : null;
+    if (!today.isValid() || !exitDate?.isValid()) {
+      return branch;
+    }
+
+    // Una sucursal que termina dentro del periodo renovado no debe volver a cobrarse
+    // ni seguir apareciendo como activa en el desglose.
+    const shouldDeactivate =
+      exitDate.isSame(today, "day") ||
+      exitDate.isBefore(today, "day") ||
+      Boolean(renewalEnd && (exitDate.isSame(renewalEnd, "day") || exitDate.isBefore(renewalEnd, "day")));
+    if (!shouldDeactivate) {
+      return branch;
+    }
+
+    return {
+      ...branch,
+      activo: false,
     };
   });
 };
@@ -185,6 +219,7 @@ type SellerListFilters = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
+  assignedPaymentDate?: string;
   sortBy?:
     | "nombre"
     | "estado"
@@ -200,11 +235,8 @@ type SellerListFilters = {
 };
 
 const matchesSellerFullName = (sellerData: any, q?: string) => {
-  const normalizedQuery = String(q || "").trim().toLowerCase();
-  if (!normalizedQuery) return true;
-
   const fullName = `${sellerData?.nombre || ""} ${sellerData?.apellido || ""}`.trim().toLowerCase();
-  return fullName.includes(normalizedQuery);
+  return includesNormalized(fullName, q);
 };
 
 const getAllSellers = async (params?: SellerListFilters) => {
@@ -227,6 +259,8 @@ const getAllSellers = async (params?: SellerListFilters) => {
     sellerId: params?.sellerId,
     q: params?.q,
     status: params?.status,
+    assignedPaymentDay: params?.assignedPaymentDay,
+    assignedPaymentDate: params?.assignedPaymentDate,
   });
 
   const processedSellers = sellersWithData.map((sellerData: any) => {
@@ -423,6 +457,83 @@ const getAssignedPaymentDate = (date = new Date()) => {
   return base.clone().add(1, "month").date(8).hour(12).minute(0).second(0).millisecond(0).toDate();
 };
 
+const PAYMENT_LIMIT_KEY = "global";
+const SELLER_VISIBLE_LIMIT_BUFFER = 20000;
+
+const getSellerPaymentLimit = async () => {
+  const config = await SellerPaymentLimitModel.findOne({ configKey: PAYMENT_LIMIT_KEY }).lean();
+  const limit = Number(config?.limit);
+  return Number.isFinite(limit) && limit >= 0 ? limit : null;
+};
+
+const nextPaymentDate = (date: Date) => {
+  const base = moment.tz(date, PAYMENT_TZ).startOf("day");
+  return getAssignedPaymentDate(base.add(1, "day").toDate());
+};
+
+const getPaymentRequestTotals = async () => {
+  const rows = await SellerRepository.getActivePaymentRequestBalances();
+  const totals = new Map<string, number>();
+  rows.forEach((row: any) => {
+    if (!row?.fecha_pago_asignada) return;
+    const key = moment.tz(row.fecha_pago_asignada, PAYMENT_TZ).format("YYYY-MM-DD");
+    totals.set(key, (totals.get(key) || 0) + Math.max(0, Number(row.pago_pendiente || 0)));
+  });
+  return totals;
+};
+
+const getNextAvailablePaymentDate = (limit: number | null, totals: Map<string, number>) => {
+  let candidate = getAssignedPaymentDate();
+  for (let index = 0; index < 120; index += 1) {
+    const key = moment.tz(candidate, PAYMENT_TZ).format("YYYY-MM-DD");
+    // El ultimo cobro puede exceder el limite: la fecha se bloquea despues de superarlo.
+    if (limit === null || (totals.get(key) || 0) <= limit) return candidate;
+    candidate = nextPaymentDate(candidate);
+  }
+  throw new Error("No se encontro una fecha de pago disponible");
+};
+
+const assignPaymentDateWithinLimit = async (_sellerId: string) => {
+  const limit = await getSellerPaymentLimit();
+  return getNextAvailablePaymentDate(limit, await getPaymentRequestTotals());
+};
+
+const getSellerPaymentLimitSummary = async (includeRealValues: boolean) => {
+  const limit = await getSellerPaymentLimit();
+  const requestedDays = await SellerRepository.getActivePaymentRequestDays();
+  const totals = await getPaymentRequestTotals();
+  const visibleLimit = limit === null ? null : limit + SELLER_VISIBLE_LIMIT_BUFFER;
+  const nextAvailableDate = getNextAvailablePaymentDate(limit, totals);
+  const nextAvailableKey = moment.tz(nextAvailableDate, PAYMENT_TZ).format("YYYY-MM-DD");
+  const nextAvailableTotal = totals.get(nextAvailableKey) || 0;
+  return {
+    limit: includeRealValues ? limit : undefined,
+    visibleLimit,
+    visibleAvailableAmount: visibleLimit === null ? null : Math.max(0, visibleLimit - nextAvailableTotal),
+    nextAvailableDate,
+    occupiedDates: limit === null ? [] : Array.from(totals.entries())
+      .filter(([, total]) => total > limit)
+      .map(([date]) => date),
+    availableDays: requestedDays,
+    dates: Array.from(totals.entries()).map(([date, total]) => ({
+      date,
+      total: includeRealValues ? total : Math.max(0, total + SELLER_VISIBLE_LIMIT_BUFFER),
+      remaining: limit === null ? null : Math.max(0, (includeRealValues ? limit : visibleLimit!) - (includeRealValues ? total : total + SELLER_VISIBLE_LIMIT_BUFFER)),
+    })),
+  };
+};
+
+const updateSellerPaymentLimit = async (limitValue: unknown, actorUserId: string) => {
+  const limit = Number(limitValue);
+  if (!Number.isFinite(limit) || limit < 0) throw new Error("El limite debe ser un numero igual o mayor a cero");
+  await SellerPaymentLimitModel.findOneAndUpdate(
+    { configKey: PAYMENT_LIMIT_KEY },
+    { $set: { limit, updatedBy: Types.ObjectId.isValid(actorUserId) ? new Types.ObjectId(actorUserId) : undefined }, $setOnInsert: { configKey: PAYMENT_LIMIT_KEY } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  return getSellerPaymentLimitSummary(true);
+};
+
 const buildSellerMetricsBreakdown = (sales: any[], simplePackageSales: any[], debts: IFinanceFlux[]) => {
   const pedidosProcesados = new Set<string>();
   const simplePackagePedidoIds = new Set(
@@ -522,6 +633,16 @@ const getSeller = async (sellerId: string) => {
     console.error(`Seller with id ${sellerId} not found`);
     return null;
   }
+  const sellerUser = seller?.user
+    ? await UserModel.findById(seller.user).select("last_login_at").lean()
+    : await UserModel.findOne({
+        $or: [
+          { vendedor: (seller as any)._id },
+          { email: (seller as any).mail },
+        ],
+      })
+        .select("last_login_at")
+        .lean();
   const sales = await SaleService.getRawSalesBySellerId(sellerId);
   const simplePackageSales = await SimplePackageService.getSellerAccountingSimplePackages(sellerId);
   const fluxes = await FinanceFluxService.getSellerInfoById(sellerId);
@@ -530,7 +651,13 @@ const getSeller = async (sellerId: string) => {
   const metrics_breakdown = buildSellerMetricsBreakdown(sales, simplePackageSales, debts as IFinanceFlux[]);
   const normalizedSeller = await normalizeSellerBranchesForInput(seller);
 
-  return { ...normalizedSeller, pago_mensual: calcPagoMensual(normalizedSeller), ...metrics, metrics_breakdown };
+  return {
+    ...normalizedSeller,
+    last_login_at: (sellerUser as any)?.last_login_at || null,
+    pago_mensual: calcPagoMensual(normalizedSeller),
+    ...metrics,
+    metrics_breakdown,
+  };
 };
 
 const buildInitialSellerPassword = (seller: any) => {
@@ -626,14 +753,36 @@ const updateSeller = async (id: string, data: any) => {
   if (!vendedor) throw new Error(`Seller with id ${id} doesn't exist`);
 
   const normalizedData = await normalizeSellerServiceValues(data.newData);
-  const previousBranches = vendedor.pago_sucursales || [];
-  const nextBranches = normalizedData.pago_sucursales || [];
+  const hasPickupField = Object.prototype.hasOwnProperty.call(
+    normalizedData,
+    "declinacion_servicio_retiro_realizado"
+  );
+  const updatePayload: any = { ...normalizedData };
 
-  if (normalizedData.pago_sucursales) {
+  if (hasPickupField) {
+    if (normalizedData.declinacion_servicio_retiro_realizado) {
+      updatePayload.declinacion_servicio_retiro_fecha =
+        normalizedData.declinacion_servicio_retiro_fecha || new Date();
+    } else {
+      delete updatePayload.declinacion_servicio_retiro_fecha;
+    }
+  }
+
+  const previousBranches = vendedor.pago_sucursales || [];
+  const nextBranches = updatePayload.pago_sucursales || [];
+
+  if (updatePayload.pago_sucursales) {
     await handleSucursalRemovals(id, previousBranches, nextBranches);
   }
 
-  const actualizado = await SellerRepository.updateSeller(id, normalizedData);
+  const actualizado = hasPickupField && !normalizedData.declinacion_servicio_retiro_realizado
+    ? await SellerRepository.updateSeller(id, {
+        $set: updatePayload,
+        $unset: {
+          declinacion_servicio_retiro_fecha: "",
+        },
+      } as any)
+    : await SellerRepository.updateSeller(id, updatePayload);
 
   const nuevasSucursales = getNewSellerBranches(previousBranches, nextBranches);
   if (nuevasSucursales.length > 0) {
@@ -804,8 +953,14 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
   let montoNuevo = 0;
   const monthsToRenew = Math.max(1, Math.floor(toNumber(data.meses_renovacion || 1)));
   const discountPercent = normalizeDiscountPercent(data.descuento_porcentaje);
+  const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
+  const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
 
   if (data.pago_sucursales) {
+    data.pago_sucursales = applyBranchExitOnRenewal(
+      await resolveSellerBranches(data.pago_sucursales),
+      finalVigencia
+    );
     montoNuevo = calcSellerDebt(data);
     const discountedMonthlyAmount = buildServiceIncomeDetail(
       data.pago_sucursales,
@@ -824,8 +979,6 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     await handleSucursalRemovals(id, previousBranches, nextBranches);
   }
 
-  const renewalStart = moment.tz(vendedor.fecha_vigencia, PAYMENT_TZ).startOf("day");
-  const finalVigencia = renewalStart.clone().add(monthsToRenew, "month").toDate();
   const updateData = {
     ...data,
     fecha_vigencia: finalVigencia,
@@ -838,6 +991,7 @@ const renewSellerWithMonths = async (id: string, data: any & { esDeuda?: boolean
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
+      declinacion_servicio_retiro_fecha: "",
     },
   } as any);
 
@@ -992,7 +1146,7 @@ const requestSellerPayment = async (
 
   const update: any = {
     fecha_solicitud_pago: new Date(),
-    fecha_pago_asignada: getAssignedPaymentDate(),
+    fecha_pago_asignada: await assignPaymentDateWithinLimit(id),
   };
 
   if (file) {
@@ -1065,6 +1219,9 @@ const declineSellerService = async (
     declinacion_servicio_probabilidad_retorno: String(options?.probabilidad_retorno || "").trim() || undefined,
     declinacion_servicio_omitir_motivo_principal: options?.omitir_motivo_principal === true,
     declinacion_servicio_omitir_probabilidad_retorno: options?.omitir_probabilidad_retorno === true,
+    declinacion_servicio_retiro_realizado: false,
+    declinacion_servicio_retiro_observaciones: "",
+    declinacion_servicio_retiro_fecha: undefined,
   } as any);
 };
 
@@ -1080,12 +1237,15 @@ const cancelSellerServiceDecline = async (id: string) => {
     $unset: {
       declinacion_servicio_fecha: "",
       declinacion_servicio_fecha_limite_retiro: "",
+      declinacion_servicio_retiro_fecha: "",
       declinacion_servicio_origen: "",
       declinacion_servicio_motivo_principal: "",
       declinacion_servicio_motivo_principal_otro: "",
       declinacion_servicio_probabilidad_retorno: "",
       declinacion_servicio_omitir_motivo_principal: "",
       declinacion_servicio_omitir_probabilidad_retorno: "",
+      declinacion_servicio_retiro_realizado: "",
+      declinacion_servicio_retiro_observaciones: "",
     },
   } as any);
 };
@@ -1300,6 +1460,190 @@ const getSellerPaymentProofs = async (sellerId: string) => {
     console.error("Error en getSellerPaymentProofs:", error);
     throw error;
   }
+};
+
+const getSimplePackageClientsList = async () => {
+  const sellers = await SellerRepository.findSimplePackageClients();
+
+  return await Promise.all(
+    (sellers || []).map(async (seller: any) => {
+      const branches = Array.isArray(seller?.pago_sucursales)
+        ? await resolveSellerBranches(seller.pago_sucursales)
+        : [];
+      const simplePackageBranches = branches.filter(
+        (branch: any) => Number(branch?.entrega_simple ?? 0) > 0
+      );
+
+      return {
+        sellerId: String(seller?._id || ""),
+        sellerName: `${String(seller?.nombre || "").trim()} ${String(seller?.apellido || "").trim()}`.trim(),
+        sellerBrand: String(seller?.marca || "").trim(),
+        sellerDisplayName:
+          [String(seller?.marca || "").trim(), `${String(seller?.nombre || "").trim()} ${String(seller?.apellido || "").trim()}`.trim()]
+            .filter(Boolean)
+            .join(" - ") || "Vendedor",
+        phone: String(seller?.telefono || "").trim(),
+        email: String(seller?.mail || "").trim(),
+        fechaVigencia: seller?.fecha_vigencia || null,
+        fechaSolicitudPago: seller?.fecha_solicitud_pago || null,
+        fechaPagoAsignada: seller?.fecha_pago_asignada || null,
+        saldoPendiente: Number(seller?.saldo_pendiente || 0),
+        deuda: Number(seller?.deuda || 0),
+        emiteFactura: seller?.emite_factura === true,
+        simplePackageBranchCount: simplePackageBranches.length,
+        totalEntregaSimple: Number(
+          simplePackageBranches.reduce(
+            (sum: number, branch: any) => sum + Number(branch?.entrega_simple || 0),
+            0
+          ).toFixed(2)
+        ),
+        branches: simplePackageBranches.map((branch: any) => ({
+          branchId: String(branch?.id_sucursal || ""),
+          branchName: String(branch?.sucursalName || "Sucursal"),
+          entregaSimple: Number(branch?.entrega_simple || 0),
+          activo: branch?.activo !== false,
+          fechaIngreso: branch?.fecha_ingreso || null,
+          fechaSalida: branch?.fecha_salida || null,
+          comentario: String(branch?.comentario || "").trim(),
+        })),
+      };
+    })
+  );
+};
+
+const getPaymentRequestClientsSinceJuly2026 = async () => {
+  const from = moment.tz("2026-07-01 00:00:00", PAYMENT_TZ).toDate();
+  const to = moment.tz(PAYMENT_TZ).endOf("day").toDate();
+  const proofs = await PaymentProofRepository.findByDateRange({ from, to });
+  const grouped = new Map<
+    string,
+    {
+      sellerId: string;
+      sellerName: string;
+      proofCount: number;
+      proofs: Array<{
+        paymentProofId: string;
+        fechaEmision: Date | null;
+        fecha: string;
+        hora: string;
+        metodoPago: string;
+        pdfUrl: string;
+      }>;
+    }
+  >();
+
+  for (const proof of proofs || []) {
+    const sellerData: any = proof?.vendedor || {};
+    const sellerId = String(sellerData?._id || proof?.vendedor || "").trim();
+    const sellerName = `${String(sellerData?.nombre || "").trim()} ${String(sellerData?.apellido || "").trim()}`.trim() || "Vendedor";
+    const issuedAt = (proof as any)?.fecha_emision || (proof as any)?.createdAt || null;
+    const current = grouped.get(sellerId) || {
+      sellerId,
+      sellerName,
+      proofCount: 0,
+      proofs: [],
+    };
+
+    current.proofCount += 1;
+    current.proofs.push({
+      paymentProofId: String((proof as any)?._id || "").trim(),
+      fechaEmision: issuedAt,
+      fecha: issuedAt ? moment.tz(issuedAt, PAYMENT_TZ).format("YYYY-MM-DD") : "",
+      hora: issuedAt ? moment.tz(issuedAt, PAYMENT_TZ).format("HH:mm:ss") : "",
+      metodoPago: String((proof as any)?.metodo_pago || "").trim() || "No registrado",
+      pdfUrl: String((proof as any)?.comprobante_entrada_pdf || "").trim(),
+    });
+    grouped.set(sellerId, current);
+  }
+
+  const summaryRows = Array.from(grouped.values())
+    .map((item) => ({
+      sellerId: item.sellerId,
+      sellerName: item.sellerName,
+      proofCount: item.proofCount,
+    }))
+    .sort((a, b) => b.proofCount - a.proofCount || a.sellerName.localeCompare(b.sellerName, "es"));
+
+  const detailRows = Array.from(grouped.values())
+    .flatMap((item) =>
+      item.proofs.map((proof, index) => ({
+        sellerId: item.sellerId,
+        sellerName: item.sellerName,
+        proofCountForSeller: item.proofCount,
+        proofSequenceForSeller: index + 1,
+        paymentProofId: proof.paymentProofId,
+        fechaEmision: proof.fechaEmision,
+        fecha: proof.fecha,
+        hora: proof.hora,
+        metodoPago: proof.metodoPago,
+        pdfUrl: proof.pdfUrl,
+      }))
+    )
+    .sort((a, b) => {
+      const sellerCompare = a.sellerName.localeCompare(b.sellerName, "es");
+      if (sellerCompare !== 0) return sellerCompare;
+      return String(a.fechaEmision || "").localeCompare(String(b.fechaEmision || ""));
+    });
+
+  return {
+    source: "payment_proofs",
+    dateRange: {
+      from: "2026-07-01",
+      to: moment.tz(PAYMENT_TZ).format("YYYY-MM-DD"),
+    },
+    totalSellers: summaryRows.length,
+    totalProofs: detailRows.length,
+    summaryRows,
+    detailRows,
+  };
+};
+
+const generatePaymentRequestClientsSinceJuly2026Workbook = async () => {
+  const report = await getPaymentRequestClientsSinceJuly2026();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Codex";
+  workbook.created = new Date();
+
+  const summarySheet = workbook.addWorksheet("Resumen");
+  summarySheet.columns = [
+    { header: "sellerId", key: "sellerId", width: 28 },
+    { header: "sellerName", key: "sellerName", width: 36 },
+    { header: "proofCount", key: "proofCount", width: 16 },
+  ];
+  summarySheet.addRows(report.summaryRows);
+  summarySheet.getRow(1).font = { bold: true };
+  summarySheet.views = [{ state: "frozen", ySplit: 1 }];
+  summarySheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, report.summaryRows.length + 1), column: summarySheet.columns.length },
+  };
+
+  const detailSheet = workbook.addWorksheet("Detalle");
+  detailSheet.columns = [
+    { header: "sellerId", key: "sellerId", width: 28 },
+    { header: "sellerName", key: "sellerName", width: 36 },
+    { header: "proofCountForSeller", key: "proofCountForSeller", width: 18 },
+    { header: "proofSequenceForSeller", key: "proofSequenceForSeller", width: 18 },
+    { header: "paymentProofId", key: "paymentProofId", width: 28 },
+    { header: "fecha", key: "fecha", width: 14 },
+    { header: "hora", key: "hora", width: 12 },
+    { header: "metodoPago", key: "metodoPago", width: 16 },
+    { header: "pdfUrl", key: "pdfUrl", width: 80 },
+  ];
+  detailSheet.addRows(report.detailRows);
+  detailSheet.getRow(1).font = { bold: true };
+  detailSheet.views = [{ state: "frozen", ySplit: 1 }];
+  detailSheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, report.detailRows.length + 1), column: detailSheet.columns.length },
+  };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return {
+    buffer: Buffer.from(buffer as ArrayBuffer),
+    filename: `seller_payment_proofs_since_2026-07-01_${report.dateRange.to}.xlsx`,
+    report,
+  };
 };
 
 const getSellerDashboard = async (sellerId: string, options?: { months?: number; sucursalIds?: string[] }) => {
@@ -1576,6 +1920,8 @@ export const SellerService = {
   startAutoRenewalScheduler,
   paySellerDebt,
   requestSellerPayment,
+  getSellerPaymentLimitSummary,
+  updateSellerPaymentLimit,
   declineSellerService,
   cancelSellerServiceDecline,
   createSellerRecoveryCharge,
@@ -1585,5 +1931,8 @@ export const SellerService = {
   getRenewalMonthlyPaymentSummary,
   getClientsStatusList,
   getSellerPaymentProofs,
+  getSimplePackageClientsList,
+  getPaymentRequestClientsSinceJuly2026,
+  generatePaymentRequestClientsSinceJuly2026Workbook,
   getSellerDashboard,
 };

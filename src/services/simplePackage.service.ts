@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import moment from "moment-timezone";
 import { Types } from "mongoose";
 import { IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
@@ -5,6 +6,7 @@ import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { SellerRepository } from "../repositories/seller.repository";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
+import { PaymentProofRepository } from "../repositories/paymentProof.repository";
 import { ShippingService } from "./shipping.service";
 import { hasConfiguredSimplePackageService } from "../utils";
 import { OrderGuideService } from "./orderGuide.service";
@@ -947,6 +949,246 @@ const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => 
   return await SimplePackageRepository.markSellerAccountingSimplePackagesDeposited(sellerId);
 };
 
+const getSellerPaymentAuditSimplePackagesReport = async (params?: {
+  sellerId?: string;
+  from?: Date;
+  to?: Date;
+  includeResolved?: boolean;
+}) => {
+  const rows = await SimplePackageRepository.getSellerPaymentAuditSimplePackages(params);
+  const sellerIds = Array.from(
+    new Set(
+      (rows || [])
+        .map((row: any) => String((row?.id_vendedor as any)?._id || row?.id_vendedor || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const proofs = await PaymentProofRepository.findByVendedores(sellerIds);
+  const proofsBySellerId = new Map<string, any[]>();
+
+  (proofs || []).forEach((proof: any) => {
+    const sellerId = String((proof?.vendedor as any)?._id || proof?.vendedor || "").trim();
+    if (!sellerId) return;
+    const list = proofsBySellerId.get(sellerId) || [];
+    list.push(proof);
+    proofsBySellerId.set(sellerId, list);
+  });
+
+  proofsBySellerId.forEach((list) => {
+    list.sort((left: any, right: any) => {
+      const leftTime = new Date(left?.fecha_emision || left?.createdAt || 0).getTime();
+      const rightTime = new Date(right?.fecha_emision || right?.createdAt || 0).getTime();
+      return leftTime - rightTime;
+    });
+  });
+
+  const reportRows = (rows || []).map((row: any) => {
+    const sellerId = String((row?.id_vendedor as any)?._id || row?.id_vendedor || "").trim();
+    const sellerProofs = proofsBySellerId.get(sellerId) || [];
+    const deliveredAtRaw = row?.hora_entrega_real || row?.fecha_pedido || null;
+    const deliveredAt = deliveredAtRaw ? new Date(deliveredAtRaw) : null;
+    const proofsAfterDelivery = sellerProofs.filter((proof: any) => {
+      const emittedAt = new Date(proof?.fecha_emision || proof?.createdAt || 0);
+      if (!deliveredAt || Number.isNaN(deliveredAt.getTime())) return true;
+      return !Number.isNaN(emittedAt.getTime()) && emittedAt.getTime() >= deliveredAt.getTime();
+    });
+    const firstProofAfterDelivery = proofsAfterDelivery[0] || null;
+    const lastProofAfterDelivery = proofsAfterDelivery[proofsAfterDelivery.length - 1] || null;
+    const currentVisibleInUnpaidList =
+      row?.deposito_realizado !== true &&
+      row?.is_external === true &&
+      (row?.delivered === true || String(row?.estado_pedido || "").trim().toLowerCase() === "entregado");
+    const hasPaymentProofAfterDelivery = proofsAfterDelivery.length > 0;
+    const suspectRepeatedPayment = proofsAfterDelivery.length > 1;
+    const riskLevel = suspectRepeatedPayment
+      ? "high"
+      : hasPaymentProofAfterDelivery && currentVisibleInUnpaidList
+        ? "medium"
+        : currentVisibleInUnpaidList
+          ? "low"
+          : "resolved";
+
+    return {
+      simplePackageId: String(row?._id || ""),
+      sellerId,
+      sellerName: String(
+        (row?.id_vendedor as any)?.marca
+          ? `${String((row?.id_vendedor as any)?.marca || "").trim()} - ${String((row?.id_vendedor as any)?.nombre || "").trim()} ${String((row?.id_vendedor as any)?.apellido || "").trim()}`
+          : `${String((row?.id_vendedor as any)?.nombre || "").trim()} ${String((row?.id_vendedor as any)?.apellido || "").trim()}`
+      ).trim() || String(row?.vendedor || "Vendedor"),
+      sellerPhone: String((row?.id_vendedor as any)?.telefono || row?.telefono_vendedor || "").trim(),
+      sellerEmail: String((row?.id_vendedor as any)?.mail || "").trim(),
+      packageNumber: Number(row?.numero_paquete || 0),
+      buyerName: String(row?.comprador || "").trim(),
+      buyerPhone: String(row?.telefono_comprador || "").trim(),
+      packageDescription: String(row?.descripcion_paquete || "").trim(),
+      guideNumber: String(row?.numero_guia || row?.pedido_ref?.numero_guia || "").trim(),
+      pedidoRefId: String((row?.pedido_ref as any)?._id || row?.pedido_ref || "").trim(),
+      buyerTrackingCode: String((row?.pedido_ref as any)?.buyer_tracking_code || "").trim(),
+      deliveredAt: deliveredAtRaw,
+      orderedAt: row?.fecha_pedido || null,
+      status: String(row?.estado_pedido || "").trim(),
+      deposited: row?.deposito_realizado === true,
+      sellerBalanceApplied: row?.seller_balance_applied === true,
+      sellerBalanceAppliedAmount: roundCurrency(Number(row?.seller_balance_applied_amount || 0)),
+      sellerAmortization: roundCurrency(Number(row?.amortizacion_vendedor || 0)),
+      sellerPendingAmount: roundCurrency(Number(row?.saldo_por_paquete || 0)),
+      buyerDebtAmount: roundCurrency(Number(row?.deuda_comprador || 0)),
+      totalToCharge: roundCurrency(Number(row?.saldo_cobrar || 0)),
+      sellerPaymentMethod: String(row?.metodo_pago || "").trim(),
+      orderPaidToSeller: row?.pedido_ref?.pagado_al_vendedor === true,
+      orderPaidStatus: String(row?.pedido_ref?.esta_pagado || "").trim(),
+      orderSubtotalQr: roundCurrency(Number(row?.pedido_ref?.subtotal_qr || 0)),
+      orderSubtotalCash: roundCurrency(Number(row?.pedido_ref?.subtotal_efectivo || 0)),
+      originBranchName: String((row?.origen_sucursal as any)?.nombre || (row?.sucursal as any)?.nombre || "").trim(),
+      destinationBranchName: String((row?.destino_sucursal as any)?.nombre || row?.lugar_entrega || "").trim(),
+      currentVisibleInUnpaidList,
+      paymentProofsAfterDeliveryCount: proofsAfterDelivery.length,
+      firstPaymentProofAfterDeliveryAt: firstProofAfterDelivery?.fecha_emision || firstProofAfterDelivery?.createdAt || null,
+      lastPaymentProofAfterDeliveryAt: lastProofAfterDelivery?.fecha_emision || lastProofAfterDelivery?.createdAt || null,
+      paymentProofIdsAfterDelivery: proofsAfterDelivery.map((proof: any) => String(proof?._id || "")),
+      hasPaymentProofAfterDelivery,
+      suspectRepeatedPayment,
+      riskLevel,
+      auditReason: suspectRepeatedPayment
+        ? "Hay varios comprobantes posteriores a la entrega y el paquete sigue/requiere revision."
+        : hasPaymentProofAfterDelivery && currentVisibleInUnpaidList
+          ? "Hay comprobante posterior a la entrega, pero el paquete sigue apareciendo como no depositado."
+          : currentVisibleInUnpaidList
+            ? "Paquete simple entregado que sigue pendiente de deposito."
+            : "Sin inconsistencia activa.",
+    };
+  });
+
+  const summary = reportRows.reduce(
+    (acc, row) => {
+      acc.total += 1;
+      if (row.currentVisibleInUnpaidList) acc.currentlyVisibleUnpaid += 1;
+      if (row.hasPaymentProofAfterDelivery) acc.withProofAfterDelivery += 1;
+      if (row.suspectRepeatedPayment) acc.suspectedRepeatedPayment += 1;
+      acc.totalSellerPendingAmount = roundCurrency(acc.totalSellerPendingAmount + Number(row.sellerPendingAmount || 0));
+      return acc;
+    },
+    {
+      total: 0,
+      currentlyVisibleUnpaid: 0,
+      withProofAfterDelivery: 0,
+      suspectedRepeatedPayment: 0,
+      totalSellerPendingAmount: 0,
+    }
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    filters: {
+      sellerId: params?.sellerId || null,
+      from: params?.from || null,
+      to: params?.to || null,
+      includeResolved: params?.includeResolved === true,
+    },
+    summary,
+    rows: reportRows,
+  };
+};
+
+const generateSellerPaymentAuditSimplePackagesWorkbook = async (params?: {
+  sellerId?: string;
+  from?: Date;
+  to?: Date;
+  includeResolved?: boolean;
+}) => {
+  const report = await getSellerPaymentAuditSimplePackagesReport(params);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Tu Punto";
+  workbook.created = new Date();
+
+  const summarySheet = workbook.addWorksheet("Resumen");
+  summarySheet.columns = [
+    { header: "Campo", key: "field", width: 32 },
+    { header: "Valor", key: "value", width: 28 },
+  ];
+  summarySheet.addRows([
+    { field: "Generado en", value: report.generatedAt },
+    { field: "Filtro sellerId", value: report.filters.sellerId || "" },
+    { field: "Filtro from", value: report.filters.from ? new Date(report.filters.from).toISOString() : "" },
+    { field: "Filtro to", value: report.filters.to ? new Date(report.filters.to).toISOString() : "" },
+    { field: "Incluye resueltos", value: report.filters.includeResolved ? "si" : "no" },
+    { field: "Total filas", value: report.summary.total },
+    { field: "Visibles en no pagadas", value: report.summary.currentlyVisibleUnpaid },
+    { field: "Con comprobante posterior", value: report.summary.withProofAfterDelivery },
+    { field: "Sospecha reproceso", value: report.summary.suspectedRepeatedPayment },
+    { field: "Monto pendiente vendedor", value: report.summary.totalSellerPendingAmount },
+  ]);
+  summarySheet.getRow(1).font = { bold: true };
+
+  const detailSheet = workbook.addWorksheet("Detalle");
+  detailSheet.columns = [
+    { header: "simplePackageId", key: "simplePackageId", width: 26 },
+    { header: "sellerId", key: "sellerId", width: 26 },
+    { header: "sellerName", key: "sellerName", width: 28 },
+    { header: "sellerPhone", key: "sellerPhone", width: 18 },
+    { header: "sellerEmail", key: "sellerEmail", width: 28 },
+    { header: "packageNumber", key: "packageNumber", width: 14 },
+    { header: "buyerName", key: "buyerName", width: 24 },
+    { header: "buyerPhone", key: "buyerPhone", width: 18 },
+    { header: "packageDescription", key: "packageDescription", width: 28 },
+    { header: "guideNumber", key: "guideNumber", width: 18 },
+    { header: "pedidoRefId", key: "pedidoRefId", width: 26 },
+    { header: "buyerTrackingCode", key: "buyerTrackingCode", width: 22 },
+    { header: "orderedAt", key: "orderedAt", width: 24 },
+    { header: "deliveredAt", key: "deliveredAt", width: 24 },
+    { header: "status", key: "status", width: 16 },
+    { header: "deposited", key: "deposited", width: 12 },
+    { header: "sellerBalanceApplied", key: "sellerBalanceApplied", width: 18 },
+    { header: "sellerBalanceAppliedAmount", key: "sellerBalanceAppliedAmount", width: 20 },
+    { header: "sellerAmortization", key: "sellerAmortization", width: 18 },
+    { header: "sellerPendingAmount", key: "sellerPendingAmount", width: 18 },
+    { header: "buyerDebtAmount", key: "buyerDebtAmount", width: 18 },
+    { header: "totalToCharge", key: "totalToCharge", width: 18 },
+    { header: "sellerPaymentMethod", key: "sellerPaymentMethod", width: 18 },
+    { header: "orderPaidToSeller", key: "orderPaidToSeller", width: 18 },
+    { header: "orderPaidStatus", key: "orderPaidStatus", width: 16 },
+    { header: "orderSubtotalQr", key: "orderSubtotalQr", width: 16 },
+    { header: "orderSubtotalCash", key: "orderSubtotalCash", width: 18 },
+    { header: "originBranchName", key: "originBranchName", width: 24 },
+    { header: "destinationBranchName", key: "destinationBranchName", width: 24 },
+    { header: "currentVisibleInUnpaidList", key: "currentVisibleInUnpaidList", width: 24 },
+    { header: "paymentProofsAfterDeliveryCount", key: "paymentProofsAfterDeliveryCount", width: 24 },
+    { header: "firstPaymentProofAfterDeliveryAt", key: "firstPaymentProofAfterDeliveryAt", width: 26 },
+    { header: "lastPaymentProofAfterDeliveryAt", key: "lastPaymentProofAfterDeliveryAt", width: 26 },
+    { header: "paymentProofIdsAfterDelivery", key: "paymentProofIdsAfterDelivery", width: 42 },
+    { header: "hasPaymentProofAfterDelivery", key: "hasPaymentProofAfterDelivery", width: 24 },
+    { header: "suspectRepeatedPayment", key: "suspectRepeatedPayment", width: 22 },
+    { header: "riskLevel", key: "riskLevel", width: 12 },
+    { header: "auditReason", key: "auditReason", width: 64 },
+  ];
+  detailSheet.addRows(
+    report.rows.map((row) => ({
+      ...row,
+      paymentProofIdsAfterDelivery: Array.isArray(row.paymentProofIdsAfterDelivery)
+        ? row.paymentProofIdsAfterDelivery.join(", ")
+        : "",
+    }))
+  );
+  detailSheet.getRow(1).font = { bold: true };
+  detailSheet.views = [{ state: "frozen", ySplit: 1 }];
+  detailSheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: Math.max(1, report.rows.length + 1), column: detailSheet.columns.length },
+  };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const suffix = params?.sellerId ? `seller_${params.sellerId}` : "all";
+  const filename = `simple_package_payment_audit_${suffix}_${Date.now()}.xlsx`;
+
+  return {
+    buffer: Buffer.from(buffer as ArrayBuffer),
+    filename,
+    report,
+  };
+};
+
 export const SimplePackageService = {
   registerSimplePackages,
   getSimplePackagesList,
@@ -959,5 +1201,7 @@ export const SimplePackageService = {
   updateSimplePackageByID,
   deleteSimplePackageByID,
   markSellerAccountingSimplePackagesDeposited,
+  getSellerPaymentAuditSimplePackagesReport,
+  generateSellerPaymentAuditSimplePackagesWorkbook,
   getSellerHistorySimplePackages,
 };

@@ -414,9 +414,8 @@ const updateFinanceFlux = async (
 };
 
 const calculateSaleCommission = async (sale: any) => {
-  const storedCommission = Number(sale?.comision);
-  if (Number.isFinite(storedCommission) && storedCommission > 0) {
-    return storedCommission;
+  if (Object.prototype.hasOwnProperty.call(sale || {}, "comision")) {
+    return Number(sale?.comision ?? 0);
   }
 
   const vendedor = sale?.vendedor || (sale?.id_vendedor ? await VendedorModel.findById(sale.id_vendedor) : null);

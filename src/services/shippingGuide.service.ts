@@ -50,10 +50,15 @@ const markAsDelivered = async (shippingGuideID: string) => {
     return await ShippingGuideRepository.markAsDelivered(shippingGuideID);
 }
 
+const updateObservations = async (shippingGuideID: string, observaciones: string) => {
+    return await ShippingGuideRepository.updateObservations(shippingGuideID, observaciones);
+};
+
 export const ShippingGuideService = {
     getAllShippings,
     getSellerShippings,
     getBranchShippings,
     uploadShipping,
     markAsDelivered,
+    updateObservations,
 }

@@ -7,6 +7,7 @@ import {
   getSimplePackageEscalationStatus,
   getSimplePackagesList,
   getSellerAccountingSimplePackages,
+  getSellerPaymentAuditSimplePackagesReport,
   getSellerHistorySimplePackages,
   getUploadedSimplePackageSellers,
   printSimplePackageGuidesController,
@@ -23,6 +24,7 @@ const simplePackageRouter = Router();
 simplePackageRouter.get("/list", getSimplePackagesList);
 simplePackageRouter.get("/uploaded-sellers", getUploadedSimplePackageSellers);
 simplePackageRouter.get("/seller-accounting", getSellerAccountingSimplePackages);
+simplePackageRouter.get("/seller-payment-audit-report", requireRole("admin", "operator", "superadmin"), getSellerPaymentAuditSimplePackagesReport);
 simplePackageRouter.get("/seller-history", getSellerHistorySimplePackages);
 simplePackageRouter.get("/branch-prices", getSimplePackageBranchPrices);
 simplePackageRouter.get("/escalation-config", getPackageEscalationConfig);

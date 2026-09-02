@@ -40,9 +40,17 @@ const findBySourceKey = async (sourceKey: string) => {
   return await BoxClosePendingOperationModel.findOne({ source_key: sourceKey }).lean().exec();
 };
 
+const deleteBySourceKey = async (sourceKey: string) => {
+  if (!String(sourceKey || "").trim()) return false;
+
+  const result = await BoxClosePendingOperationModel.deleteOne({ source_key: sourceKey }).exec();
+  return Number(result?.deletedCount || 0) > 0;
+};
+
 export const BoxClosePendingOperationRepository = {
   findPendingByBranchAndBusinessDate,
   registerPendingOperation,
   markApplied,
   findBySourceKey,
+  deleteBySourceKey,
 };

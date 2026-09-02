@@ -428,7 +428,7 @@ const resolvePaymentSplit = (
   if (paidStatus === "no") {
     return {
       montoPagaVendedor: 0,
-      montoPagaComprador: 0,
+      montoPagaComprador: +amountToCharge.toFixed(2),
       saldoCobrar: +amountToCharge.toFixed(2),
     };
   }

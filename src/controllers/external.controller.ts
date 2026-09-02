@@ -195,7 +195,16 @@ export const updateExternalSaleByID = async (req: Request, res: Response) => {
 
 export const sendExternalGuideWhatsapp = async (req: Request, res: Response) => {
     try {
-        const result = await OrderGuideWhatsappService.sendExternalGuideMessages(req.params.id);
+        const payload: any = {
+            id: req.params.id,
+            target: String(req.body?.target || req.query?.target || "buyer").toLowerCase() === "seller" ? "seller" : "buyer",
+            mode: String(req.body?.mode || req.query?.mode || "single").toLowerCase() === "grouped" ? "grouped" : "single",
+        };
+        if (Array.isArray(req.body?.selectedGuideIds)) {
+            payload.selectedGuideIds = req.body.selectedGuideIds;
+        }
+
+        const result = await OrderGuideWhatsappService.sendExternalGuideMessages(payload);
         return res.json({
             ...result
         });
@@ -207,3 +216,34 @@ export const sendExternalGuideWhatsapp = async (req: Request, res: Response) => 
         });
     }
 }
+
+export const previewExternalGuideWhatsapp = async (req: Request, res: Response) => {
+    try {
+        const preview = await OrderGuideWhatsappService.getExternalGuideWhatsappPreview({
+            id: req.params.id,
+            target: String(req.query?.target || "buyer").toLowerCase() === "seller" ? "seller" : "buyer",
+            mode: String(req.query?.mode || "single").toLowerCase() === "grouped" ? "grouped" : "single",
+        });
+        return res.json(preview);
+    } catch (error: any) {
+        console.error("Error obteniendo vista previa de WhatsApp de guia externa:", error);
+        return res.status(400).json({
+            success: false,
+            message: error?.message || "No se pudo obtener la vista previa de WhatsApp",
+        });
+    }
+}
+
+export const ExternalController = {
+    getAllExternalSales,
+    getExternalSalesList,
+    getExternalContactSuggestions,
+    getExternalSaleByID,
+    registerExternalSale,
+    registerExternalSalesByPackages,
+    deleteExternalSaleByID,
+    annulExternalSaleByID,
+    updateExternalSaleByID,
+    sendExternalGuideWhatsapp,
+    previewExternalGuideWhatsapp,
+};

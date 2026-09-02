@@ -57,6 +57,10 @@ const UserSchema = new Schema<IUserDocument>({
     type: Date,
     required: false
   },
+  last_login_at: {
+    type: Date,
+    required: false
+  },
   failed_login_attempts: {
     type: Number,
     default: 0

@@ -4,6 +4,7 @@ import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { SellerRepository } from "../repositories/seller.repository";
 import { canAccessSellerProductInfoByCommission } from "../utils";
 import { createVariantKey } from "../utils/variantKey";
+import { includesNormalized } from "../utils/search";
 
 type PromotionScope = "interno" | "catalogo" | "ambos";
 type PromotionState = "draft" | "active" | "disabled";
@@ -562,12 +563,10 @@ const listPromotions = async (params: {
     .lean();
 
   const mapped = (await Promise.all(promotions.map((promotion) => mapPromotion(promotion)))).filter((item) => {
-    const search = text(params.q).toLowerCase();
-    if (!search) return true;
     return (
-      item.productName.toLowerCase().includes(search) ||
-      item.variantLabel.toLowerCase().includes(search) ||
-      text(item.title).toLowerCase().includes(search)
+      includesNormalized(item.productName, params.q) ||
+      includesNormalized(item.variantLabel, params.q) ||
+      includesNormalized(item.title, params.q)
     );
   });
 
@@ -626,12 +625,10 @@ const listSellerVariantOptions = async (sellerId: string, q?: string) => {
     }
   }
 
-  const search = text(q).toLowerCase();
   return Array.from(grouped.values())
     .filter((item) =>
-      !search ||
-      item.displayName.toLowerCase().includes(search) ||
-      item.productName.toLowerCase().includes(search)
+      includesNormalized(item.displayName, q) ||
+      includesNormalized(item.productName, q)
     )
     .sort((left, right) => left.displayName.localeCompare(right.displayName, "es"));
 };

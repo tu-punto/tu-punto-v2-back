@@ -32,6 +32,8 @@ export const getSellers = async (req: Request, res: Response) => {
     const statusQuery = String(req.query.status || "").trim().toLowerCase();
     const pendingPaymentQuery = String(req.query.pendingPayment || "").trim().toLowerCase();
     const assignedPaymentDayQuery = String(req.query.assignedPaymentDay || "").trim().toLowerCase();
+    const assignedPaymentDateQuery = String(req.query.assignedPaymentDate || "").trim();
+    const assignedPaymentDate = /^\d{4}-\d{2}-\d{2}$/.test(assignedPaymentDateQuery) ? assignedPaymentDateQuery : undefined;
     const sortByQuery = String(req.query.sortBy || "").trim();
     const sortOrderQuery = String(req.query.sortOrder || "").trim().toLowerCase();
     const usePagination = req.query.page !== undefined || req.query.pageSize !== undefined;
@@ -82,6 +84,7 @@ export const getSellers = async (req: Request, res: Response) => {
         status,
         pendingPayment,
         assignedPaymentDay,
+        assignedPaymentDate,
         sortBy,
         sortOrder,
         page,
@@ -95,6 +98,7 @@ export const getSellers = async (req: Request, res: Response) => {
       status,
       pendingPayment,
       assignedPaymentDay,
+      assignedPaymentDate,
       sortBy,
       sortOrder,
       page,
@@ -309,6 +313,25 @@ export const requestSellerPayment = async (req: Request, res: Response) => {
   }
 };
 
+export const getSellerPaymentLimit = async (req: Request, res: Response) => {
+  try {
+    const isSuperadmin = String(res.locals.auth?.role || "").toLowerCase() === "superadmin";
+    const data = await SellerService.getSellerPaymentLimitSummary(isSuperadmin);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, msg: error?.message || "No se pudo obtener el cupo de pagos" });
+  }
+};
+
+export const updateSellerPaymentLimit = async (req: Request, res: Response) => {
+  try {
+    const data = await SellerService.updateSellerPaymentLimit(req.body?.limit, String(res.locals.auth?.id || ""));
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(400).json({ success: false, msg: error?.message || "No se pudo actualizar el limite" });
+  }
+};
+
 export const declineSellerService = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -424,6 +447,52 @@ export const getSellerPaymentProofs = async (req: Request, res: Response) => {
     res.status(500).json({
       msg: "Error obteniendo comprobantes de pago",
       error: err,
+    });
+  }
+};
+
+export const getSimplePackageClientsList = async (_req: Request, res: Response) => {
+  try {
+    const rows = await SellerService.getSimplePackageClientsList();
+    res.json({
+      success: true,
+      total: rows.length,
+      rows,
+    });
+  } catch (err) {
+    console.error("Error obteniendo clientes con entregas simples:", err);
+    res.status(500).json({
+      success: false,
+      msg: "Error obteniendo clientes con entregas simples",
+      err,
+    });
+  }
+};
+
+export const getPaymentRequestClientsSinceJuly2026 = async (_req: Request, res: Response) => {
+  try {
+    const format = String(_req.query.format || "").trim().toLowerCase();
+
+    if (format === "xlsx" || format === "excel") {
+      const result = await SellerService.generatePaymentRequestClientsSinceJuly2026Workbook();
+      res.set({
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      });
+      return res.send(result.buffer);
+    }
+
+    const report = await SellerService.getPaymentRequestClientsSinceJuly2026();
+    res.json({
+      success: true,
+      ...report,
+    });
+  } catch (err) {
+    console.error("Error obteniendo clientes que solicitaron pago desde julio 2026:", err);
+    res.status(500).json({
+      success: false,
+      msg: "Error obteniendo clientes que solicitaron pago desde julio 2026",
+      err,
     });
   }
 };

@@ -38,9 +38,9 @@ export const getShipping = async (req: Request, res: Response) => {
   try {
     const shippings = await ShippingService.getAllShippings();
     res.json(shippings);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
+  } catch (error: any) {
+    console.error("Error registrando entrega:", error);
+    res.status(500).json({ error: error?.message || "No se pudo registrar la entrega" });
   }
 };
 

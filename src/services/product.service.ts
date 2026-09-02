@@ -18,6 +18,9 @@ import { IngresoModel } from "../entities/implements/IngresoSchema";
 import { ProductVariantKeyService } from "./productVariantKey.service";
 import { createVariantKey } from "../utils/variantKey";
 import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
+import { NotificationService } from "./notification.service";
+import { UserModel } from "../entities/implements/UserSchema";
+import { CRITICAL_STOCK_THRESHOLD } from "../constants/stock";
 
 interface Feature {
   feature: string;
@@ -31,6 +34,78 @@ const normalizeVariantsForEntry = (variants: any): Record<string, string> => {
   return Object.fromEntries(
     Object.entries(variants).map(([key, value]) => [key, String(value ?? "")])
   );
+};
+
+const notifyCriticalStockIfNeeded = async (
+  beforeProduct: any,
+  afterProduct: any,
+  productId: string,
+  sucursalId: string
+) => {
+  if (!beforeProduct || !afterProduct) return;
+
+  const sellerId = String(afterProduct?.id_vendedor || beforeProduct?.id_vendedor || "").trim();
+  if (!sellerId || !Types.ObjectId.isValid(sellerId)) return;
+
+  const beforeBranch = (beforeProduct.sucursales || []).find(
+    (branch: any) => String(branch?.id_sucursal || "") === String(sucursalId || "")
+  );
+  const afterBranch = (afterProduct.sucursales || []).find(
+    (branch: any) => String(branch?.id_sucursal || "") === String(sucursalId || "")
+  );
+
+  if (!beforeBranch || !afterBranch) return;
+
+  const beforeCombinations = Array.isArray(beforeBranch.combinaciones) ? beforeBranch.combinaciones : [];
+  const afterCombinations = Array.isArray(afterBranch.combinaciones) ? afterBranch.combinaciones : [];
+
+  const recipients = await UserModel.find({
+    role: "seller",
+    vendedor: new Types.ObjectId(sellerId),
+  })
+    .select("_id")
+    .lean();
+  const userIds = recipients.map((user: any) => String(user?._id || "")).filter(Boolean);
+  if (!userIds.length) return;
+
+  for (const afterCombination of afterCombinations) {
+    const stockAfter = Number(afterCombination?.stock || 0);
+    if (stockAfter > CRITICAL_STOCK_THRESHOLD) continue;
+
+    const variantKey = String(afterCombination?.variantKey || "").trim();
+    const beforeCombination = beforeCombinations.find((candidate: any) => {
+      if (variantKey && String(candidate?.variantKey || "").trim() === variantKey) return true;
+      return (
+        createVariantKey(productId, normalizeVariantsForEntry(candidate?.variantes)) ===
+        createVariantKey(productId, normalizeVariantsForEntry(afterCombination?.variantes))
+      );
+    });
+    const stockBefore = Number(beforeCombination?.stock || 0);
+    if (stockBefore <= CRITICAL_STOCK_THRESHOLD) continue;
+
+    const productName = String(afterProduct?.nombre_producto || beforeProduct?.nombre_producto || "Producto");
+    const variantLabel = Object.values(afterCombination?.variantes || {}).filter(Boolean).join(" / ") || "Variante";
+    const branchName = String(afterBranch?.id_sucursal?.nombre || afterBranch?.nombre || "");
+    const tag = `critical-stock:${productId}:${sucursalId}:${variantKey || variantLabel}`;
+
+    await NotificationService.notifyUsers({
+      userIds,
+      type: "critical_stock",
+      title: stockAfter <= 0 ? "Stock agotado" : "Stock critico",
+      body: `${productName} - ${variantLabel} quedo en ${stockAfter} unidades${branchName ? ` en ${branchName}` : ""}.`,
+      role: "seller",
+      data: {
+        productId,
+        sucursalId,
+        variantKey,
+        stock: stockAfter,
+        threshold: CRITICAL_STOCK_THRESHOLD,
+      },
+      dedupeKey: tag,
+      urlPath: "/stock",
+      pushTag: tag,
+    });
+  }
 };
 
 const buildVariantEntryName = (productName: string, variants: Record<string, string>) => {
@@ -599,7 +674,10 @@ const updateStockInSucursal = async (
   variante: string,
   stock: number
 ) => {
-  return await ProductRepository.updateStockInSucursal(productId, sucursalId, variante, stock);
+  const before = await ProductoModel.findById(productId);
+  const updated = await ProductRepository.updateStockInSucursal(productId, sucursalId, variante, stock);
+  await notifyCriticalStockIfNeeded(before, updated, productId, sucursalId);
+  return updated;
 };
 
 const updatePrice = async (
@@ -643,13 +721,16 @@ const updateSubvariantStock = async (params: {
   subvarianteNombre: string;
   stock: number;
 }) => {
-  return await ProductRepository.updateStockOfSubvariant(
+  const before = await ProductoModel.findById(params.productId);
+  const updated = await ProductRepository.updateStockOfSubvariant(
     params.productId,
     params.sucursalId,
     params.varianteNombre,
     params.subvarianteNombre,
     params.stock
   );
+  await notifyCriticalStockIfNeeded(before, updated, params.productId, params.sucursalId);
+  return updated;
 };
 
 const updateStockByVariantCombination = async ({
@@ -689,6 +770,8 @@ const updateStockByVariantCombination = async ({
     variantes,
     nextStock
   );
+
+  await notifyCriticalStockIfNeeded(productBefore, updatedProduct, productId, sucursalId);
 
   await recordSingleProductAudit({
     eventType: "manual_stock_adjustment",
@@ -1296,6 +1379,67 @@ const deleteVariantForSuperadmin = async ({
   });
 };
 
+const deleteVariantForSeller = async ({
+  productId,
+  sellerId,
+  variantKey,
+  sucursalId,
+  scope
+}: {
+  productId: string;
+  sellerId: string;
+  variantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para eliminar solo una sucursal");
+  }
+
+  return await ProductRepository.deleteVariantForSeller({
+    productId,
+    sellerId,
+    variantKey,
+    sucursalId,
+    scope
+  });
+};
+
+const duplicateVariantForSuperadmin = async ({
+  productId,
+  sellerId,
+  sourceVariantKey,
+  sucursalId,
+  scope,
+  variantAttributes,
+  price,
+  stock,
+}: {
+  productId: string;
+  sellerId: string;
+  sourceVariantKey: string;
+  sucursalId?: string;
+  scope: "branch" | "all";
+  variantAttributes: Record<string, string>;
+  price?: number;
+  stock?: number;
+}) => {
+  if (scope === "branch" && !String(sucursalId || "").trim()) {
+    throw new Error("La sucursal es requerida para duplicar solo una sucursal");
+  }
+
+  return await ProductRepository.duplicateVariantForSuperadmin({
+    productId,
+    sellerId,
+    sourceVariantKey,
+    sucursalId,
+    scope,
+    variantAttributes,
+    price,
+    stock,
+  });
+};
+
 export const ProductService = {
   getAllProducts,
   registerProduct,
@@ -1325,6 +1469,8 @@ export const ProductService = {
   getSellerVariantImages,
   updateVariantStockByBranchForSuperadmin,
   renameVariantForSuperadmin,
-  deleteVariantForSuperadmin
+  deleteVariantForSuperadmin,
+  deleteVariantForSeller,
+  duplicateVariantForSuperadmin
 };
 

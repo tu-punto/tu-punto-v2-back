@@ -18,6 +18,10 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: Number,
     default: 0
   },
+  comision: {
+    type: Number,
+    default: 0,
+  },
   deposito_realizado: {
     type: Boolean,
     default: false

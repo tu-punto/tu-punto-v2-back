@@ -20,6 +20,7 @@ type SellerListQueryParams = {
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
+  assignedPaymentDate?: string;
   sortBy?:
     | "nombre"
     | "estado"
@@ -60,6 +61,7 @@ const findAllBasic = async (params?: {
     mail: 1,
     comision_porcentual: 1,
     comision_fija: 1,
+    comision_diferente_por_sucursal: 1,
     amortizacion: 1,
     precio_paquete: 1,
     fecha_vigencia: 1,
@@ -206,7 +208,12 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
     ];
   }
 
-  if (params?.assignedPaymentDay === "sin_solicitud") {
+  if (params?.assignedPaymentDate) {
+    const date = dayjs(params.assignedPaymentDate);
+    if (date.isValid()) {
+      match.fecha_pago_asignada = { $gte: date.startOf("day").toDate(), $lte: date.endOf("day").toDate() };
+    }
+  } else if (params?.assignedPaymentDay === "sin_solicitud") {
     match.$and = [
       ...(Array.isArray(match.$and) ? match.$and : []),
       {
@@ -595,6 +602,77 @@ const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
   };
 };
 
+const getActivePaymentRequestBalances = async () => {
+  return await VendedorModel.aggregate([
+    { $match: { fecha_pago_asignada: { $type: "date" } } },
+    ...buildSellerMetricsStages(),
+    { $project: { fecha_pago_asignada: 1, pago_pendiente: 1 } },
+  ]).exec();
+};
+
+const getActivePaymentRequestDays = async () => {
+  const rows = await VendedorModel.aggregate([
+    { $match: { fecha_pago_asignada: { $type: "date" } } },
+    { $group: { _id: { $dayOfMonth: "$fecha_pago_asignada" } } },
+  ]).exec();
+  return rows.map((row: any) => Number(row._id)).filter((day) => [8, 18, 28].includes(day));
+};
+
+const findSimplePackageClients = async () => {
+  return await VendedorModel.find(
+    {
+      "pago_sucursales.entrega_simple": { $gt: 0 },
+    },
+    {
+      nombre: 1,
+      apellido: 1,
+      marca: 1,
+      telefono: 1,
+      mail: 1,
+      fecha_vigencia: 1,
+      fecha_solicitud_pago: 1,
+      fecha_pago_asignada: 1,
+      pago_sucursales: 1,
+      saldo_pendiente: 1,
+      deuda: 1,
+      emite_factura: 1,
+    }
+  )
+    .lean<IVendedor[]>()
+    .exec();
+};
+
+const findPaymentRequestClientsByDateRange = async (params: {
+  from: Date;
+  to: Date;
+}) => {
+  return await VendedorModel.find(
+    {
+      fecha_solicitud_pago: {
+        $gte: params.from,
+        $lte: params.to,
+      },
+    },
+    {
+      nombre: 1,
+      apellido: 1,
+      marca: 1,
+      telefono: 1,
+      mail: 1,
+      fecha_vigencia: 1,
+      fecha_solicitud_pago: 1,
+      fecha_pago_asignada: 1,
+      pago_sucursales: 1,
+      saldo_pendiente: 1,
+      deuda: 1,
+      emite_factura: 1,
+      qr_pago_url: 1,
+    }
+  )
+    .lean<IVendedor[]>()
+    .exec();
+};
+
 export const SellerRepository = {
   findAll,
   findAllBasic,
@@ -621,4 +699,8 @@ export const SellerRepository = {
   markSalesAsDeposited,
   findWithDebtsAndSales,
   findWithDebtsAndSalesPage,
+  getActivePaymentRequestBalances,
+  getActivePaymentRequestDays,
+  findSimplePackageClients,
+  findPaymentRequestClientsByDateRange,
 };

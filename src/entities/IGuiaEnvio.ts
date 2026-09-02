@@ -8,5 +8,7 @@ export interface IGuiaEnvio {
     descripcion?: string;
     fecha_subida: Date;
     imagen_key?: string;
+    lista_productos_keys?: string[];
+    observaciones?: string;
     isRecogido?: boolean;
 }

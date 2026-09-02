@@ -1,21 +1,20 @@
 import { Router } from "express";
-import { getAllShippings, getBranchShippings, getSellerShippings, markAsDelivered, uploadShipping } from "../controllers/shippingGuide.controller";
-import { imageMimeTypes, uploadGuideImage } from "../config/multerConfig";
+import { getAllShippings, getBranchShippings, getSellerShippings, markAsDelivered, updateObservations, uploadShipping } from "../controllers/shippingGuide.controller";
+import { uploadShippingGuideAttachments } from "../config/multerConfig";
 import { requireRole, requireSellerOwnership } from "../middlewares/auth.middleware";
 import { rateLimiters } from "../middlewares/rateLimit.middleware";
 import { validateRequest } from "../middlewares/validate.middleware";
-import { validateUploadedFiles } from "../middlewares/upload.middleware";
 import { validateShippingGuideBody } from "../validation/uploads.validation";
 
 
 const shippingGuideRouter = Router();
-const uploadGuideImageSingle = (req: any, res: any, next: any) => {
-  uploadGuideImage.single("imagen")(req, res, (error: any) => {
+const uploadGuideFiles = (req: any, res: any, next: any) => {
+  uploadShippingGuideAttachments.any()(req, res, (error: any) => {
     if (!error) return next();
     const message =
       error?.code === "LIMIT_FILE_SIZE"
-        ? "La imagen de la guia no puede superar 15 MB"
-        : error?.message || "No se pudo procesar la imagen";
+        ? "Los archivos de la guia no pueden superar 15 MB"
+        : error?.message || "No se pudo procesar la guia";
     return res.status(400).json({ success: false, message });
   });
 };
@@ -27,8 +26,7 @@ shippingGuideRouter.post(
   "/upload",
   requireRole("admin", "operator", "seller", "superadmin"),
   rateLimiters.uploads,
-  uploadGuideImageSingle,
-  validateUploadedFiles({ fieldLabel: "guia", allowedMimeTypes: imageMimeTypes }),
+  uploadGuideFiles,
   validateRequest({
     body: (input, _req, res) =>
       validateShippingGuideBody(input, String(res.locals.auth?.role || ""), String(res.locals.auth?.sellerId || "")),
@@ -36,5 +34,6 @@ shippingGuideRouter.post(
   uploadShipping
 )
 shippingGuideRouter.put("/mark-deliver/:id", requireRole("admin", "operator", "superadmin", "seller"), markAsDelivered)
+shippingGuideRouter.put("/observations/:id", requireRole("admin", "operator", "superadmin"), updateObservations)
 
 export default shippingGuideRouter;

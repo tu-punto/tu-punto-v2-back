@@ -14,7 +14,7 @@ const SERVICE_ANNOUNCEMENT_ROLES = ["admin", "operator", "seller"] as const;
 
 export const validateShippingGuideBody = (input: unknown, role?: string, sellerId?: string) => {
   const payload = ensurePlainObject(input, "body");
-  rejectUnexpectedKeys(payload, ["vendedor", "sucursal", "descripcion"], "body");
+  rejectUnexpectedKeys(payload, ["vendedor", "sucursal", "descripcion", "observaciones"], "body");
 
   const normalizedRole = String(role || "").toLowerCase();
   const targetSellerId = payload.vendedor ? parseObjectId(payload.vendedor, "vendedor") : undefined;
@@ -29,6 +29,9 @@ export const validateShippingGuideBody = (input: unknown, role?: string, sellerI
     sucursal: parseObjectId(payload.sucursal, "sucursal"),
     ...(payload.descripcion !== undefined
       ? { descripcion: parseOptionalString(payload.descripcion, "descripcion", { maxLength: 500 }) || "" }
+      : {}),
+    ...(payload.observaciones !== undefined
+      ? { observaciones: parseOptionalString(payload.observaciones, "observaciones", { maxLength: 1000 }) || "" }
       : {}),
   };
 };

@@ -95,6 +95,12 @@ productRouter.patch(
   requireRole("superadmin"),
   ProductController.renameVariantForSuperadmin
 );
+productRouter.post(
+  "/superadmin/variant-duplicate",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.duplicateVariantForSuperadmin
+);
 productRouter.patch(
   "/:productId/sucursal/:sucursalId/variant/:variantKey/extras",
   requireAuth,
@@ -107,6 +113,12 @@ productRouter.delete(
   requireAuth,
   requireRole("superadmin"),
   ProductController.deleteVariantForSuperadmin
+);
+productRouter.delete(
+  "/seller/variant",
+  requireAuth,
+  requireRole("seller"),
+  ProductController.deleteVariantForSeller
 );
 
 export default productRouter;

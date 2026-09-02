@@ -247,6 +247,7 @@ export const loginUserController = async (req: Request, res: Response) => {
 
     user.failed_login_attempts = 0;
     user.login_locked_until = null;
+    user.last_login_at = new Date();
     await user.save();
 
     let id_vendedor = null;
@@ -283,6 +284,10 @@ export const loginUserController = async (req: Request, res: Response) => {
     if (actualRole === "seller") {
       const vendedor = await resolveSellerByUserData(user);
       if (vendedor) {
+        if (!user.vendedor || String(user.vendedor) !== String(vendedor._id)) {
+          user.vendedor = vendedor._id;
+          await user.save();
+        }
         if (!sellerHasSystemAccess(vendedor.fecha_vigencia)) {
           clearAuthCookie(res);
           return res.status(403).json({

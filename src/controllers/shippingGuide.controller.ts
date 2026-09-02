@@ -42,12 +42,21 @@ export const uploadShipping = async (req: Request, res: Response) => {
         const auth = res.locals.auth as { role?: string; sellerId?: string } | undefined;
         const vendedorId = String(req.body.vendedor || auth?.sellerId || "").trim();
         const sucursalId = String(req.body.sucursal || "").trim();
+        const files = Array.isArray(req.files) ? req.files : [];
+        const guideImage = files.find((file: any) => String(file?.fieldname || "") === "imagen") as Express.Multer.File | undefined;
+        const listFiles = files.filter((file: any) => String(file?.fieldname || "") === "lista_productos") as Express.Multer.File[];
 
         if (!Types.ObjectId.isValid(vendedorId)) {
             return res.status(400).json({ success: false, message: "No se pudo identificar el vendedor" });
         }
         if (!Types.ObjectId.isValid(sucursalId)) {
             return res.status(400).json({ success: false, message: "Debe seleccionar una sucursal valida" });
+        }
+        if (!listFiles.length) {
+            return res.status(400).json({ success: false, message: "La lista de productos es obligatoria" });
+        }
+        if (listFiles.length > 3) {
+            return res.status(400).json({ success: false, message: "La lista de productos admite hasta 3 archivos" });
         }
         if (String(auth?.role || "").toLowerCase() === "seller" && auth?.sellerId && String(auth.sellerId) !== vendedorId) {
             return res.status(403).json({ success: false, message: "No autorizado para este vendedor" });
@@ -57,15 +66,23 @@ export const uploadShipping = async (req: Request, res: Response) => {
             vendedor: new Types.ObjectId(vendedorId),
             sucursal: new Types.ObjectId(sucursalId),
             descripcion: req.body.descripcion,
+            observaciones: req.body.observaciones,
             fecha_subida: new Date(),
+            lista_productos_keys: [],
         }
-        if (req.file) {
-            const imagen_s3_key = await uploadFileToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
+        if (guideImage) {
+            const imagen_s3_key = await uploadFileToS3(guideImage.buffer, guideImage.originalname, guideImage.mimetype);
             shippingGuide = {
                 ...shippingGuide, 
                 imagen_key: imagen_s3_key
             }
         }
+        const listKeys: string[] = [];
+        for (const file of listFiles) {
+            const key = await uploadFileToS3(file.buffer, file.originalname, file.mimetype);
+            listKeys.push(key);
+        }
+        shippingGuide.lista_productos_keys = listKeys;
         const newShippingGuide = await ShippingGuideService.uploadShipping(shippingGuide);
         res.json({
             success: true,
@@ -90,5 +107,20 @@ export const markAsDelivered = async (req: Request, res: Response) => {
     } catch (error) {
         console.log(error);
         res.status(500).json({ error: "Internal Server Error" })
+    }
+}
+
+export const updateObservations = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const observaciones = String(req.body?.observaciones || "");
+        const updatedShipping = await ShippingGuideService.updateObservations(id, observaciones);
+        res.json({
+            status: true,
+            updatedShipping
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 }

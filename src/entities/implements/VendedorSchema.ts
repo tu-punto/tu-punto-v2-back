@@ -65,6 +65,14 @@ export const VendedorSchema = new Schema({
       type: Number,
       default: 0
     },
+    comision_porcentual: {
+      type: Number,
+      default: 0
+    },
+    comision_fija: {
+      type: Number,
+      default: 0
+    },
     fecha_ingreso: {
       type: Date, 
       default: Date.now
@@ -88,6 +96,10 @@ export const VendedorSchema = new Schema({
   comision_fija: {
     type: Number,
     default: 0
+  },
+  comision_diferente_por_sucursal: {
+    type: Boolean,
+    default: false
   },
   amortizacion: {
     type: Number,
@@ -132,6 +144,9 @@ export const VendedorSchema = new Schema({
   declinacion_servicio_fecha_limite_retiro: {
     type: Date,
   },
+  declinacion_servicio_retiro_fecha: {
+    type: Date,
+  },
   declinacion_servicio_origen: {
     type: String,
     enum: ["seller", "admin"],
@@ -152,6 +167,13 @@ export const VendedorSchema = new Schema({
   declinacion_servicio_omitir_probabilidad_retorno: {
     type: Boolean,
     default: false,
+  },
+  declinacion_servicio_retiro_realizado: {
+    type: Boolean,
+    default: false,
+  },
+  declinacion_servicio_retiro_observaciones: {
+    type: String,
   },
   comprobante_entrada: [{
     type: Types.ObjectId,

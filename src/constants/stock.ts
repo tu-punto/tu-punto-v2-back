@@ -1,0 +1,1 @@
+export const CRITICAL_STOCK_THRESHOLD = 1;

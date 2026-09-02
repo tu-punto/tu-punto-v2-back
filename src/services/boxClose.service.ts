@@ -260,6 +260,47 @@ const registerBranchTransferBoxCloseOperation = async (params: {
   return { success: true, stored: true, target: "pending" as const };
 };
 
+const registerPendingBoxCloseOperation = async (params: {
+  sourceKey?: string;
+  branchId: string;
+  businessDate: string;
+  operation: any;
+}) => {
+  const sourceKey = String(params.sourceKey || "").trim() || `boxclose-${params.branchId}-${params.businessDate}-${Date.now()}`;
+  const branchId = String(params.branchId || "").trim();
+  const businessDate = String(params.businessDate || "").trim();
+  const operation = params.operation || {};
+  const amount = normalizeOperationAmount(operation?.monto);
+
+  if (!branchId || !Types.ObjectId.isValid(branchId) || !businessDate || amount <= 0) {
+    return { success: false, stored: false };
+  }
+
+  const existing = await BoxClosePendingOperationRepository.findBySourceKey(sourceKey);
+  if (existing) {
+    return { success: true, stored: true, target: "pending" as const };
+  }
+
+  await BoxClosePendingOperationRepository.registerPendingOperation({
+    source_key: sourceKey,
+    business_date: businessDate,
+    id_sucursal: new Types.ObjectId(branchId),
+    operation: {
+      ...operation,
+      monto: amount,
+      fecha: normalizeOperationDate(operation?.fecha),
+      source_key: sourceKey,
+    },
+  });
+
+  return { success: true, stored: true, target: "pending" as const };
+};
+
+const deletePendingBoxCloseOperation = async (sourceKey: string) => {
+  const deleted = await BoxClosePendingOperationRepository.deleteBySourceKey(sourceKey);
+  return { success: deleted };
+};
+
 
 export const BoxCloseService = {
   getAllBoxClosings,
@@ -269,4 +310,6 @@ export const BoxCloseService = {
   updateBoxClose,
   registerBranchTransferBoxCloseOperation,
   getPendingOperationsForBranchAndDate,
+  registerPendingBoxCloseOperation,
+  deletePendingBoxCloseOperation,
 };

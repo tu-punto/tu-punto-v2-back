@@ -24,6 +24,7 @@ export interface IUser {
   trabajador: Types.ObjectId;
   must_change_password?: boolean;
   password_changed_at?: Date;
+  last_login_at?: Date | null;
   failed_login_attempts?: number;
   login_locked_until?: Date | null;
   system_access_hours?: IUserAccessHours;

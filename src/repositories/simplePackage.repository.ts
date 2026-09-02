@@ -303,6 +303,71 @@ const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => 
   };
 };
 
+const getSellerPaymentAuditSimplePackages = async (params?: {
+  sellerId?: string;
+  from?: Date;
+  to?: Date;
+  includeResolved?: boolean;
+}) => {
+  const match: any = {
+    ...SIMPLE_PACKAGE_FILTER,
+    is_external: true,
+    $or: [{ delivered: true }, { estado_pedido: "Entregado" }],
+  };
+
+  if (params?.sellerId && Types.ObjectId.isValid(params.sellerId)) {
+    match.id_vendedor = new Types.ObjectId(params.sellerId);
+  }
+
+  if (!params?.includeResolved) {
+    match.deposito_realizado = { $ne: true };
+  }
+
+  if (params?.from || params?.to) {
+    match.$and = [];
+    const deliveredDateClauses: any[] = [];
+    if (params.from) {
+      deliveredDateClauses.push({
+        $or: [
+          { hora_entrega_real: { $gte: params.from } },
+          {
+            hora_entrega_real: null,
+            fecha_pedido: { $gte: params.from },
+          },
+        ],
+      });
+    }
+    if (params.to) {
+      deliveredDateClauses.push({
+        $or: [
+          { hora_entrega_real: { $lte: params.to } },
+          {
+            hora_entrega_real: null,
+            fecha_pedido: { $lte: params.to },
+          },
+        ],
+      });
+    }
+    match.$and.push(...deliveredDateClauses);
+  }
+
+  return await VentaExternaModel.find(match)
+    .sort({ hora_entrega_real: -1, fecha_pedido: -1, numero_paquete: 1 })
+    .populate({ path: "id_vendedor", select: "_id nombre apellido marca mail telefono" })
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" })
+    .populate({ path: "sucursal", select: "_id nombre" })
+    .populate({
+      path: "pedido_ref",
+      select: "_id fecha_pedido hora_entrega_real estado_pedido pagado_al_vendedor esta_pagado subtotal_qr subtotal_efectivo numero_guia buyer_tracking_code simple_package_source_id",
+      populate: [
+        { path: "sucursal", select: "_id nombre" },
+        { path: "lugar_origen", select: "_id nombre" },
+      ]
+    })
+    .lean();
+};
+
 export const SimplePackageRepository = {
   getSimplePackageByID,
   getSimplePackagesByIDs,
@@ -317,4 +382,5 @@ export const SimplePackageRepository = {
   getSellerAccountingSimplePackages,
   getSellerHistorySimplePackages,
   markSellerAccountingSimplePackagesDeposited,
+  getSellerPaymentAuditSimplePackages,
 };
