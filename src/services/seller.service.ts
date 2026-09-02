@@ -241,6 +241,26 @@ const matchesSellerFullName = (sellerData: any, q?: string) => {
   return includesNormalized(fullName, q);
 };
 
+const getSellerRecentActivityCount = (sellerData: any) => {
+  const threshold = dayjs().subtract(30, "day");
+
+  const salesCount = Array.isArray(sellerData?.sales)
+    ? sellerData.sales.filter((sale: any) => {
+        const saleDate = sale?.pedido?.hora_entrega_real || sale?.pedido?.fecha_pedido || sale?.pedido?.hora_entrega_acordada;
+        return saleDate ? dayjs(saleDate).isValid() && !dayjs(saleDate).isBefore(threshold) : false;
+      }).length
+    : 0;
+
+  const simplePackageCount = Array.isArray(sellerData?.simplePackageSales)
+    ? sellerData.simplePackageSales.filter((row: any) => {
+        const rowDate = row?.hora_entrega_real || row?.fecha_pedido;
+        return rowDate ? dayjs(rowDate).isValid() && !dayjs(rowDate).isBefore(threshold) : false;
+      }).length
+    : 0;
+
+  return salesCount + simplePackageCount;
+};
+
 const getAllSellers = async (params?: SellerListFilters) => {
   if (params?.page || params?.pageSize) {
     const paged = await SellerRepository.findWithDebtsAndSalesPage(params);
@@ -279,6 +299,7 @@ const getAllSellers = async (params?: SellerListFilters) => {
       ...sellerData,
       ...metrics,
       pago_mensual: pagoMensual,
+      activity_last_30_days_count: getSellerRecentActivityCount(sellerData),
     };
   });
 

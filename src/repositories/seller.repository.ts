@@ -361,6 +361,8 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
               saldo_por_paquete: { $ifNull: ["$saldo_por_paquete", 0] },
               estado_pedido: 1,
               deposito_realizado: 1,
+              fecha_pedido: 1,
+              hora_entrega_real: 1,
             }
           }
         ],
