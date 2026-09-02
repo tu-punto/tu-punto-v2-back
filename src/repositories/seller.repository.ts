@@ -19,6 +19,8 @@ type SellerListQueryParams = {
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
+  branchIds?: string[];
+  serviceTypes?: Array<"alquiler" | "exhibicion" | "entrega_simple">;
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
   assignedPaymentDate?: string;
   sortBy?:
@@ -36,6 +38,14 @@ type SellerListQueryParams = {
 };
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const appendAndCondition = (match: Record<string, any>, condition: Record<string, any>) => {
+  if (!Array.isArray(match.$and)) {
+    match.$and = [];
+  }
+
+  match.$and.push(condition);
+};
 
 const findAll = async (): Promise<IVendedor[]> => {
   return await VendedorModel.find().lean<IVendedor[]>().exec();
@@ -178,6 +188,40 @@ const buildSellerListMatch = (params?: SellerListQueryParams) => {
   }
 
   const todayStart = dayjs().startOf("day");
+
+  if (Array.isArray(params?.branchIds) && params.branchIds.length > 0) {
+    const validBranchIds = params.branchIds.filter((id) => Types.ObjectId.isValid(id));
+    if (validBranchIds.length > 0) {
+      appendAndCondition(match, {
+        pago_sucursales: {
+          $elemMatch: {
+            activo: { $ne: false },
+            id_sucursal: { $in: validBranchIds.map((id) => new Types.ObjectId(id)) },
+          },
+        },
+      });
+    }
+  }
+
+  if (Array.isArray(params?.serviceTypes) && params.serviceTypes.length > 0) {
+    const serviceConditions = params.serviceTypes
+      .filter((service): service is "alquiler" | "exhibicion" | "entrega_simple" =>
+        ["alquiler", "exhibicion", "entrega_simple"].includes(service)
+      )
+      .map((service) => ({ [service]: { $gt: 0 } }));
+
+    if (serviceConditions.length > 0) {
+      appendAndCondition(match, {
+        pago_sucursales: {
+          $elemMatch: {
+            activo: { $ne: false },
+            $or: serviceConditions,
+          },
+        },
+      });
+    }
+  }
+
   if (params?.status === "declinando_servicio") {
     match.declinacion_servicio_fecha = { $exists: true, $ne: null };
     match.fecha_vigencia = { $gte: todayStart.subtract(5, "day").toDate() };
@@ -317,6 +361,8 @@ const findWithDebtsAndSales = async (params?: SellerListQueryParams) => {
               saldo_por_paquete: { $ifNull: ["$saldo_por_paquete", 0] },
               estado_pedido: 1,
               deposito_realizado: 1,
+              fecha_pedido: 1,
+              hora_entrega_real: 1,
             }
           }
         ],
@@ -447,6 +493,60 @@ const buildSellerMetricsStages = () => [
     },
   },
   {
+    $lookup: {
+      from: "Venta",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$vendedor", "$$vendedor_id"] },
+          },
+        },
+        {
+          $lookup: {
+            from: "Pedido",
+            localField: "pedido",
+            foreignField: "_id",
+            as: "pedido",
+          },
+        },
+        { $unwind: { path: "$pedido", preserveNullAndEmptyArrays: true } },
+        {
+          $match: {
+            "pedido.simple_package_order": { $ne: true },
+            $or: [
+              { "pedido.fecha_pedido": { $gte: dayjs().subtract(30, "day").toDate() } },
+              { "pedido.hora_entrega_real": { $gte: dayjs().subtract(30, "day").toDate() } },
+            ],
+          },
+        },
+        { $count: "count" },
+      ],
+      as: "recentSalesActivity",
+    },
+  },
+  {
+    $lookup: {
+      from: "VentaExterna",
+      let: { vendedor_id: "$_id" },
+      pipeline: [
+        {
+          $match: {
+            $expr: { $eq: ["$id_vendedor", "$$vendedor_id"] },
+            service_origin: "simple_package",
+            is_external: true,
+            $or: [
+              { fecha_pedido: { $gte: dayjs().subtract(30, "day").toDate() } },
+              { hora_entrega_real: { $gte: dayjs().subtract(30, "day").toDate() } },
+            ],
+          },
+        },
+        { $count: "count" },
+      ],
+      as: "recentSimplePackageActivity",
+    },
+  },
+  {
     $addFields: {
       saldo_pendiente: {
         $add: [
@@ -456,6 +556,12 @@ const buildSellerMetricsStages = () => [
       },
       deuda: {
         $ifNull: [{ $arrayElemAt: ["$debtMetrics.deuda", 0] }, 0],
+      },
+      activity_last_30_days_count: {
+        $add: [
+          { $ifNull: [{ $arrayElemAt: ["$recentSalesActivity.count", 0] }, 0] },
+          { $ifNull: [{ $arrayElemAt: ["$recentSimplePackageActivity.count", 0] }, 0] },
+        ],
       },
       pago_mensual: {
         $sum: {

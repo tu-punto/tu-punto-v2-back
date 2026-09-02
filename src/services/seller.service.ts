@@ -218,6 +218,8 @@ type SellerListFilters = {
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
+  branchIds?: string[];
+  serviceTypes?: Array<"alquiler" | "exhibicion" | "entrega_simple">;
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
   assignedPaymentDate?: string;
   sortBy?:
@@ -237,6 +239,26 @@ type SellerListFilters = {
 const matchesSellerFullName = (sellerData: any, q?: string) => {
   const fullName = `${sellerData?.nombre || ""} ${sellerData?.apellido || ""}`.trim().toLowerCase();
   return includesNormalized(fullName, q);
+};
+
+const getSellerRecentActivityCount = (sellerData: any) => {
+  const threshold = dayjs().subtract(30, "day");
+
+  const salesCount = Array.isArray(sellerData?.sales)
+    ? sellerData.sales.filter((sale: any) => {
+        const saleDate = sale?.pedido?.hora_entrega_real || sale?.pedido?.fecha_pedido || sale?.pedido?.hora_entrega_acordada;
+        return saleDate ? dayjs(saleDate).isValid() && !dayjs(saleDate).isBefore(threshold) : false;
+      }).length
+    : 0;
+
+  const simplePackageCount = Array.isArray(sellerData?.simplePackageSales)
+    ? sellerData.simplePackageSales.filter((row: any) => {
+        const rowDate = row?.hora_entrega_real || row?.fecha_pedido;
+        return rowDate ? dayjs(rowDate).isValid() && !dayjs(rowDate).isBefore(threshold) : false;
+      }).length
+    : 0;
+
+  return salesCount + simplePackageCount;
 };
 
 const getAllSellers = async (params?: SellerListFilters) => {
@@ -259,6 +281,8 @@ const getAllSellers = async (params?: SellerListFilters) => {
     sellerId: params?.sellerId,
     q: params?.q,
     status: params?.status,
+    branchIds: params?.branchIds,
+    serviceTypes: params?.serviceTypes,
     assignedPaymentDay: params?.assignedPaymentDay,
     assignedPaymentDate: params?.assignedPaymentDate,
   });
@@ -275,6 +299,7 @@ const getAllSellers = async (params?: SellerListFilters) => {
       ...sellerData,
       ...metrics,
       pago_mensual: pagoMensual,
+      activity_last_30_days_count: getSellerRecentActivityCount(sellerData),
     };
   });
 

@@ -31,6 +31,8 @@ export const getSellers = async (req: Request, res: Response) => {
     const q = String(req.query.q || "").trim() || undefined;
     const statusQuery = String(req.query.status || "").trim().toLowerCase();
     const pendingPaymentQuery = String(req.query.pendingPayment || "").trim().toLowerCase();
+    const branchIdsQuery = String(req.query.branchIds || "").trim();
+    const serviceTypesQuery = String(req.query.serviceTypes || "").trim();
     const assignedPaymentDayQuery = String(req.query.assignedPaymentDay || "").trim().toLowerCase();
     const assignedPaymentDateQuery = String(req.query.assignedPaymentDate || "").trim();
     const assignedPaymentDate = /^\d{4}-\d{2}-\d{2}$/.test(assignedPaymentDateQuery) ? assignedPaymentDateQuery : undefined;
@@ -52,6 +54,17 @@ export const getSellers = async (req: Request, res: Response) => {
       pendingPaymentQuery === "con_deuda" || pendingPaymentQuery === "sin_deuda"
         ? pendingPaymentQuery
         : undefined;
+    const branchIds = branchIdsQuery
+      ? branchIdsQuery.split(",").map((id) => id.trim()).filter(Boolean)
+      : undefined;
+    const serviceTypes = serviceTypesQuery
+      ? serviceTypesQuery
+          .split(",")
+          .map((item) => item.trim())
+          .filter((item): item is "alquiler" | "exhibicion" | "entrega_simple" =>
+            ["alquiler", "exhibicion", "entrega_simple"].includes(item)
+          )
+      : undefined;
     const assignedPaymentDay =
       assignedPaymentDayQuery === "sin_solicitud" ||
       assignedPaymentDayQuery === "8" ||
@@ -83,6 +96,8 @@ export const getSellers = async (req: Request, res: Response) => {
         q,
         status,
         pendingPayment,
+        branchIds,
+        serviceTypes,
         assignedPaymentDay,
         assignedPaymentDate,
         sortBy,
@@ -97,6 +112,8 @@ export const getSellers = async (req: Request, res: Response) => {
       q,
       status,
       pendingPayment,
+      branchIds,
+      serviceTypes,
       assignedPaymentDay,
       assignedPaymentDate,
       sortBy,
