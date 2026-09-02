@@ -218,6 +218,8 @@ type SellerListFilters = {
   q?: string;
   status?: "activo" | "debe_renovar" | "ya_no_es_cliente" | "declinando_servicio";
   pendingPayment?: "con_deuda" | "sin_deuda";
+  branchIds?: string[];
+  serviceTypes?: Array<"alquiler" | "exhibicion" | "entrega_simple">;
   assignedPaymentDay?: "sin_solicitud" | "8" | "18" | "28";
   assignedPaymentDate?: string;
   sortBy?:
@@ -259,6 +261,8 @@ const getAllSellers = async (params?: SellerListFilters) => {
     sellerId: params?.sellerId,
     q: params?.q,
     status: params?.status,
+    branchIds: params?.branchIds,
+    serviceTypes: params?.serviceTypes,
     assignedPaymentDay: params?.assignedPaymentDay,
     assignedPaymentDate: params?.assignedPaymentDate,
   });

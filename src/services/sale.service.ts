@@ -491,6 +491,7 @@ const getProductsBySellerId = async (sellerId: string) => {
         key: sale.producto._id,
         producto: sale.producto.nombre_producto,
         id_producto: sale.producto._id,
+        esTemporal: Boolean(sale.producto.esTemporal),
       };
     }
 
@@ -509,6 +510,9 @@ const getProductsBySellerId = async (sellerId: string) => {
       deposito_realizado: sale.deposito_realizado,
       cliente: sale.pedido?.cliente ?? null,
       fecha_pedido: sale.pedido?.fecha_pedido ?? null,
+      fecha_creacion: sale.pedido?.fecha_pedido ?? null,
+      fecha_entrega: sale.pedido?.hora_entrega_real ?? sale.pedido?.hora_entrega_acordada ?? null,
+      esTemporal: Boolean(sale.producto?.esTemporal),
     };
 
     if (product) {
