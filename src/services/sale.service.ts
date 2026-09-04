@@ -425,6 +425,10 @@ const getSalesByShippingId = async (pedidoId: string) => {
     id_pedido: pedidoId,
     id_producto: sale.producto._id,
     id_sucursal: sale.sucursal,
+    pricingPromotion: (sale as any).pricingPromotion || null,
+    promoAccepted: Boolean((sale as any).promoAccepted),
+    promoLabel: (sale as any).promoLabel || null,
+    promoQuestion: (sale as any).promoQuestion || null,
   }));
 
   const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
@@ -472,6 +476,10 @@ const getProductDetailsByProductId = async (productId: number) => {
       cliente: sale.pedido.cliente,
       fecha_pedido: sale.pedido.fecha_pedido,
       nombre_vendedor: `${sale.vendedor.nombre} ${sale.vendedor.apellido} - ${sale.vendedor.marca}`,
+      pricingPromotion: (sale as any).pricingPromotion || null,
+      promoAccepted: Boolean((sale as any).promoAccepted),
+      promoLabel: (sale as any).promoLabel || null,
+      promoQuestion: (sale as any).promoQuestion || null,
     };
   });
 
@@ -513,6 +521,10 @@ const getProductsBySellerId = async (sellerId: string) => {
       fecha_creacion: sale.pedido?.fecha_pedido ?? null,
       fecha_entrega: sale.pedido?.hora_entrega_real ?? sale.pedido?.hora_entrega_acordada ?? null,
       esTemporal: Boolean(sale.producto?.esTemporal),
+      pricingPromotion: (sale as any).pricingPromotion || null,
+      promoAccepted: Boolean((sale as any).promoAccepted),
+      promoLabel: (sale as any).promoLabel || null,
+      promoQuestion: (sale as any).promoQuestion || null,
     };
 
     if (product) {
@@ -678,6 +690,10 @@ const getDataPaymentProof = async (sellerId: number) => {
     original: Number(venta.precio_original ?? venta.precio_unitario),
     cantidad: venta.cantidad,
     total: venta.precio_unitario * venta.cantidad,
+    pricingPromotion: (venta as any).pricingPromotion || null,
+    promoAccepted: Boolean((venta as any).promoAccepted),
+    promoLabel: (venta as any).promoLabel || null,
+    promoQuestion: (venta as any).promoQuestion || null,
   }));
 
   const payments = data
