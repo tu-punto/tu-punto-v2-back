@@ -669,7 +669,7 @@ const classifyDashboardRow = (
     !isAnnulled &&
     status === SEND_TO_BRANCH_STATUS &&
     branchTransferManaged &&
-    (ignoreBranchVisibility || originId === currentBranchId);
+    (ignoreBranchVisibility || related);
   const inTransit =
     !isAnnulled &&
     !pendingSend &&
@@ -686,7 +686,6 @@ const classifyDashboardRow = (
     !pendingSend &&
     !inTransit &&
     !deliveryLike &&
-    !interbranch &&
     (status === WAITING_RAW_STATUS || status === READY_FOR_PICKUP_VISUAL_STATUS);
   const visibleInAll = !isAnnulled && !delivered && (ignoreBranchVisibility || related);
 
@@ -1617,6 +1616,7 @@ const updateShipping = async (
           : (resShip as any).public_tracking_ready_for_pickup_at,
       retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
       seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
+      mostrar_recogido_por_vendedor: (resShip as any).mostrar_recogido_por_vendedor === true,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
       numero_guia: (resShip as any).numero_guia || "",
       guia_sequence: (resShip as any).guia_sequence,
@@ -2326,6 +2326,7 @@ const markSellerWithdrawal = async (params: {
           hora_entrega_real: withdrawnAt,
           retirado_por_vendedor: true,
           seller_withdrawn_at: withdrawnAt,
+          mostrar_recogido_por_vendedor: true,
         },
         shippingId,
         {
@@ -2352,6 +2353,7 @@ const markSellerWithdrawal = async (params: {
         hora_entrega_real: withdrawnAt,
         retirado_por_vendedor: true,
         seller_withdrawn_at: withdrawnAt,
+        mostrar_recogido_por_vendedor: true,
       });
       results.externalSales.updated += 1;
     } catch (error: any) {

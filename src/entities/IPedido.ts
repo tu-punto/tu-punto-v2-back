@@ -40,6 +40,7 @@ export interface IPedido {
   rechazado_en?: Date;
   rechazado_por?: string;
   motivo_rechazo?: string;
+  mostrar_recogido_por_vendedor?: boolean;
   esta_pagado: 'si' | 'no' | 'adelanto';
   adelanto_cliente: number;
   pagado_al_vendedor: boolean;

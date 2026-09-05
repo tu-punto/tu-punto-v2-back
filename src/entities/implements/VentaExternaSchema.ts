@@ -182,6 +182,10 @@ const VentaExternaSchema = new Schema({
         type: Boolean,
         default: false
     },
+    mostrar_recogido_por_vendedor: {
+        type: Boolean,
+        default: false
+    },
     seller_withdrawn_at: {
         type: Date,
         required: false

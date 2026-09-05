@@ -999,9 +999,8 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
     updatePayload.hora_entrega_real = undefined;
   }
 
-  if (externalSale.retirado_por_vendedor === true) {
-    updatePayload.retirado_por_vendedor = true;
-    updatePayload.seller_withdrawn_at = externalSale.seller_withdrawn_at || deliveredAt;
+  if (Object.prototype.hasOwnProperty.call(externalSale, "mostrar_recogido_por_vendedor")) {
+    updatePayload.mostrar_recogido_por_vendedor = externalSale.mostrar_recogido_por_vendedor === true;
   }
 
   if (!nextBranchRoute) {
