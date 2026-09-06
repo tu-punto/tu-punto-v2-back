@@ -1,0 +1,12 @@
+import { Router } from "express";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware";
+import { correctQRInventory, createQRInventory, exportQRInventory, getQRInventoryByBranch, scanQRInventory, transitionQRInventory } from "../controllers/qrInventory.controller";
+const router = Router();
+router.use(requireAuth, requireRole("admin", "operator", "seller", "superadmin"));
+router.get("/by-branch", getQRInventoryByBranch);
+router.post("/", createQRInventory);
+router.post("/:id/scan", scanQRInventory);
+router.patch("/:id/rows/:rowId", correctQRInventory);
+router.patch("/:id/status", transitionQRInventory);
+router.get("/:id/export/xlsx", exportQRInventory);
+export default router;
