@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import { IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { SellerRepository } from "../repositories/seller.repository";
+import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SimplePackageRepository } from "../repositories/simplePackage.repository";
 import { PaymentProofRepository } from "../repositories/paymentProof.repository";
@@ -15,6 +16,7 @@ import { PackageEscalationConfigService } from "./packageEscalationConfig.servic
 import { TrackingFreezeService } from "./trackingFreeze.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
+import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 
 const toTrimmed = (value: unknown): string => String(value ?? "").trim();
 
@@ -223,6 +225,50 @@ const resolveSimplePackagePaymentPayload = (row: any) => {
     subtotal_qr: method === "qr" ? sellerDebtAmount : 0,
     subtotal_efectivo: method === "efectivo" ? sellerDebtAmount : 0,
   };
+};
+
+const registerSimplePackageSellerPayment = async (params: {
+  row: any;
+  paymentMethod: PackagePaymentMethod;
+  recordedAt: Date;
+}) => {
+  const paymentMethod = normalizePaymentMethod(params.paymentMethod);
+  const amount = roundCurrency(
+    Math.min(
+      Math.max(0, Number(params.row?.amortizacion_vendedor || 0)),
+      Math.max(0, Number(params.row?.precio_total || 0))
+    )
+  );
+  if (!paymentMethod || amount <= 0) return null;
+
+  const packageId = String(params.row?._id || "").trim();
+  if (!packageId) throw new Error("No se pudo identificar el paquete simple para registrar el pago del vendedor");
+
+  const sourceKey = `simple-package-seller-payment:${packageId}`;
+  const existing = await FinanceFluxRepository.findBySourceKey(sourceKey);
+  if (existing) {
+    return { fluxId: existing._id, sourceKey, recordedAt: existing.fecha || params.recordedAt };
+  }
+
+  const originBranchId = String(
+    (params.row?.origen_sucursal as any)?._id ?? params.row?.origen_sucursal ?? params.row?.sucursal ?? ""
+  ).trim();
+  const sellerId = String(params.row?.id_vendedor || "").trim();
+  const created = await FinanceFluxRepository.registerFinanceFlux({
+    tipo: "INGRESO",
+    categoria: "SERVICIO",
+    concepto: `Cobro inicial vendedor - paquete simple (${paymentMethod === "qr" ? "QR" : "Efectivo"})`,
+    monto: amount,
+    fecha: params.recordedAt,
+    esDeuda: false,
+    visible_en_flujo_general: true,
+    source_key: sourceKey,
+    id_vendedor: Types.ObjectId.isValid(sellerId) ? new Types.ObjectId(sellerId) : undefined,
+    id_sucursal: Types.ObjectId.isValid(originBranchId) ? new Types.ObjectId(originBranchId) : undefined,
+  });
+  await FinanceStatsAggregateService.markDateDirty(params.recordedAt);
+
+  return { fluxId: created._id, sourceKey, recordedAt: params.recordedAt };
 };
 
 const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) => {
@@ -511,6 +557,11 @@ const createSimplePackageOrders = async (params: {
 
     try {
       await ShippingService.processSalesForShipping(String(createdShipping._id), [salePayload]);
+      const sellerPayment = await registerSimplePackageSellerPayment({
+        row,
+        paymentMethod,
+        recordedAt: new Date(orderCreatedAt),
+      });
 
       const updatedRow = await SimplePackageRepository.updateSimplePackageByID(String(row._id), {
         is_external: true,
@@ -524,6 +575,14 @@ const createSimplePackageOrders = async (params: {
             ? orderCreatedAt
             : (row as any)?.public_tracking_ready_for_pickup_at,
         seller_debt_applied: !paymentMethod,
+        ...(sellerPayment
+          ? {
+              seller_payment_source_key: sellerPayment.sourceKey,
+              seller_payment_method: paymentMethod,
+              seller_payment_flux_id: sellerPayment.fluxId,
+              seller_payment_recorded_at: sellerPayment.recordedAt,
+            }
+          : {}),
         esta_pagado: "no",
         metodo_pago: paymentMethod,
         fecha_pedido: orderCreatedAt as unknown as Date,

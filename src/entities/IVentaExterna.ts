@@ -51,6 +51,10 @@ export interface IVentaExterna {
     seller_balance_applied_amount?: number;
     deposito_realizado?: boolean;
     seller_debt_applied?: boolean;
+    seller_payment_source_key?: string;
+    seller_payment_method?: PackagePaymentMethod;
+    seller_payment_flux_id?: Types.ObjectId;
+    seller_payment_recorded_at?: Date;
     pedido_ref?: Types.ObjectId;
     qr_code?: string;
     shipping_qr_code?: string;

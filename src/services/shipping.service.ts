@@ -1927,6 +1927,19 @@ const getDailySalesHistory = async (
     return paymentBranchId === sucursalId;
   }).map(({ pedido }) => pedido);
 
+  const simpleSellerPaymentCandidates = await SimplePackageRepository.getSellerPaymentHistoryRows({
+    from: fromLastClose ? periodStart : (date ? startOfDay : undefined),
+    to: periodEnd,
+    originBranchId: sucursalId,
+  });
+  const simpleSellerPaymentRows = simpleSellerPaymentCandidates.filter((row: any) => {
+    const recordedAt = row?.seller_payment_recorded_at ? new Date(row.seller_payment_recorded_at) : null;
+    if (!recordedAt || Number.isNaN(recordedAt.getTime())) return false;
+    if (fromLastClose) return recordedAt > periodStart && recordedAt <= periodEnd;
+    if (date) return recordedAt >= startOfDay && recordedAt <= periodEnd;
+    return true;
+  });
+
   const externalCandidates = await ExternalSaleRepository.getExternalSalesHistoryCandidates(
     fromLastClose ? periodStart : (date ? startOfDay : undefined),
     periodEnd,
@@ -2159,7 +2172,40 @@ const getDailySalesHistory = async (
     return rows;
   });
 
-  const resumen = [...resumenPedidos, ...resumenExternas].sort(
+  const resumenPagosVendedorSimples = simpleSellerPaymentRows.map((row: any) => {
+    const amount = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+    const method = String(row?.seller_payment_method || "").trim().toLowerCase();
+    const isQr = method === "qr";
+    const productosBusqueda = buildHistorySearchText(row?.descripcion_paquete);
+    const busquedaGlobal = buildHistorySearchText(
+      row?.comprador,
+      row?.vendedor,
+      row?.descripcion_paquete,
+      row?.numero_guia,
+      row?.origen_sucursal?.nombre,
+      row?.destino_sucursal?.nombre,
+      amount
+    );
+
+    return {
+      _id: `${row._id}-simple-seller-payment`,
+      simple_package_id: row._id,
+      payment_kind: "seller",
+      fecha: row.seller_payment_recorded_at,
+      hora: dayjs(row.seller_payment_recorded_at).format("HH:mm"),
+      tipo_de_pago: isQr ? "Pago vendedor QR" : "Pago vendedor efectivo",
+      monto_total: amount,
+      subtotal_efectivo: isQr ? 0 : amount,
+      subtotal_qr: isQr ? amount : 0,
+      esta_pagado: "si",
+      is_simple_package_seller_payment: true,
+      exclude_from_box_close: true,
+      productos_busqueda: productosBusqueda,
+      busqueda_global: busquedaGlobal,
+    };
+  });
+
+  const resumen = [...resumenPedidos, ...resumenExternas, ...resumenPagosVendedorSimples].sort(
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
@@ -2169,7 +2215,14 @@ const getDailySalesHistory = async (
     return acc;
   }, { efectivo: 0, qr: 0 });
 
-  return { resumen, totales };
+  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number }, curr: any) => {
+    if (curr.exclude_from_box_close) return acc;
+    acc.efectivo += curr.subtotal_efectivo;
+    acc.qr += curr.subtotal_qr;
+    return acc;
+  }, { efectivo: 0, qr: 0 });
+
+  return { resumen, totales, totales_cierre: totalesCierre };
 };
 
 const saveQRCode = async (shippingId: string, qrCode: string) => {

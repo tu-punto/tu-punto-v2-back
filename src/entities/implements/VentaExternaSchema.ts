@@ -246,6 +246,28 @@ const VentaExternaSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    seller_payment_source_key: {
+        type: String,
+        required: false,
+        default: "",
+        index: true,
+    },
+    seller_payment_method: {
+        type: String,
+        enum: ["", "efectivo", "qr"],
+        default: "",
+    },
+    seller_payment_flux_id: {
+        type: Types.ObjectId,
+        ref: 'FlujoFinanciero',
+        required: false,
+        default: null,
+    },
+    seller_payment_recorded_at: {
+        type: Date,
+        required: false,
+        default: null,
+    },
     deposito_realizado: {
         type: Boolean,
         default: false,
