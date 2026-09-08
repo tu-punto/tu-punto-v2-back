@@ -41,6 +41,7 @@ export interface IVentaExterna {
     saldo_cobrar: number;
     estado_pedido: string;
     mostrar_recogido_por_vendedor?: boolean;
+    producto_cubierto_por_recojo_vendedor?: boolean;
     is_external?: boolean;
     anulado?: boolean;
     anulado_en?: Date;

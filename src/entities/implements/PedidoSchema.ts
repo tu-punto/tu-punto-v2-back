@@ -133,6 +133,10 @@ const PedidoSchema = new Schema({
     type: Boolean,
     default: false
   },
+  producto_cubierto_por_recojo_vendedor: {
+    type: Boolean,
+    default: false
+  },
   seller_withdrawn_at: {
     type: Date,
     required: false

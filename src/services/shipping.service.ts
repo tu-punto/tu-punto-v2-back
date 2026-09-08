@@ -1624,6 +1624,7 @@ const updateShipping = async (
       retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
       seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
       mostrar_recogido_por_vendedor: (resShip as any).mostrar_recogido_por_vendedor === true,
+      producto_cubierto_por_recojo_vendedor: (resShip as any).producto_cubierto_por_recojo_vendedor === true,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
       numero_guia: (resShip as any).numero_guia || "",
       guia_sequence: (resShip as any).guia_sequence,
