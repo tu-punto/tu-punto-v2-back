@@ -21,6 +21,7 @@ export const createCatalogOrder = async (req: Request, res: Response) => {
     return res.status(201).json({
       success: true,
       orderId: order._id,
+      catalogStatus: "READY_FOR_PICKUP",
       stockItems: (order as any).catalog_stock_items || []
     });
   } catch (error: any) {
