@@ -109,6 +109,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
         ? String(req.query.currentBranchId || auth?.sucursalId || "").trim()
         : String(auth?.sucursalId || "").trim();
     const category = (req.query.category as "all" | "externos" | "paquetes" | undefined) || "all";
+    const origin = req.query.origin === "catalogo" ? "catalogo" : undefined;
     const ignoreBranchVisibility = isSellerRole;
 
     if (isSellerRole || sellerId) {
@@ -147,6 +148,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
       guide,
       destinationMode,
       destinationQuery,
+      origin,
     });
 
     if (isSellerRole || sellerId) {

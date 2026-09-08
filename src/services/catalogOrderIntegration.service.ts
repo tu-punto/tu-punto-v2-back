@@ -342,6 +342,7 @@ const syncOrderStatus = async (pedido: any) => {
   if (pedido?.origen_pedido !== "catalogo" || !pedido?.catalog_order_id) return;
   const statusMap: Record<string, string> = {
     "En Espera": "PENDING_REVIEW",
+    "LISTO PARA RECOGER": "READY_FOR_PICKUP",
     "En camino": "SHIPPED",
     "Entregado": "COMPLETED",
     "Rechazado": "REJECTED",
