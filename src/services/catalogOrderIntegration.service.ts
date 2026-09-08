@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { PedidoModel } from "../entities/implements/PedidoSchema";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { SucursalModel } from "../entities/implements/SucursalSchema";
 import { createVariantKey } from "../utils/variantKey";
 import { InventoryAuditService } from "./inventoryAudit.service";
 
@@ -195,9 +196,12 @@ const createOrder = async (payload: CatalogOrderPayload) => {
   if (invalidSeller) throw new Error("El pedido contiene un vendedor no valido");
 
   const branchId = text(payload.delivery?.internalBranchId);
+  const pickupBranch = Types.ObjectId.isValid(branchId)
+    ? await SucursalModel.findById(branchId).select("nombre").lean()
+    : null;
   const destination =
     payload.delivery?.method === "PICKUP"
-      ? "Retiro en sucursal"
+      ? text((pickupBranch as any)?.nombre) || "Retiro en sucursal"
       : text(payload.delivery?.address) || "Direccion indicada en catalogo";
 
   const order = await PedidoModel.create({
