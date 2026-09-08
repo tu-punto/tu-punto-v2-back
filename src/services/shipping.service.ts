@@ -568,7 +568,6 @@ type ShippingDashboardParams = {
   externalSellerSearch?: string;
   destinationMode?: "any" | "branch" | "other";
   destinationQuery?: string;
-  origin?: "catalogo";
 };
 
 const resolveInternalOriginBranchId = (row: any) =>
@@ -862,12 +861,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       { service_origin: "external" },
     ],
   };
-
-  if (params.origin === "catalogo") {
-    internalFilter.origen_pedido = "catalogo";
-    vendorOptionsInternalFilter.origen_pedido = "catalogo";
-    externalFilter._id = { $in: [] };
-  }
 
   if (params.from || params.to) {
     internalFilter.hora_entrega_acordada = {};

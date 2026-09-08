@@ -4,6 +4,8 @@ import { ProductoModel } from "../entities/implements/ProductoSchema";
 import { createVariantKey } from "../utils/variantKey";
 import { InventoryAuditService } from "./inventoryAudit.service";
 
+const READY_FOR_PICKUP_STATUS = "LISTO PARA RECOGER";
+
 type CatalogOrderItem = {
   name: string;
   quantity: number;
@@ -216,7 +218,10 @@ const createOrder = async (payload: CatalogOrderPayload) => {
     lugar_entrega: destination,
     costo_delivery: 0,
     cargo_delivery: 0,
-    estado_pedido: "En Espera",
+    // Los pedidos del catálogo ya tienen el stock validado y reservado en Tu Punto.
+    // Se comportan como los pedidos internos creados para entrega: listos desde su creación.
+    estado_pedido: READY_FOR_PICKUP_STATUS,
+    public_tracking_ready_for_pickup_at: new Date(),
     esta_pagado: "no",
     adelanto_cliente: 0,
     pagado_al_vendedor: false,
@@ -265,6 +270,9 @@ const createOrder = async (payload: CatalogOrderPayload) => {
         stockAfter: Number(item.currentStock || 0),
       })),
     });
+    // Refleja el estado inmediatamente en el pedido local del catálogo. Si el callback
+    // falla, el pedido interno conserva el estado correcto y queda marcado para reintento.
+    await syncOrderStatus(order);
     return order;
   } catch (error) {
     await restoreReservedStock(orderId, reservedItems);
