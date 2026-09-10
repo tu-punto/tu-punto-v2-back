@@ -26,6 +26,7 @@ export interface IVentaExterna {
     amortizacion_vendedor?: number;
     deuda_comprador?: number;
     saldo_por_paquete?: number;
+    saldo_por_paquete_antes_recogido?: number;
     metodo_pago?: PackagePaymentMethod;
     tipo_de_pago?: string;
     subtotal_qr?: number;

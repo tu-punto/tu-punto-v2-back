@@ -1483,7 +1483,9 @@ const updateShipping = async (
     const sales = await SaleService.getSalesByShippingId(shippingId);
     for (const sale of sales) {
       const backup = (sale as any).precio_antes_recogido;
-      await VentaModel.findByIdAndUpdate(sale._id, {
+      const saleId = (sale as any)._id || (sale as any).id_venta;
+      if (!saleId) continue;
+      await VentaModel.findByIdAndUpdate(saleId, {
         $set: {
           precio_unitario: 0,
           ...(backup === undefined || backup === null ? { precio_antes_recogido: Number(sale.precio_unitario || 0) } : {}),
@@ -1506,7 +1508,9 @@ const updateShipping = async (
     for (const sale of sales) {
       const backup = (sale as any).precio_antes_recogido;
       if (backup === undefined || backup === null) continue;
-      await VentaModel.findByIdAndUpdate(sale._id, {
+      const saleId = (sale as any)._id || (sale as any).id_venta;
+      if (!saleId) continue;
+      await VentaModel.findByIdAndUpdate(saleId, {
         $set: { precio_unitario: Number(backup) },
         $unset: { precio_antes_recogido: 1 },
       });
@@ -1646,6 +1650,17 @@ const updateShipping = async (
       nextStatus === "Entregado"
         ? roundCurrency(Number((existingSource as any)?.amortizacion_vendedor || 0))
         : 0;
+    const packagePriceRestore = Number((existingSource as any)?.saldo_por_paquete_antes_recogido);
+    const packagePickupPricePatch = willBePickedUpBySeller && !wasPickedUpBySeller
+      ? {
+          saldo_por_paquete: 0,
+          ...((existingSource as any)?.saldo_por_paquete_antes_recogido === undefined || (existingSource as any)?.saldo_por_paquete_antes_recogido === null
+            ? { saldo_por_paquete_antes_recogido: Number((existingSource as any)?.saldo_por_paquete || 0) }
+            : {}),
+        }
+      : wasPickedUpBySeller && willBeDelivered && !willBePickedUpBySeller && !Number.isNaN(packagePriceRestore)
+        ? { saldo_por_paquete: packagePriceRestore, saldo_por_paquete_antes_recogido: undefined }
+        : {};
     const destinationBranchId = resolveBranchId((resShip as any).sucursal);
     const simplePackageUpdatePayload = {
       estado_pedido: (resShip as any).estado_pedido,
@@ -1669,6 +1684,7 @@ const updateShipping = async (
       shipping_qr_code: (resShip as any).shipping_qr_code || "",
       shipping_qr_payload: (resShip as any).shipping_qr_payload || "",
       shipping_qr_image_path: (resShip as any).shipping_qr_image_path || "",
+      ...packagePickupPricePatch,
       ...(simplePackageDestinationEditRequested && destinationBranchId
         ? {
             destino_sucursal: Types.ObjectId.isValid(destinationBranchId)

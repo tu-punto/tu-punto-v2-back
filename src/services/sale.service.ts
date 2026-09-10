@@ -411,13 +411,20 @@ const getSalesByShippingId = async (pedidoId: string) => {
   const pedido = await PedidoModel.findById(pedidoId);
 
   if (!pedido) throw new Error("No existe el pedido");
+  const isPickedUpBySeller = Boolean(
+    (pedido as any)?.simple_package_order &&
+    (pedido as any)?.mostrar_recogido_por_vendedor
+  );
 
   const ventas = sales.map((sale) => ({
     key: sale.producto._id,
     producto: sale.producto.nombre_producto,
     nombre_variante: sale.nombre_variante,
     precio_unitario: sale.precio_unitario,
-    precio_original: resolveSaleOriginalPrice(sale),
+    // The original selling price remains stored for later restoration, but it
+    // must not be presented as the active price while pickup is free.
+    precio_original: isPickedUpBySeller ? Number(sale.precio_unitario || 0) : resolveSaleOriginalPrice(sale),
+    precio_antes_recogido: (sale as any).precio_antes_recogido,
     cantidad: sale.cantidad,
     utilidad: sale.utilidad,
     id_venta: sale._id,
@@ -437,6 +444,7 @@ const getSalesByShippingId = async (pedidoId: string) => {
       cantidad: prod.cantidad,
       precio_unitario: prod.precio_unitario,
       precio_original: Number((prod as any).precio_original ?? prod.precio_unitario),
+      precio_antes_recogido: (prod as any).precio_antes_recogido,
       utilidad: prod.utilidad,
       id_vendedor: prod.id_vendedor,
       id_pedido: pedidoId,

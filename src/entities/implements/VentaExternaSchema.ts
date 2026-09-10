@@ -80,6 +80,10 @@ const VentaExternaSchema = new Schema({
         required: false,
         default: 0
     },
+    saldo_por_paquete_antes_recogido: {
+        type: Number,
+        required: false
+    },
     metodo_pago: {
         type: String,
         enum: ["", "efectivo", "qr"],
