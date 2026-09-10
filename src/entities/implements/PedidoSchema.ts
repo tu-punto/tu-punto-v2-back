@@ -87,7 +87,6 @@ const PedidoSchema = new Schema({
   catalog_order_id: {
     type: String,
     required: false,
-    index: true
   },
   catalog_status_sync: {
     type: String,
