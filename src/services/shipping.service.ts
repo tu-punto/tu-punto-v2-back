@@ -1464,6 +1464,8 @@ const updateShipping = async (
 
   const wasDelivered = shipping.estado_pedido === "Entregado";
   const willBeDelivered = newData.estado_pedido === "Entregado";
+  const wasPickedUpBySeller = isSimplePackageOrder && (shipping as any)?.mostrar_recogido_por_vendedor === true;
+  const willBePickedUpBySeller = isSimplePackageOrder && newData?.mostrar_recogido_por_vendedor === true;
   const fromStatus = shipping.estado_pedido || "En Espera";
   const toStatus = newData.estado_pedido || fromStatus;
   const nextShippingState = {
@@ -1473,6 +1475,49 @@ const updateShipping = async (
 
   if (willBeDelivered && !(await canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId))) {
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
+  }
+
+  // A seller pickup is financially free. Keep an isolated backup so old orders,
+  // and the regular precio_original business field, are never repurposed.
+  if (willBePickedUpBySeller && !wasPickedUpBySeller) {
+    const sales = await SaleService.getSalesByShippingId(shippingId);
+    for (const sale of sales) {
+      const backup = (sale as any).precio_antes_recogido;
+      await VentaModel.findByIdAndUpdate(sale._id, {
+        $set: {
+          precio_unitario: 0,
+          ...(backup === undefined || backup === null ? { precio_antes_recogido: Number(sale.precio_unitario || 0) } : {}),
+        },
+      });
+    }
+    if (Array.isArray((shipping as any)?.productos_temporales)) {
+      newData.productos_temporales = (shipping as any).productos_temporales.map((product: any) => ({
+        ...product,
+        precio_unitario: 0,
+        ...(product.precio_antes_recogido === undefined || product.precio_antes_recogido === null
+          ? { precio_antes_recogido: Number(product.precio_unitario || 0) }
+          : {}),
+      }));
+    }
+  }
+
+  if (wasPickedUpBySeller && willBeDelivered && !willBePickedUpBySeller) {
+    const sales = await SaleService.getSalesByShippingId(shippingId);
+    for (const sale of sales) {
+      const backup = (sale as any).precio_antes_recogido;
+      if (backup === undefined || backup === null) continue;
+      await VentaModel.findByIdAndUpdate(sale._id, {
+        $set: { precio_unitario: Number(backup) },
+        $unset: { precio_antes_recogido: 1 },
+      });
+    }
+    if (Array.isArray((shipping as any)?.productos_temporales)) {
+      newData.productos_temporales = (shipping as any).productos_temporales.map((product: any) => {
+        if (product.precio_antes_recogido === undefined || product.precio_antes_recogido === null) return product;
+        const { precio_antes_recogido, ...rest } = product;
+        return { ...rest, precio_unitario: Number(precio_antes_recogido) };
+      });
+    }
   }
 
   let latePickupFee = 0;

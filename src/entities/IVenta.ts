@@ -11,6 +11,7 @@ export interface IVenta {
   cantidad: number;
   precio_unitario: number;
   precio_original?: number;
+  precio_antes_recogido?: number;
   utilidad: number;
   deposito_realizado: boolean;
 

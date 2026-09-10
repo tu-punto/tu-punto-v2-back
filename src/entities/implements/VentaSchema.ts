@@ -14,6 +14,10 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: Number,
     default: 0
   },
+  precio_antes_recogido: {
+    type: Number,
+    required: false
+  },
   utilidad: {
     type: Number,
     default: 0

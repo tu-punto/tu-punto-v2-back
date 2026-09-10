@@ -251,6 +251,7 @@ const PedidoSchema = new Schema({
       producto: { type: String, required: true },
       cantidad: { type: Number, required: true },
       precio_unitario: { type: Number, required: true },
+      precio_antes_recogido: { type: Number, required: false },
       utilidad: { type: Number, default: 0 },
       id_vendedor: { type: Schema.Types.ObjectId, ref: 'Vendedor', required: true }
     }

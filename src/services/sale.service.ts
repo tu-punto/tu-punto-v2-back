@@ -547,6 +547,13 @@ const updateProducts = async (shippingId: any, prods: any[], auditActor?: Invent
   }
 
   const updated: any[] = [];
+  const shippingPricingState = await PedidoModel.findById(shippingId)
+    .select("simple_package_order mostrar_recogido_por_vendedor")
+    .lean();
+  const shippingIsPickedUpBySeller = Boolean(
+    (shippingPricingState as any)?.simple_package_order &&
+    (shippingPricingState as any)?.mostrar_recogido_por_vendedor
+  );
 
   for (const prod of prods) {
     const saleId = String(prod?._id || prod?.id_venta || "");
@@ -554,7 +561,7 @@ const updateProducts = async (shippingId: any, prods: any[], auditActor?: Invent
 
     const fieldsToUpdate: any = {};
     if ("cantidad" in prod) fieldsToUpdate.cantidad = Number(prod.cantidad);
-    if ("precio_unitario" in prod) fieldsToUpdate.precio_unitario = Number(prod.precio_unitario);
+    if ("precio_unitario" in prod) fieldsToUpdate.precio_unitario = shippingIsPickedUpBySeller ? 0 : Number(prod.precio_unitario);
     if ("utilidad" in prod) fieldsToUpdate.utilidad = Number(prod.utilidad);
     if ("deposito_realizado" in prod) {
       fieldsToUpdate.deposito_realizado = prod.deposito_realizado;

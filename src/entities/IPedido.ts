@@ -75,6 +75,7 @@ export interface IPedido {
     producto: string;
     cantidad: number;
     precio_unitario: number;
+    precio_antes_recogido?: number;
     utilidad: number;
     id_vendedor: Types.ObjectId;
   }
