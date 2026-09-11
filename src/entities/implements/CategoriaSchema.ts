@@ -5,6 +5,7 @@ const CategoriaSchema = new Schema<ICategoriaDocument>({
     type: String,
     required: true,
   },
+  imagen_catalogo_url: { type: String, default: "" },
   producto: [{
     type: Types.ObjectId,
     ref: 'Producto' 

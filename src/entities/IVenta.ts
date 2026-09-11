@@ -11,6 +11,7 @@ export interface IVenta {
   cantidad: number;
   precio_unitario: number;
   precio_original?: number;
+  precio_antes_recogido?: number;
   utilidad: number;
   deposito_realizado: boolean;
 
@@ -22,6 +23,18 @@ export interface IVenta {
   nombre_variante?: string;
   variantes?: Record<string, string>;
   variantKey?: string;
+  pricingPromotion?: {
+    label?: string | null;
+    title?: string | null;
+    pricingMode?: "simple" | "tiers" | "conditional";
+    conditionalQuestion?: string | null;
+    conditionalAccepted?: boolean | null;
+    simplePrice?: number | null;
+    effectivePrice?: number | null;
+  } | null;
+  promoAccepted?: boolean;
+  promoLabel?: string | null;
+  promoQuestion?: string | null;
 
   comision: number;
   fecha: Date;

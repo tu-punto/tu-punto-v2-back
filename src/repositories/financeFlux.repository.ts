@@ -133,6 +133,13 @@ const registerFinanceFlux = async (
   return await newFinanceFlux.save();
 };
 
+const findBySourceKey = async (sourceKey: string): Promise<IFlujoFinancieroDocument | null> => {
+  const normalizedSourceKey = String(sourceKey || "").trim();
+  if (!normalizedSourceKey) return null;
+
+  return await FlujoFinancieroModel.findOne({ source_key: normalizedSourceKey }).exec();
+};
+
 const findWorkerById = async (
   workerId: Types.ObjectId
 ): Promise<IFlujoFinancieroDocument | null> => {
@@ -209,6 +216,7 @@ export const FinanceFluxRepository = {
   findByDateRange,
   findServiceIncomeByDateRange,
   registerFinanceFlux,
+  findBySourceKey,
   findWorkerById,
   findSellerById,
   findSellerInfoById,

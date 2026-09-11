@@ -9,7 +9,7 @@ const getRequestedSellerId = (req: Request) =>
 export const listPromotions = async (req: Request, res: Response) => {
   try {
     const actorRole = getAuthRole(res);
-    const sellerId = getAuthSellerId(res);
+    const sellerId = getAuthSellerId(res) || getRequestedSellerId(req);
     if (actorRole === "seller" && !sellerId) {
       return res.status(400).json({ success: false, message: "sellerId no resuelto" });
     }
@@ -33,7 +33,7 @@ export const listPromotions = async (req: Request, res: Response) => {
 export const listVariantOptions = async (req: Request, res: Response) => {
   try {
     const actorRole = getAuthRole(res);
-    const sellerId = actorRole === "seller" ? getAuthSellerId(res) : getRequestedSellerId(req);
+    const sellerId = actorRole === "seller" ? (getAuthSellerId(res) || getRequestedSellerId(req)) : getRequestedSellerId(req);
     if (!sellerId) {
       return res.status(400).json({ success: false, message: "sellerId no resuelto" });
     }
@@ -57,6 +57,7 @@ export const createPromotion = async (req: Request, res: Response) => {
       scope: String(req.body?.scope || "interno").trim() as any,
       pricingMode: String(req.body?.pricingMode || "").trim() as any,
       title: req.body?.title,
+      conditionalQuestion: req.body?.conditionalQuestion,
       simplePrice: req.body?.simplePrice,
       tiers: Array.isArray(req.body?.tiers) ? req.body.tiers : [],
       startsAt: req.body?.startsAt,
@@ -82,6 +83,7 @@ export const updatePromotion = async (req: Request, res: Response) => {
       scope: req.body?.scope,
       pricingMode: req.body?.pricingMode,
       title: req.body?.title,
+      conditionalQuestion: req.body?.conditionalQuestion,
       simplePrice: req.body?.simplePrice,
       tiers: Array.isArray(req.body?.tiers) ? req.body.tiers : undefined,
       startsAt: req.body?.startsAt,
@@ -111,11 +113,12 @@ export const deletePromotion = async (req: Request, res: Response) => {
 export const previewPromotion = async (req: Request, res: Response) => {
   try {
     const preview = await ProductPromotionService.previewPromotion({
-      sellerId: getAuthRole(res) === "seller" ? getAuthSellerId(res) : getRequestedSellerId(req),
+      sellerId: getAuthRole(res) === "seller" ? (getAuthSellerId(res) || getRequestedSellerId(req)) : getRequestedSellerId(req),
       productId: String(req.body?.productId || "").trim(),
       variantKey: String(req.body?.variantKey || "").trim(),
       scope: String(req.body?.scope || "interno").trim() as any,
       quantity: Number(req.body?.quantity || 1),
+      conditionalQuestion: req.body?.conditionalQuestion,
       simplePrice: req.body?.simplePrice,
       tiers: Array.isArray(req.body?.tiers) ? req.body.tiers : []
     });

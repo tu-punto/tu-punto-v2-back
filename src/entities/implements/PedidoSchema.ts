@@ -87,7 +87,6 @@ const PedidoSchema = new Schema({
   catalog_order_id: {
     type: String,
     required: false,
-    index: true
   },
   catalog_status_sync: {
     type: String,
@@ -126,6 +125,14 @@ const PedidoSchema = new Schema({
     default: ""
   },
   retirado_por_vendedor: {
+    type: Boolean,
+    default: false
+  },
+  mostrar_recogido_por_vendedor: {
+    type: Boolean,
+    default: false
+  },
+  producto_cubierto_por_recojo_vendedor: {
     type: Boolean,
     default: false
   },
@@ -244,6 +251,7 @@ const PedidoSchema = new Schema({
       producto: { type: String, required: true },
       cantidad: { type: Number, required: true },
       precio_unitario: { type: Number, required: true },
+      precio_antes_recogido: { type: Number, required: false },
       utilidad: { type: Number, default: 0 },
       id_vendedor: { type: Schema.Types.ObjectId, ref: 'Vendedor', required: true }
     }

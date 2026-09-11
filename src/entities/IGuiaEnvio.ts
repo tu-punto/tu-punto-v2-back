@@ -11,4 +11,5 @@ export interface IGuiaEnvio {
     lista_productos_keys?: string[];
     observaciones?: string;
     isRecogido?: boolean;
+    isRegistrado?: boolean;
 }

@@ -148,6 +148,7 @@ const isPromotionPayloadInvalid = (simplePrice: number | null, tiers: any[] = []
   simplePrice !== null && normalizePromotionTiers(tiers).length > 0;
 
 const resolvePromotionPricing = (basePrice: number, promotion?: any, quantity = 1) => {
+  const conditionalQuestion = String(promotion?.pregunta_condicional || "").trim();
   const simplePrice =
     promotion?.precio_simple === undefined || promotion?.precio_simple === null
       ? null
@@ -157,7 +158,7 @@ const resolvePromotionPricing = (basePrice: number, promotion?: any, quantity = 
   const matchedTier = [...tiers]
     .sort((left, right) => right.minQuantity - left.minQuantity)
     .find((tier) => safeQuantity >= tier.minQuantity);
-  const effectivePrice = matchedTier?.unitPrice ?? simplePrice ?? basePrice;
+  const effectivePrice = conditionalQuestion ? basePrice : matchedTier?.unitPrice ?? simplePrice ?? basePrice;
   const discountPercent =
     basePrice > 0 ? roundMoney(((basePrice - effectivePrice) / basePrice) * 100) : 0;
 
@@ -169,6 +170,7 @@ const resolvePromotionPricing = (basePrice: number, promotion?: any, quantity = 
     tiers,
     matchedTier,
     title: String(promotion?.titulo || "").trim() || null,
+    conditionalQuestion: conditionalQuestion || null,
     startsAt: promotion?.fecha_inicio || null,
     endsAt: promotion?.fecha_fin || null,
     scope: promotion?.scope || null
@@ -211,7 +213,7 @@ const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
     fecha_fin: { $gte: new Date() },
     scope: { $in: ["interno", "ambos"] }
   })
-    .select("id_producto variantKey scope titulo precio_simple escalas fecha_inicio fecha_fin")
+    .select("id_producto variantKey scope titulo pregunta_condicional precio_simple escalas fecha_inicio fecha_fin")
     .lean();
 
   const promotionMap = new Map(
@@ -221,7 +223,7 @@ const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
           promotion?.precio_simple === undefined || promotion?.precio_simple === null
             ? null
             : roundMoney(Math.max(0, Number(promotion.precio_simple)));
-        return !isPromotionPayloadInvalid(simplePrice, promotion?.escalas || []);
+        return !isPromotionPayloadInvalid(simplePrice, promotion?.escalas || []) || Boolean(promotion?.pregunta_condicional);
       })
       .map((promotion: any) => [
         `${String(promotion.id_producto)}::${String(promotion.variantKey)}`,
@@ -251,7 +253,9 @@ const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
             effectivePrice: pricing.effectivePrice,
             discountPercent: pricing.discountPercent,
             matchedTier: pricing.matchedTier,
-            scope: pricing.scope
+            scope: pricing.scope,
+            pricingMode: pricing.conditionalQuestion ? "conditional" : (pricing.tiers.length > 0 ? "tiers" : "simple"),
+            conditionalQuestion: pricing.conditionalQuestion
           }
         : null
     };

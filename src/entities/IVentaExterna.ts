@@ -26,6 +26,7 @@ export interface IVentaExterna {
     amortizacion_vendedor?: number;
     deuda_comprador?: number;
     saldo_por_paquete?: number;
+    saldo_por_paquete_antes_recogido?: number;
     metodo_pago?: PackagePaymentMethod;
     tipo_de_pago?: string;
     subtotal_qr?: number;
@@ -40,6 +41,8 @@ export interface IVentaExterna {
     monto_paga_comprador?: number;
     saldo_cobrar: number;
     estado_pedido: string;
+    mostrar_recogido_por_vendedor?: boolean;
+    producto_cubierto_por_recojo_vendedor?: boolean;
     is_external?: boolean;
     anulado?: boolean;
     anulado_en?: Date;
@@ -50,6 +53,10 @@ export interface IVentaExterna {
     seller_balance_applied_amount?: number;
     deposito_realizado?: boolean;
     seller_debt_applied?: boolean;
+    seller_payment_source_key?: string;
+    seller_payment_method?: PackagePaymentMethod;
+    seller_payment_flux_id?: Types.ObjectId;
+    seller_payment_recorded_at?: Date;
     pedido_ref?: Types.ObjectId;
     qr_code?: string;
     shipping_qr_code?: string;

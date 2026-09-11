@@ -8,6 +8,7 @@ import { includesNormalized } from "../utils/search";
 
 type PromotionScope = "interno" | "catalogo" | "ambos";
 type PromotionState = "draft" | "active" | "disabled";
+type PromotionMode = "simple" | "tiers" | "conditional";
 
 type PromotionTierInput = {
   minQuantity: number;
@@ -19,8 +20,9 @@ type PromotionInput = {
   productId: string;
   variantKey: string;
   scope: PromotionScope;
-  pricingMode?: "simple" | "tiers";
+  pricingMode?: PromotionMode;
   title?: string;
+  conditionalQuestion?: string;
   simplePrice?: number | null;
   tiers?: PromotionTierInput[];
   startsAt: Date | string;
@@ -34,6 +36,7 @@ type PricingPreviewInput = {
   variantKey: string;
   scope: PromotionScope;
   quantity: number;
+  conditionalQuestion?: string;
   simplePrice?: number | null;
   tiers?: PromotionTierInput[];
   startsAt?: Date | string;
@@ -135,8 +138,13 @@ const inferStoredPricingMode = (simplePrice: number | null, tiers: PromotionTier
   return "invalid";
 };
 
-const isPromotionPayloadInvalid = (simplePrice: number | null, tiers: PromotionTierInput[]) =>
-  inferStoredPricingMode(simplePrice, tiers) === "invalid";
+const normalizeConditionalQuestion = (value: unknown) => text(value);
+
+const isPromotionPayloadInvalid = (
+  simplePrice: number | null,
+  tiers: PromotionTierInput[],
+  conditionalQuestion?: string
+) => inferStoredPricingMode(simplePrice, tiers) === "invalid" && !conditionalQuestion;
 
 const getEffectiveState = (promotion: any, now = new Date()) => {
   if (promotion?.estado === "disabled") return "disabled";
@@ -228,12 +236,26 @@ const validatePromotionPayload = async (input: PromotionInput, excludeId?: strin
       ? null
       : roundMoney(Math.max(0, toNumber(input.simplePrice)));
   const tiers = normalizeTierList(input.tiers || []);
+  const conditionalQuestion = normalizeConditionalQuestion(input.conditionalQuestion);
   ensureNoDuplicateTiers(tiers);
 
   if (simplePrice !== null && simplePrice <= 0) {
     throw new Error("El precio simple debe ser mayor a 0");
   }
-  if (input.pricingMode === "simple") {
+  if (input.pricingMode === "conditional") {
+    if (input.scope !== "interno") {
+      throw new Error("La promocion condicional solo puede aplicar a interno");
+    }
+    if (!conditionalQuestion) {
+      throw new Error("Debes escribir la pregunta de la promocion condicional");
+    }
+    if (simplePrice === null) {
+      throw new Error("Debes definir el precio para la respuesta afirmativa");
+    }
+    if (tiers.length > 0) {
+      throw new Error("Una promocion condicional no puede tener escalas por cantidad");
+    }
+  } else if (input.pricingMode === "simple") {
     if (simplePrice === null) {
       throw new Error("Debes definir un precio fijo promocional");
     }
@@ -289,27 +311,39 @@ const validatePromotionPayload = async (input: PromotionInput, excludeId?: strin
     endsAt,
     simplePrice,
     tiers,
+    conditionalQuestion,
     context
   };
 };
 
 const mapPromotion = async (promotion: any) => {
-  const context = await getVariantContext({
-    sellerId: resolvePromotionSellerId(promotion.id_vendedor),
-    productId: String(promotion.id_producto),
-    variantKey: String(promotion.variantKey)
-  });
+  let context;
+  try {
+    context = await getVariantContext({
+      sellerId: resolvePromotionSellerId(promotion.id_vendedor),
+      productId: String(promotion.id_producto),
+      variantKey: String(promotion.variantKey)
+    });
+  } catch (error) {
+    context = {
+      product: null,
+      basePrice: 0,
+      variantLabel: String(promotion.variantKey || "Variante"),
+      totalStock: 0
+    };
+  }
   const normalizedSimplePrice =
     promotion.precio_simple === undefined || promotion.precio_simple === null
       ? null
       : roundMoney(toNumber(promotion.precio_simple));
+  const conditionalQuestion = text(promotion.pregunta_condicional);
   const normalizedTiers = Array.isArray(promotion.escalas)
     ? promotion.escalas.map((tier: any) => ({
         minQuantity: Math.max(2, Math.floor(toNumber(tier?.minQuantity))),
         unitPrice: roundMoney(toNumber(tier?.unitPrice))
       }))
     : [];
-  const pricingMode = inferStoredPricingMode(normalizedSimplePrice, normalizedTiers);
+  const pricingMode = conditionalQuestion ? "conditional" : inferStoredPricingMode(normalizedSimplePrice, normalizedTiers);
 
   return {
     id: String(promotion._id),
@@ -327,6 +361,7 @@ const mapPromotion = async (promotion: any) => {
     pricingMode,
     isInvalid: pricingMode === "invalid",
     title: text(promotion.titulo),
+    conditionalQuestion: conditionalQuestion || null,
     simplePrice: normalizedSimplePrice,
     tiers: normalizedTiers,
     startsAt: promotion.fecha_inicio,
@@ -367,7 +402,7 @@ const getApplicablePromotion = async ({
         ? null
         : roundMoney(toNumber(candidate?.precio_simple));
     const tiers = normalizeTierList(candidate?.escalas || []);
-    return !isPromotionPayloadInvalid(simplePrice, tiers);
+    return !isPromotionPayloadInvalid(simplePrice, tiers, candidate?.pregunta_condicional);
   });
   if (!promotion) return null;
 
@@ -375,11 +410,13 @@ const getApplicablePromotion = async ({
   const matchingTier = [...tiers]
     .sort((left, right) => right.minQuantity - left.minQuantity)
     .find((tier) => quantity >= tier.minQuantity);
+  const conditionalQuestion = text(promotion?.pregunta_condicional);
 
   return {
     promotion,
     tiers,
-    matchingTier
+    matchingTier,
+    conditionalQuestion
   };
 };
 
@@ -406,8 +443,8 @@ const resolveEffectivePricing = async ({
     applied?.promotion?.precio_simple === undefined || applied?.promotion?.precio_simple === null
       ? null
       : roundMoney(toNumber(applied?.promotion?.precio_simple));
-
-  const effectivePrice = applied?.matchingTier?.unitPrice ?? simplePrice ?? context.basePrice;
+  const conditionalQuestion = text(applied?.promotion?.pregunta_condicional);
+  const effectivePrice = conditionalQuestion ? context.basePrice : applied?.matchingTier?.unitPrice ?? simplePrice ?? context.basePrice;
   const discountPercent =
     context.basePrice > 0
       ? roundMoney(((context.basePrice - effectivePrice) / context.basePrice) * 100)
@@ -427,6 +464,7 @@ const resolveEffectivePricing = async ({
     simplePrice,
     tiers: applied?.tiers || [],
     matchedTier: applied?.matchingTier || null,
+    conditionalQuestion: conditionalQuestion || null,
     startsAt: applied?.promotion?.fecha_inicio || null,
     endsAt: applied?.promotion?.fecha_fin || null
   };
@@ -443,6 +481,9 @@ const createPromotion = async (input: PromotionInput) => {
     sellerId: safeSellerId,
     scope: normalizeScopeForSeller(input.scope, sellerCanUseCatalog),
   };
+  if (nextInput.pricingMode === "conditional") {
+    nextInput.scope = "interno";
+  }
   const validated = await validatePromotionPayload(nextInput);
   const created = await ProductPromotionModel.create({
     id_vendedor: new Types.ObjectId(safeSellerId),
@@ -450,6 +491,7 @@ const createPromotion = async (input: PromotionInput) => {
     variantKey: input.variantKey,
     scope: nextInput.scope,
     titulo: text(input.title),
+    pregunta_condicional: normalizeConditionalQuestion(input.conditionalQuestion),
     precio_simple: validated.simplePrice,
     escalas: validated.tiers,
     fecha_inicio: validated.startsAt,
@@ -493,16 +535,22 @@ const updatePromotion = async (
     simplePrice:
       input.simplePrice !== undefined ? input.simplePrice : (current as any).precio_simple,
     tiers: input.tiers !== undefined ? input.tiers : ((current as any).escalas || []),
+    conditionalQuestion:
+      input.conditionalQuestion !== undefined ? input.conditionalQuestion : (current as any).pregunta_condicional,
     startsAt: input.startsAt || (current as any).fecha_inicio,
     endsAt: input.endsAt || (current as any).fecha_fin,
     state: (input.state || current.estado) as PromotionState
   };
+  if (nextPayload.pricingMode === "conditional") {
+    nextPayload.scope = "interno";
+  }
 
   const validated = await validatePromotionPayload(nextPayload, promotionId);
   current.id_producto = new Types.ObjectId(nextPayload.productId) as any;
   current.variantKey = nextPayload.variantKey;
   current.scope = nextPayload.scope;
   current.titulo = text(nextPayload.title);
+  (current as any).pregunta_condicional = normalizeConditionalQuestion(nextPayload.conditionalQuestion);
   (current as any).precio_simple = validated.simplePrice;
   (current as any).escalas = validated.tiers;
   (current as any).fecha_inicio = validated.startsAt;
@@ -562,7 +610,44 @@ const listPromotions = async (params: {
     .sort({ updatedAt: -1 })
     .lean();
 
-  const mapped = (await Promise.all(promotions.map((promotion) => mapPromotion(promotion)))).filter((item) => {
+  const mapped = (
+    await Promise.all(
+      promotions.map(async (promotion) => {
+        try {
+          return await mapPromotion(promotion);
+        } catch (error) {
+          console.error("Error mapeando promocion:", error);
+          return {
+            id: String(promotion?._id || ""),
+            sellerId: resolvePromotionSellerId(promotion?.id_vendedor),
+            sellerName:
+              promotion?.id_vendedor && typeof promotion.id_vendedor === "object"
+                ? text(`${(promotion.id_vendedor as any).nombre || ""} ${(promotion.id_vendedor as any).apellido || ""}`) || "Vendedor"
+                : undefined,
+            productId: String(promotion?.id_producto || ""),
+            productName: "Producto no disponible",
+            variantKey: String(promotion?.variantKey || ""),
+            variantLabel: String(promotion?.variantKey || "Variante"),
+            basePrice: 0,
+            totalStock: 0,
+            scope: promotion?.scope,
+            pricingMode: "invalid",
+            isInvalid: true,
+            title: text(promotion?.titulo),
+            conditionalQuestion: text(promotion?.pregunta_condicional) || null,
+            simplePrice: promotion?.precio_simple ?? null,
+            tiers: Array.isArray(promotion?.escalas) ? promotion.escalas : [],
+            startsAt: promotion?.fecha_inicio,
+            endsAt: promotion?.fecha_fin,
+            state: promotion?.estado,
+            effectiveState: getEffectiveState(promotion),
+            updatedAt: promotion?.updatedAt,
+            createdAt: promotion?.createdAt,
+          };
+        }
+      })
+    )
+  ).filter(Boolean).filter((item) => {
     return (
       includesNormalized(item.productName, params.q) ||
       includesNormalized(item.variantLabel, params.q) ||
@@ -646,12 +731,13 @@ const previewPromotion = async (input: PricingPreviewInput) => {
     input.simplePrice === undefined || input.simplePrice === null
       ? null
       : roundMoney(Math.max(0, toNumber(input.simplePrice)));
+  const conditionalQuestion = normalizeConditionalQuestion(input.conditionalQuestion);
   const quantity = Math.max(1, Math.floor(toNumber(input.quantity) || 1));
   const scope = normalizeScopeForSeller(input.scope, sellerCanUseCatalog);
   const matchedTier = [...tiers]
     .sort((left, right) => right.minQuantity - left.minQuantity)
     .find((tier) => quantity >= tier.minQuantity);
-  const effectivePrice = matchedTier?.unitPrice ?? simplePrice ?? context.basePrice;
+  const effectivePrice = conditionalQuestion ? simplePrice ?? context.basePrice : matchedTier?.unitPrice ?? simplePrice ?? context.basePrice;
   const discountPercent =
     context.basePrice > 0
       ? roundMoney(((context.basePrice - effectivePrice) / context.basePrice) * 100)
@@ -668,6 +754,7 @@ const previewPromotion = async (input: PricingPreviewInput) => {
     matchedTier: matchedTier || null,
     simplePrice,
     tiers,
+    conditionalQuestion: conditionalQuestion || null,
     scope
   };
 };

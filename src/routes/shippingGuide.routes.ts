@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAllShippings, getBranchShippings, getSellerShippings, markAsDelivered, updateObservations, uploadShipping } from "../controllers/shippingGuide.controller";
+import { getAllShippings, getBranchShippings, getSellerShippings, markAsDelivered, markAsRegistered, updateObservations, uploadShipping } from "../controllers/shippingGuide.controller";
 import { uploadShippingGuideAttachments } from "../config/multerConfig";
 import { requireRole, requireSellerOwnership } from "../middlewares/auth.middleware";
 import { rateLimiters } from "../middlewares/rateLimit.middleware";
@@ -34,6 +34,7 @@ shippingGuideRouter.post(
   uploadShipping
 )
 shippingGuideRouter.put("/mark-deliver/:id", requireRole("admin", "operator", "superadmin", "seller"), markAsDelivered)
+shippingGuideRouter.put("/mark-registered/:id", requireRole("admin", "operator", "superadmin"), markAsRegistered)
 shippingGuideRouter.put("/observations/:id", requireRole("admin", "operator", "superadmin"), updateObservations)
 
 export default shippingGuideRouter;

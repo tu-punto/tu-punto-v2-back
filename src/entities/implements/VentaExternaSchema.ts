@@ -80,6 +80,10 @@ const VentaExternaSchema = new Schema({
         required: false,
         default: 0
     },
+    saldo_por_paquete_antes_recogido: {
+        type: Number,
+        required: false
+    },
     metodo_pago: {
         type: String,
         enum: ["", "efectivo", "qr"],
@@ -182,6 +186,14 @@ const VentaExternaSchema = new Schema({
         type: Boolean,
         default: false
     },
+    mostrar_recogido_por_vendedor: {
+        type: Boolean,
+        default: false
+    },
+    producto_cubierto_por_recojo_vendedor: {
+        type: Boolean,
+        default: false
+    },
     seller_withdrawn_at: {
         type: Date,
         required: false
@@ -241,6 +253,28 @@ const VentaExternaSchema = new Schema({
     seller_debt_applied: {
         type: Boolean,
         default: false,
+    },
+    seller_payment_source_key: {
+        type: String,
+        required: false,
+        default: "",
+        index: true,
+    },
+    seller_payment_method: {
+        type: String,
+        enum: ["", "efectivo", "qr"],
+        default: "",
+    },
+    seller_payment_flux_id: {
+        type: Types.ObjectId,
+        ref: 'FlujoFinanciero',
+        required: false,
+        default: null,
+    },
+    seller_payment_recorded_at: {
+        type: Date,
+        required: false,
+        default: null,
     },
     deposito_realizado: {
         type: Boolean,

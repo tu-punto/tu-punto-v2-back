@@ -110,6 +110,17 @@ export const markAsDelivered = async (req: Request, res: Response) => {
     }
 }
 
+export const markAsRegistered = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const updatedShipping = await ShippingGuideService.markAsRegistered(id);
+        res.json({ status: true, updatedShipping });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+}
+
 export const updateObservations = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;

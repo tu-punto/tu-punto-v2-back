@@ -37,6 +37,10 @@ const ProductPromotionSchema = new Schema(
       type: String,
       default: ""
     },
+    pregunta_condicional: {
+      type: String,
+      default: ""
+    },
     precio_simple: {
       type: Number,
       required: false

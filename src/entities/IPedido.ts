@@ -40,6 +40,8 @@ export interface IPedido {
   rechazado_en?: Date;
   rechazado_por?: string;
   motivo_rechazo?: string;
+  mostrar_recogido_por_vendedor?: boolean;
+  producto_cubierto_por_recojo_vendedor?: boolean;
   esta_pagado: 'si' | 'no' | 'adelanto';
   adelanto_cliente: number;
   pagado_al_vendedor: boolean;
@@ -73,6 +75,7 @@ export interface IPedido {
     producto: string;
     cantidad: number;
     precio_unitario: number;
+    precio_antes_recogido?: number;
     utilidad: number;
     id_vendedor: Types.ObjectId;
   }
