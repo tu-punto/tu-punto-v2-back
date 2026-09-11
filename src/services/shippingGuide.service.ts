@@ -50,6 +50,10 @@ const markAsDelivered = async (shippingGuideID: string) => {
     return await ShippingGuideRepository.markAsDelivered(shippingGuideID);
 }
 
+const markAsRegistered = async (shippingGuideID: string) => {
+    return await ShippingGuideRepository.markAsRegistered(shippingGuideID);
+}
+
 const updateObservations = async (shippingGuideID: string, observaciones: string) => {
     return await ShippingGuideRepository.updateObservations(shippingGuideID, observaciones);
 };
@@ -60,5 +64,6 @@ export const ShippingGuideService = {
     getBranchShippings,
     uploadShipping,
     markAsDelivered,
+    markAsRegistered,
     updateObservations,
 }
