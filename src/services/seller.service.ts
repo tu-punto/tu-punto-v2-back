@@ -241,6 +241,41 @@ const matchesSellerFullName = (sellerData: any, q?: string) => {
   return includesNormalized(fullName, q);
 };
 
+const resolveSellerBranchesForSellers = async (sellers: any[] = []) => {
+  const branchIds = Array.from(
+    new Set(
+      sellers.flatMap((seller) =>
+        (Array.isArray(seller?.pago_sucursales) ? seller.pago_sucursales : [])
+          .map((branch: any) => getRawId(branch?.id_sucursal))
+          .filter((id: string) => Types.ObjectId.isValid(id))
+      )
+    )
+  );
+  const branchDocs = branchIds.length
+    ? await SucursalModel.find({ _id: { $in: branchIds } }).select("_id nombre").lean()
+    : [];
+  const branchNameById = new Map(
+    branchDocs.map((branch: any) => [String(branch?._id || ""), String(branch?.nombre || "").trim()])
+  );
+
+  return sellers.map((seller) => ({
+    ...seller,
+    pago_sucursales: Array.isArray(seller?.pago_sucursales)
+      ? seller.pago_sucursales.map((branch: any) => {
+          const idSucursal = getRawId(branch?.id_sucursal);
+          return {
+            ...branch,
+            id_sucursal: idSucursal || branch?.id_sucursal || "",
+            sucursalName:
+              [branch?.sucursalName, branch?.id_sucursal?.nombre, branchNameById.get(idSucursal)]
+                .map((value) => String(value ?? "").trim())
+                .find(isMeaningfulText) || "Sucursal",
+          };
+        })
+      : seller?.pago_sucursales,
+  }));
+};
+
 const getSellerRecentActivityCount = (sellerData: any) => {
   const threshold = dayjs().subtract(30, "day");
 
@@ -263,17 +298,18 @@ const getSellerRecentActivityCount = (sellerData: any) => {
 
 const getAllSellers = async (params?: SellerListFilters) => {
   if (params?.page || params?.pageSize) {
-    const paged = await SellerRepository.findWithDebtsAndSalesPage(params);
+    if (params?.sortBy === "pago_pendiente") {
+      const paged = await SellerRepository.findWithDebtsAndSalesPage(params);
+      return {
+        ...paged,
+        data: await resolveSellerBranchesForSellers(paged.data || []),
+      };
+    }
+
+    const paged = await SellerRepository.findLightPage(params);
     return {
       ...paged,
-      data: await Promise.all(
-        (paged.data || []).map(async (seller: any) => ({
-          ...seller,
-          pago_sucursales: Array.isArray(seller?.pago_sucursales)
-            ? await resolveSellerBranches(seller.pago_sucursales)
-            : seller?.pago_sucursales,
-        }))
-      ),
+      data: await resolveSellerBranchesForSellers(paged.data || []),
     };
   }
 
@@ -480,6 +516,48 @@ const getAssignedPaymentDate = (date = new Date()) => {
   if (day <= 17) return assignAtLocalNoon(18);
   if (day <= 27) return assignAtLocalNoon(28);
   return base.clone().add(1, "month").date(8).hour(12).minute(0).second(0).millisecond(0).toDate();
+};
+
+const getSellerMetrics = async (sellerIds: string[]) => {
+  const rows = await SellerRepository.findMetricsBySellerIds(sellerIds);
+  return rows.map((row: any) => ({
+    sellerId: String(row?._id || ""),
+    pago_pendiente: Number(row?.pago_pendiente || 0),
+  }));
+};
+
+const getSellersSummary = async (params?: SellerListFilters) =>
+  SellerRepository.getSummary(params);
+
+const isActiveSellerForAlert = (seller: any) => {
+  const fechaVigencia = dayjs(seller?.fecha_vigencia);
+  if (!fechaVigencia.isValid()) return false;
+
+  const today = dayjs().startOf("day");
+  const declinacion = seller?.declinacion_servicio_fecha ? dayjs(seller.declinacion_servicio_fecha) : null;
+  if (declinacion?.isValid()) {
+    return !today.isAfter(fechaVigencia.endOf("day").add(5, "day"));
+  }
+
+  return today.diff(fechaVigencia.endOf("day"), "day") <= 20;
+};
+
+const getSellerAlerts = async (includeRows = false) => {
+  const sellers = (await getAllSellers()) as any[];
+  const noSales = sellers.filter(
+    (seller: any) => isActiveSellerForAlert(seller) && Number(seller?.activity_last_30_days_count || 0) === 0
+  );
+  const debt = sellers.filter((seller: any) => {
+    const pagoMensual = Number(seller?.pago_mensual || 0);
+    const pagoPendiente = Number(seller?.pago_pendiente ?? seller?.pagoTotalInt ?? 0);
+    return pagoMensual > 0 && pagoPendiente <= -1.5 * pagoMensual;
+  });
+
+  return {
+    noSalesCount: noSales.length,
+    debtCount: debt.length,
+    ...(includeRows ? { noSales, debt } : {}),
+  };
 };
 
 const PAYMENT_LIMIT_KEY = "global";
@@ -1192,6 +1270,28 @@ const requestSellerPayment = async (
     seller: updatedSeller,
     fecha_pago_asignada: update.fecha_pago_asignada,
   };
+};
+
+const cancelSellerPaymentRequest = async (id: string) => {
+  const seller = await SellerRepository.findById(id);
+  if (!seller) {
+    const error: any = new Error("Vendedor no encontrado");
+    error.status = 404;
+    throw error;
+  }
+
+  if (!seller.fecha_pago_asignada) {
+    const error: any = new Error("El vendedor no tiene una solicitud de pago asignada");
+    error.status = 400;
+    throw error;
+  }
+
+  return await SellerRepository.updateSeller(id, {
+    $unset: {
+      fecha_solicitud_pago: "",
+      fecha_pago_asignada: "",
+    },
+  } as any);
 };
 
 const declineSellerService = async (
@@ -1936,6 +2036,9 @@ const getSellerDashboard = async (sellerId: string, options?: { months?: number;
 
 export const SellerService = {
   getAllSellers,
+  getSellerMetrics,
+  getSellersSummary,
+  getSellerAlerts,
   getAllSellersBasic,
   getSeller,
   registerSeller,
@@ -1945,6 +2048,7 @@ export const SellerService = {
   startAutoRenewalScheduler,
   paySellerDebt,
   requestSellerPayment,
+  cancelSellerPaymentRequest,
   getSellerPaymentLimitSummary,
   updateSellerPaymentLimit,
   declineSellerService,

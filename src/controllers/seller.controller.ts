@@ -24,6 +24,81 @@ const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null>
   return null;
 };
 
+const getSellerListFiltersFromQuery = (query: Request["query"]) => {
+  const q = String(query.q || "").trim() || undefined;
+  const statusQuery = String(query.status || "").trim().toLowerCase();
+  const pendingPaymentQuery = String(query.pendingPayment || "").trim().toLowerCase();
+  const branchIdsQuery = String(query.branchIds || "").trim();
+  const serviceTypesQuery = String(query.serviceTypes || "").trim();
+  const assignedPaymentDayQuery = String(query.assignedPaymentDay || "").trim().toLowerCase();
+  const assignedPaymentDateQuery = String(query.assignedPaymentDate || "").trim();
+  const sortByQuery = String(query.sortBy || "").trim();
+  const sortOrderQuery = String(query.sortOrder || "").trim().toLowerCase();
+  const status = ["activo", "debe_renovar", "ya_no_es_cliente", "declinando_servicio"].includes(statusQuery)
+    ? statusQuery as any
+    : undefined;
+  const pendingPayment = ["con_deuda", "sin_deuda"].includes(pendingPaymentQuery)
+    ? pendingPaymentQuery as any
+    : undefined;
+  const branchIds = branchIdsQuery ? branchIdsQuery.split(",").map((id) => id.trim()).filter(Boolean) : undefined;
+  const serviceTypes = serviceTypesQuery
+    ? serviceTypesQuery.split(",").map((item) => item.trim()).filter((item): item is "alquiler" | "exhibicion" | "entrega_simple" =>
+        ["alquiler", "exhibicion", "entrega_simple"].includes(item)
+      )
+    : undefined;
+  const assignedPaymentDay = ["sin_solicitud", "8", "18", "28"].includes(assignedPaymentDayQuery)
+    ? assignedPaymentDayQuery as any
+    : undefined;
+  const assignedPaymentDate = /^\d{4}-\d{2}-\d{2}$/.test(assignedPaymentDateQuery)
+    ? assignedPaymentDateQuery
+    : undefined;
+  const allowedSortBy = new Set([
+    "nombre", "estado", "pago_pendiente", "fecha_vigencia", "fecha_pago_asignada",
+    "pago_mensual", "comision_porcentual", "emite_factura",
+  ]);
+
+  return {
+    q,
+    status,
+    pendingPayment,
+    branchIds,
+    serviceTypes,
+    assignedPaymentDay,
+    assignedPaymentDate,
+    sortBy: allowedSortBy.has(sortByQuery) ? sortByQuery as any : undefined,
+    sortOrder: sortOrderQuery === "desc" ? "desc" as const : "asc" as const,
+  };
+};
+
+export const getSellerMetrics = async (req: Request, res: Response) => {
+  try {
+    const ids = String(req.query.ids || "").split(",").map((id) => id.trim()).filter(Boolean).slice(0, 100);
+    res.json({ data: await SellerService.getSellerMetrics(ids) });
+  } catch (err) {
+    console.error("Error obteniendo métricas de vendedores:", err);
+    res.status(500).json({ msg: "Error obteniendo métricas de vendedores" });
+  }
+};
+
+export const getSellersSummary = async (req: Request, res: Response) => {
+  try {
+    res.json(await SellerService.getSellersSummary(getSellerListFiltersFromQuery(req.query)));
+  } catch (err) {
+    console.error("Error obteniendo resumen de vendedores:", err);
+    res.status(500).json({ msg: "Error obteniendo resumen de vendedores" });
+  }
+};
+
+export const getSellerAlerts = async (req: Request, res: Response) => {
+  try {
+    const includeRows = String(req.query.includeRows || "").toLowerCase() === "true";
+    res.json(await SellerService.getSellerAlerts(includeRows));
+  } catch (err) {
+    console.error("Error obteniendo alertas de vendedores:", err);
+    res.status(500).json({ msg: "Error obteniendo alertas de vendedores" });
+  }
+};
+
 export const getSellers = async (req: Request, res: Response) => {
   try {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
@@ -326,6 +401,23 @@ export const requestSellerPayment = async (req: Request, res: Response) => {
     res.status(error?.status || 500).json({
       ok: false,
       msg: error?.message || "Error solicitando pago del vendedor",
+    });
+  }
+};
+
+export const cancelSellerPaymentRequest = async (req: Request, res: Response) => {
+  try {
+    const seller = await SellerService.cancelSellerPaymentRequest(req.params.id);
+    res.json({
+      ok: true,
+      msg: "Solicitud de pago cancelada correctamente",
+      seller,
+    });
+  } catch (error: any) {
+    console.error("Error cancelando solicitud de pago del vendedor:", error);
+    res.status(error?.status || 500).json({
+      ok: false,
+      msg: error?.message || "Error cancelando solicitud de pago del vendedor",
     });
   }
 };
