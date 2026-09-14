@@ -31,6 +31,11 @@ const FlujoFinancieroSchema = new Schema({
     type: Boolean,
     default: true
   },
+  source_key: {
+    type: String,
+    default: '',
+    index: true,
+  },
   clase_cobro: {
     type: String,
     enum: ['INGRESO', 'RECUPERACION'],

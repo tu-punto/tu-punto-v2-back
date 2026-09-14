@@ -17,9 +17,13 @@ const findAll = async (): Promise<ICategoriaDocument[]> => {
     const category = await CategoriaModel.findById(id);
     return category; 
   };
+  const updateCategory = async (id: string, updates: Partial<ICategoria>): Promise<ICategoriaDocument | null> => {
+    return CategoriaModel.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+  };
   
   export const CategoryRepository = {
     findAll,
     registerCategory,
     getCategoryById,
+    updateCategory,
   };

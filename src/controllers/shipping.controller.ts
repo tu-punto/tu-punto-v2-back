@@ -100,6 +100,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
     const guide = (req.query.guide as string | undefined) || undefined;
     const destinationMode = (req.query.destinationMode as "any" | "branch" | "other" | undefined) || "any";
     const destinationQuery = (req.query.destinationQuery as string | undefined) || undefined;
+    const includeGlobalVendorIds = String(req.query.includeGlobalVendorIds || "").toLowerCase() === "true";
     const fromRaw = (req.query.from as string | undefined) || undefined;
     const toRaw = (req.query.to as string | undefined) || undefined;
     const from = fromRaw ? new Date(fromRaw) : undefined;
@@ -147,6 +148,7 @@ export const getShippingDashboardList = async (req: Request, res: Response) => {
       guide,
       destinationMode,
       destinationQuery,
+      includeGlobalVendorIds,
     });
 
     if (isSellerRole || sellerId) {

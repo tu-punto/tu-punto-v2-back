@@ -196,7 +196,7 @@ const buildSnapshot = async () => {
 
   const [categories, branches] = await Promise.all([
     CategoriaModel.find({ _id: { $in: Array.from(usedCategoryIds) } })
-      .select("categoria")
+      .select("categoria imagen_catalogo_url")
       .lean(),
     SucursalModel.find({ _id: { $in: Array.from(usedBranchIds) } })
       .select("nombre direccion ciudad telefono")
@@ -223,7 +223,8 @@ const buildSnapshot = async () => {
       })),
     categories: categories.map((category: any) => ({
       internalCategoryId: String(category._id),
-      name: toStringValue(category.categoria) || "Sin categoria"
+      name: toStringValue(category.categoria) || "Sin categoria",
+      imageUrl: toStringValue(category.imagen_catalogo_url) || null
     })),
     branches: branches.map((branch: any) => ({
       internalBranchId: String(branch._id),

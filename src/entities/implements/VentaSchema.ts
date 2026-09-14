@@ -14,6 +14,10 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: Number,
     default: 0
   },
+  precio_antes_recogido: {
+    type: Number,
+    required: false
+  },
   utilidad: {
     type: Number,
     default: 0
@@ -61,6 +65,27 @@ const VentaSchema = new Schema<IVentaDocument>({
   variantKey: {
     type: String,
     required: false
+  },
+  pricingPromotion: {
+    label: { type: String, default: null },
+    title: { type: String, default: null },
+    pricingMode: { type: String, enum: ["simple", "tiers", "conditional"], default: null },
+    conditionalQuestion: { type: String, default: null },
+    conditionalAccepted: { type: Boolean, default: null },
+    simplePrice: { type: Number, default: null },
+    effectivePrice: { type: Number, default: null },
+  },
+  promoAccepted: {
+    type: Boolean,
+    default: false,
+  },
+  promoLabel: {
+    type: String,
+    default: null,
+  },
+  promoQuestion: {
+    type: String,
+    default: null,
   },
 
 }, {

@@ -12,6 +12,9 @@ sellerRouter.get('/clients/payment-requests-since-july-2026', requireRole("admin
 sellerRouter.get('/payment-limit', requireRole("admin", "operator", "seller", "superadmin"), SellerController.getSellerPaymentLimit);
 sellerRouter.put('/payment-limit', requireRole("superadmin"), SellerController.updateSellerPaymentLimit);
 sellerRouter.get('/basic', requireRole("admin", "operator", "seller", "superadmin"), SellerController.getSellersBasic);
+sellerRouter.get('/metrics', requireRole("admin", "operator", "superadmin"), SellerController.getSellerMetrics);
+sellerRouter.get('/summary', requireRole("admin", "operator", "superadmin"), SellerController.getSellersSummary);
+sellerRouter.get('/alerts', requireRole("admin", "operator", "superadmin"), SellerController.getSellerAlerts);
 sellerRouter.get('/', requireRole("admin", "operator", "seller", "superadmin"), SellerController.getSellers);
 sellerRouter.post('/register', requireRole("admin"), SellerController.registerSeller);
 sellerRouter.post('/auto-renew', requireRole("admin"), SellerController.autoRenewSellers);
@@ -20,6 +23,7 @@ sellerRouter.get('/:id', requireRole("admin", "operator", "seller"), requireSell
 sellerRouter.get('/:id/dashboard', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.getSellerDashboard);
 sellerRouter.put("/renew/:id", requireRole("admin"), SellerController.renewSeller);
 sellerRouter.post("/:id/payment-request", requireRole("seller"), requireSellerOwnership("id"), upload.single("qr_pago"), SellerController.requestSellerPayment);
+sellerRouter.post("/:id/cancel-payment-request", requireRole("admin"), SellerController.cancelSellerPaymentRequest);
 sellerRouter.post("/:id/admin-decline-service", requireRole("admin", "operator"), SellerController.declineSellerService);
 sellerRouter.post("/:id/cancel-decline-service", requireRole("admin", "operator"), SellerController.cancelSellerServiceDecline);
 sellerRouter.post("/:id/decline-service", requireRole("seller"), requireSellerOwnership("id"), SellerController.declineSellerService);

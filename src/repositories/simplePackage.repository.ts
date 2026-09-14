@@ -251,6 +251,35 @@ const getSellerHistorySimplePackages = async (sellerId: string) => {
     .lean();
 };
 
+const getSellerPaymentHistoryRows = async (params: {
+  from?: Date;
+  to?: Date;
+  originBranchId?: string;
+}) => {
+  const match: any = {
+    ...SIMPLE_PACKAGE_FILTER,
+    is_external: true,
+    seller_payment_flux_id: { $ne: null },
+    seller_payment_recorded_at: { $ne: null },
+  };
+
+  if (params.from || params.to) {
+    match.seller_payment_recorded_at = {};
+    if (params.from) match.seller_payment_recorded_at.$gte = params.from;
+    if (params.to) match.seller_payment_recorded_at.$lte = params.to;
+  }
+
+  if (params.originBranchId && Types.ObjectId.isValid(params.originBranchId)) {
+    match.origen_sucursal = new Types.ObjectId(params.originBranchId);
+  }
+
+  return await VentaExternaModel.find(match)
+    .sort({ seller_payment_recorded_at: -1, numero_paquete: 1 })
+    .populate({ path: "origen_sucursal", select: "_id nombre" })
+    .populate({ path: "destino_sucursal", select: "_id nombre" })
+    .lean();
+};
+
 const markSellerAccountingSimplePackagesDeposited = async (sellerId: string) => {
   if (!Types.ObjectId.isValid(sellerId)) return { modifiedCount: 0 };
 
@@ -381,6 +410,7 @@ export const SimplePackageRepository = {
   getUploadedSimplePackageSellers,
   getSellerAccountingSimplePackages,
   getSellerHistorySimplePackages,
+  getSellerPaymentHistoryRows,
   markSellerAccountingSimplePackagesDeposited,
   getSellerPaymentAuditSimplePackages,
 };

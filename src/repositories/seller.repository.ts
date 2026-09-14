@@ -636,6 +636,144 @@ const buildSellerMetricsStages = () => [
   },
 ];
 
+const buildSellerLightStages = () => [
+  {
+    $addFields: {
+      pago_mensual: {
+        $sum: {
+          $map: {
+            input: {
+              $filter: {
+                input: { $ifNull: ["$pago_sucursales", []] },
+                as: "pago",
+                cond: { $ne: ["$$pago.activo", false] },
+              },
+            },
+            as: "pago",
+            in: {
+              $add: [
+                { $ifNull: ["$$pago.alquiler", 0] },
+                { $ifNull: ["$$pago.exhibicion", 0] },
+                { $ifNull: ["$$pago.delivery", 0] },
+                { $ifNull: ["$$pago.entrega_simple", 0] },
+              ],
+            },
+          },
+        },
+      },
+      estado_orden: {
+        $switch: {
+          branches: [
+            {
+              case: {
+                $and: [
+                  { $ne: [{ $ifNull: ["$declinacion_servicio_fecha", null] }, null] },
+                  { $gte: ["$fecha_vigencia", dayjs().startOf("day").subtract(5, "day").toDate()] },
+                ],
+              },
+              then: 2,
+            },
+            {
+              case: {
+                $and: [
+                  { $gte: ["$fecha_vigencia", dayjs().startOf("day").toDate()] },
+                  { $eq: [{ $ifNull: ["$declinacion_servicio_fecha", null] }, null] },
+                ],
+              },
+              then: 1,
+            },
+            {
+              case: {
+                $and: [
+                  { $gte: ["$fecha_vigencia", dayjs().startOf("day").subtract(20, "day").toDate()] },
+                  { $lt: ["$fecha_vigencia", dayjs().startOf("day").toDate()] },
+                  { $eq: [{ $ifNull: ["$declinacion_servicio_fecha", null] }, null] },
+                ],
+              },
+              then: 3,
+            },
+          ],
+          default: 4,
+        },
+      },
+    },
+  },
+];
+
+const findLightPage = async (params?: SellerListQueryParams) => {
+  const match = buildSellerListMatch(params);
+  const page = Math.max(1, Number(params?.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(params?.pageSize || 10)));
+  const skip = (page - 1) * pageSize;
+  const sortFieldByParam: Record<string, string> = {
+    nombre: "nombre",
+    estado: "estado_orden",
+    fecha_vigencia: "fecha_vigencia",
+    fecha_pago_asignada: "fecha_pago_asignada",
+    pago_mensual: "pago_mensual",
+    comision_porcentual: "comision_porcentual",
+    emite_factura: "emite_factura",
+  };
+  const sortField = params?.sortBy ? sortFieldByParam[params.sortBy] : "";
+  const sortDirection: 1 | -1 = params?.sortOrder === "desc" ? -1 : 1;
+  const sortStage: Record<string, 1 | -1> = sortField
+    ? { [sortField]: sortDirection, nombre: 1, apellido: 1, _id: 1 }
+    : { nombre: 1, apellido: 1, _id: 1 };
+
+  const result = await VendedorModel.aggregate([
+    ...(Object.keys(match).length ? [{ $match: match }] : []),
+    ...buildSellerLightStages(),
+    { $sort: sortStage },
+    {
+      $facet: {
+        rows: [{ $skip: skip }, { $limit: pageSize }],
+        meta: [{ $count: "total" }],
+      },
+    },
+    {
+      $project: {
+        rows: 1,
+        total: { $ifNull: [{ $arrayElemAt: ["$meta.total", 0] }, 0] },
+      },
+    },
+  ]).exec();
+
+  const data = result[0] || {};
+  return { data: data.rows || [], total: data.total || 0, page, pageSize };
+};
+
+const findMetricsBySellerIds = async (sellerIds: string[]) => {
+  const validIds = sellerIds
+    .filter((id) => Types.ObjectId.isValid(id))
+    .map((id) => new Types.ObjectId(id));
+  if (validIds.length === 0) return [];
+
+  return await VendedorModel.aggregate([
+    { $match: { _id: { $in: validIds } } },
+    ...buildSellerMetricsStages(),
+    { $project: { _id: 1, pago_pendiente: 1 } },
+  ]).exec();
+};
+
+const getSummary = async (params?: SellerListQueryParams) => {
+  const match = buildSellerListMatch(params);
+  const pendingMatch =
+    params?.pendingPayment === "con_deuda"
+      ? { pago_pendiente: { $ne: 0 } }
+      : params?.pendingPayment === "sin_deuda"
+      ? { pago_pendiente: 0 }
+      : null;
+
+  const result = await VendedorModel.aggregate([
+    ...(Object.keys(match).length ? [{ $match: match }] : []),
+    ...buildSellerMetricsStages(),
+    ...(pendingMatch ? [{ $match: pendingMatch }] : []),
+    { $group: { _id: null, totalPendingPayment: { $sum: "$pago_pendiente" } } },
+  ]).exec();
+
+  return { totalPendingPayment: Number(result[0]?.totalPendingPayment || 0) };
+};
+
 const findWithDebtsAndSalesPage = async (params?: SellerListQueryParams) => {
   const match = buildSellerListMatch(params);
   const page = Math.max(1, Number(params?.page || 1));
@@ -805,6 +943,9 @@ export const SellerRepository = {
   markSalesAsDeposited,
   findWithDebtsAndSales,
   findWithDebtsAndSalesPage,
+  findLightPage,
+  findMetricsBySellerIds,
+  getSummary,
   getActivePaymentRequestBalances,
   getActivePaymentRequestDays,
   findSimplePackageClients,

@@ -411,13 +411,20 @@ const getSalesByShippingId = async (pedidoId: string) => {
   const pedido = await PedidoModel.findById(pedidoId);
 
   if (!pedido) throw new Error("No existe el pedido");
+  const isPickedUpBySeller = Boolean(
+    (pedido as any)?.simple_package_order &&
+    (pedido as any)?.mostrar_recogido_por_vendedor
+  );
 
   const ventas = sales.map((sale) => ({
     key: sale.producto._id,
     producto: sale.producto.nombre_producto,
     nombre_variante: sale.nombre_variante,
     precio_unitario: sale.precio_unitario,
-    precio_original: resolveSaleOriginalPrice(sale),
+    // The original selling price remains stored for later restoration, but it
+    // must not be presented as the active price while pickup is free.
+    precio_original: isPickedUpBySeller ? Number(sale.precio_unitario || 0) : resolveSaleOriginalPrice(sale),
+    precio_antes_recogido: (sale as any).precio_antes_recogido,
     cantidad: sale.cantidad,
     utilidad: sale.utilidad,
     id_venta: sale._id,
@@ -425,6 +432,10 @@ const getSalesByShippingId = async (pedidoId: string) => {
     id_pedido: pedidoId,
     id_producto: sale.producto._id,
     id_sucursal: sale.sucursal,
+    pricingPromotion: (sale as any).pricingPromotion || null,
+    promoAccepted: Boolean((sale as any).promoAccepted),
+    promoLabel: (sale as any).promoLabel || null,
+    promoQuestion: (sale as any).promoQuestion || null,
   }));
 
   const temporales = (pedido.productos_temporales || []).map((prod, i) => ({
@@ -433,6 +444,7 @@ const getSalesByShippingId = async (pedidoId: string) => {
       cantidad: prod.cantidad,
       precio_unitario: prod.precio_unitario,
       precio_original: Number((prod as any).precio_original ?? prod.precio_unitario),
+      precio_antes_recogido: (prod as any).precio_antes_recogido,
       utilidad: prod.utilidad,
       id_vendedor: prod.id_vendedor,
       id_pedido: pedidoId,
@@ -472,6 +484,10 @@ const getProductDetailsByProductId = async (productId: number) => {
       cliente: sale.pedido.cliente,
       fecha_pedido: sale.pedido.fecha_pedido,
       nombre_vendedor: `${sale.vendedor.nombre} ${sale.vendedor.apellido} - ${sale.vendedor.marca}`,
+      pricingPromotion: (sale as any).pricingPromotion || null,
+      promoAccepted: Boolean((sale as any).promoAccepted),
+      promoLabel: (sale as any).promoLabel || null,
+      promoQuestion: (sale as any).promoQuestion || null,
     };
   });
 
@@ -513,6 +529,10 @@ const getProductsBySellerId = async (sellerId: string) => {
       fecha_creacion: sale.pedido?.fecha_pedido ?? null,
       fecha_entrega: sale.pedido?.hora_entrega_real ?? sale.pedido?.hora_entrega_acordada ?? null,
       esTemporal: Boolean(sale.producto?.esTemporal),
+      pricingPromotion: (sale as any).pricingPromotion || null,
+      promoAccepted: Boolean((sale as any).promoAccepted),
+      promoLabel: (sale as any).promoLabel || null,
+      promoQuestion: (sale as any).promoQuestion || null,
     };
 
     if (product) {
@@ -535,6 +555,13 @@ const updateProducts = async (shippingId: any, prods: any[], auditActor?: Invent
   }
 
   const updated: any[] = [];
+  const shippingPricingState = await PedidoModel.findById(shippingId)
+    .select("simple_package_order mostrar_recogido_por_vendedor")
+    .lean();
+  const shippingIsPickedUpBySeller = Boolean(
+    (shippingPricingState as any)?.simple_package_order &&
+    (shippingPricingState as any)?.mostrar_recogido_por_vendedor
+  );
 
   for (const prod of prods) {
     const saleId = String(prod?._id || prod?.id_venta || "");
@@ -542,7 +569,7 @@ const updateProducts = async (shippingId: any, prods: any[], auditActor?: Invent
 
     const fieldsToUpdate: any = {};
     if ("cantidad" in prod) fieldsToUpdate.cantidad = Number(prod.cantidad);
-    if ("precio_unitario" in prod) fieldsToUpdate.precio_unitario = Number(prod.precio_unitario);
+    if ("precio_unitario" in prod) fieldsToUpdate.precio_unitario = shippingIsPickedUpBySeller ? 0 : Number(prod.precio_unitario);
     if ("utilidad" in prod) fieldsToUpdate.utilidad = Number(prod.utilidad);
     if ("deposito_realizado" in prod) {
       fieldsToUpdate.deposito_realizado = prod.deposito_realizado;
@@ -678,6 +705,10 @@ const getDataPaymentProof = async (sellerId: number) => {
     original: Number(venta.precio_original ?? venta.precio_unitario),
     cantidad: venta.cantidad,
     total: venta.precio_unitario * venta.cantidad,
+    pricingPromotion: (venta as any).pricingPromotion || null,
+    promoAccepted: Boolean((venta as any).promoAccepted),
+    promoLabel: (venta as any).promoLabel || null,
+    promoQuestion: (venta as any).promoQuestion || null,
   }));
 
   const payments = data

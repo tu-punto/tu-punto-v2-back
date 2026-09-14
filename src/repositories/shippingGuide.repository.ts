@@ -41,6 +41,14 @@ const markAsDelivered = async(shippingGuideID: string) => {
     )
 }
 
+const markAsRegistered = async(shippingGuideID: string) => {
+    return await GuiaEnviosModel.findByIdAndUpdate(
+        shippingGuideID,
+        { $set: { isRegistrado: true } },
+        { new: true }
+    );
+}
+
 const updateObservations = async (shippingGuideID: string, observaciones: string) => {
     return await GuiaEnviosModel.findByIdAndUpdate(
         shippingGuideID,
@@ -55,5 +63,6 @@ export const ShippingGuideRepository = {
     getBranchShippings,
     uploadShipping,
     markAsDelivered,
+    markAsRegistered,
     updateObservations,
 }

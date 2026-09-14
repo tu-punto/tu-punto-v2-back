@@ -36,6 +36,9 @@ const GuiaEnvioSchema = new Schema({
     isRecogido: {
         type: Boolean,
         default: false
+    },
+    isRegistrado: {
+        type: Boolean
     }
 },{
     collection: 'GuiaEnvio',

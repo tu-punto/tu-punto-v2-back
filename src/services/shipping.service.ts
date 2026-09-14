@@ -568,6 +568,58 @@ type ShippingDashboardParams = {
   externalSellerSearch?: string;
   destinationMode?: "any" | "branch" | "other";
   destinationQuery?: string;
+  includeGlobalVendorIds?: boolean;
+};
+
+const ACCENT_INSENSITIVE_CHARACTERS: Record<string, string> = {
+  a: "aáàäâãå",
+  e: "eéèëê",
+  i: "iíìïî",
+  o: "oóòöôõ",
+  u: "uúùüû",
+  n: "nñ",
+  c: "cç",
+};
+
+const buildAccentInsensitiveRegex = (value: string) => {
+  const pattern = Array.from(value).map((character) => {
+    const normalizedCharacter = character.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const alternatives = ACCENT_INSENSITIVE_CHARACTERS[normalizedCharacter];
+    return alternatives ? `[${alternatives}]` : escapeRegex(character);
+  }).join("");
+
+  return new RegExp(pattern, "i");
+};
+
+const getGlobalShippingVendorIds = async () => {
+  const rows = await PedidoModel.aggregate([
+    { $match: { estado_pedido: { $ne: INTERNAL_SALE_STATUS } } },
+    { $project: { saleIds: "$venta", temporarySellerIds: "$productos_temporales.id_vendedor" } },
+    {
+      $lookup: {
+        from: "Venta",
+        localField: "saleIds",
+        foreignField: "_id",
+        pipeline: [{ $project: { vendedor: 1 } }],
+        as: "sales",
+      },
+    },
+    {
+      $project: {
+        sellerIds: {
+          $concatArrays: [
+            { $ifNull: ["$temporarySellerIds", []] },
+            { $ifNull: ["$sales.vendedor", []] },
+          ],
+        },
+      },
+    },
+    { $unwind: "$sellerIds" },
+    { $match: { sellerIds: { $ne: null } } },
+    { $group: { _id: "$sellerIds" } },
+  ]);
+
+  return rows.map((row: any) => normalizeTextValue(row?._id)).filter(Boolean);
 };
 
 const resolveInternalOriginBranchId = (row: any) =>
@@ -624,25 +676,6 @@ const matchesDestinationFilter = (row: any, params: ShippingDashboardParams, kno
   return normalizedDestination.includes(query);
 };
 
-const collectSellerIdsFromShippingLike = (row: any): string[] => {
-  const ids = new Set<string>();
-
-  (Array.isArray(row?.venta) ? row.venta : []).forEach((sale: any) => {
-    const sellerId =
-      sale?.id_vendedor ||
-      (typeof sale?.vendedor === "object" ? sale?.vendedor?._id : sale?.vendedor);
-    const normalized = normalizeTextValue(sellerId);
-    if (normalized) ids.add(normalized);
-  });
-
-  (Array.isArray(row?.productos_temporales) ? row.productos_temporales : []).forEach((item: any) => {
-    const normalized = normalizeTextValue(item?.id_vendedor);
-    if (normalized) ids.add(normalized);
-  });
-
-  return Array.from(ids);
-};
-
 const classifyDashboardRow = (
   row: any,
   source: "shipping" | "external",
@@ -669,7 +702,7 @@ const classifyDashboardRow = (
     !isAnnulled &&
     status === SEND_TO_BRANCH_STATUS &&
     branchTransferManaged &&
-    (ignoreBranchVisibility || originId === currentBranchId);
+    (ignoreBranchVisibility || related);
   const inTransit =
     !isAnnulled &&
     !pendingSend &&
@@ -686,7 +719,6 @@ const classifyDashboardRow = (
     !pendingSend &&
     !inTransit &&
     !deliveryLike &&
-    !interbranch &&
     (status === WAITING_RAW_STATUS || status === READY_FOR_PICKUP_VISUAL_STATUS);
   const visibleInAll = !isAnnulled && !delivered && (ignoreBranchVisibility || related);
 
@@ -853,9 +885,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   const internalFilter: any = {
     estado_pedido: { $ne: INTERNAL_SALE_STATUS },
   };
-  const vendorOptionsInternalFilter: any = {
-    estado_pedido: { $ne: INTERNAL_SALE_STATUS },
-  };
   const externalFilter: any = {
     $or: [
       { service_origin: { $exists: false } },
@@ -865,16 +894,13 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
 
   if (params.from || params.to) {
     internalFilter.hora_entrega_acordada = {};
-    vendorOptionsInternalFilter.hora_entrega_acordada = {};
     externalFilter.fecha_pedido = {};
     if (params.from) {
       internalFilter.hora_entrega_acordada.$gte = params.from;
-      vendorOptionsInternalFilter.hora_entrega_acordada.$gte = params.from;
       externalFilter.fecha_pedido.$gte = params.from;
     }
     if (params.to) {
       internalFilter.hora_entrega_acordada.$lte = params.to;
-      vendorOptionsInternalFilter.hora_entrega_acordada.$lte = params.to;
       externalFilter.fecha_pedido.$lte = params.to;
     }
   }
@@ -883,15 +909,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     const branchObjectId = new Types.ObjectId(currentBranchId);
     internalFilter.$and = [
       ...(internalFilter.$and || []),
-      {
-        $or: [
-          { lugar_origen: branchObjectId },
-          { sucursal: branchObjectId },
-        ],
-      },
-    ];
-    vendorOptionsInternalFilter.$and = [
-      ...(vendorOptionsInternalFilter.$and || []),
       {
         $or: [
           { lugar_origen: branchObjectId },
@@ -912,7 +929,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   }
 
   if (params.client) {
-    const searchRegex = new RegExp(escapeRegex(params.client), "i");
+    const searchRegex = buildAccentInsensitiveRegex(params.client);
     const clientMatch = {
       $or: [
         { cliente: searchRegex },
@@ -922,7 +939,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       ],
     };
     internalFilter.$and = [...(internalFilter.$and || []), clientMatch];
-    vendorOptionsInternalFilter.$and = [...(vendorOptionsInternalFilter.$and || []), clientMatch];
     externalFilter.$and = [
       ...(externalFilter.$and || []),
       {
@@ -939,7 +955,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   if (params.guide) {
     const guideRegex = new RegExp(escapeRegex(params.guide), "i");
     internalFilter.$and = [...(internalFilter.$and || []), { numero_guia: guideRegex }];
-    vendorOptionsInternalFilter.$and = [...(vendorOptionsInternalFilter.$and || []), { numero_guia: guideRegex }];
     externalFilter.$and = [...(externalFilter.$and || []), { numero_guia: guideRegex }];
   }
 
@@ -983,12 +998,8 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     ];
   }
 
-  const [internalRowsLight, vendorOptionsInternalRowsLight, externalRowsLight] = await Promise.all([
+  const [internalRowsLight, externalRowsLight, globalVendorIds] = await Promise.all([
     PedidoModel.find(internalFilter)
-      .select("_id estado_pedido hora_entrega_acordada fecha_pedido lugar_origen sucursal simple_package_order simple_package_source_id lugar_entrega venta.vendedor venta.id_vendedor productos_temporales.id_vendedor")
-      .sort({ hora_entrega_acordada: -1, _id: -1 })
-      .lean(),
-    PedidoModel.find(vendorOptionsInternalFilter)
       .select("_id estado_pedido hora_entrega_acordada fecha_pedido lugar_origen sucursal simple_package_order simple_package_source_id lugar_entrega venta.vendedor venta.id_vendedor productos_temporales.id_vendedor")
       .sort({ hora_entrega_acordada: -1, _id: -1 })
       .lean(),
@@ -996,6 +1007,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       .select("_id estado_pedido anulado fecha_pedido hora_entrega_real origen_sucursal destino_sucursal sucursal service_origin lugar_entrega")
       .sort({ fecha_pedido: -1, _id: -1 })
       .lean(),
+    params.includeGlobalVendorIds ? getGlobalShippingVendorIds() : Promise.resolve([]),
   ]);
 
   if (debugSeller) {
@@ -1014,8 +1026,8 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       salesPedidoIdsCount: salesPedidoIds.length,
       salesPedidoIdsSample: salesPedidoIds.slice(0, 10).map((id: any) => String(id)),
       internalRowsLight: internalRowsLight.length,
-      vendorOptionsInternalRowsLight: vendorOptionsInternalRowsLight.length,
       externalRowsLight: externalRowsLight.length,
+      globalVendorIdsCount: globalVendorIds.length,
     });
   }
 
@@ -1027,14 +1039,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     .filter((row: any) => matchesDashboardCategory(row, "external", category))
     .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
     .map((row: any) => classifyDashboardRow(row, "external", currentBranchId, now, ignoreBranchVisibility));
-  const classifiedVendorOptionsInternal = vendorOptionsInternalRowsLight
-    .filter((row: any) => matchesDashboardCategory(row, "shipping", category))
-    .filter((row: any) => matchesDestinationFilter(row, params, knownBranchNames))
-    .map((row: any) => ({
-      row,
-      classified: classifyDashboardRow(row, "shipping", currentBranchId, now, ignoreBranchVisibility),
-    }));
-
   const allClassified = [...classifiedInternal, ...classifiedExternal]
     .filter((row) => ignoreBranchVisibility || row.related)
     .sort((a, b) => new Date(b.sortAt).getTime() - new Date(a.sortAt).getTime());
@@ -1054,21 +1058,6 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
     if (tab === "en_camino") return row.inTransit;
     return row.delivered;
   });
-  const vendorIds = Array.from(
-    new Set(
-      classifiedVendorOptionsInternal
-        .filter(({ classified }) => ignoreBranchVisibility || classified.related)
-        .filter(({ classified }) => {
-          if (tab === "todos") return classified.all;
-          if (tab === "En Espera") return classified.ready;
-          if (tab === "para_enviar") return classified.pendingSend;
-          if (tab === "en_camino") return classified.inTransit;
-          return classified.delivered;
-        })
-        .flatMap(({ row }) => collectSellerIdsFromShippingLike(row))
-    )
-  );
-
   const pageSlice = tabRows.slice((safePage - 1) * safeLimit, safePage * safeLimit);
   const pageInternalIds = pageSlice.filter((row) => row.source === "shipping").map((row) => row.rowId);
   const pageExternalIds = pageSlice.filter((row) => row.source === "external").map((row) => row.rowId);
@@ -1113,7 +1102,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
       classifiedExternal: classifiedExternal.length,
       allClassified: allClassified.length,
       counts,
-      vendorIdsCount: vendorIds.length,
+      globalVendorIdsCount: globalVendorIds.length,
       tabRows: tabRows.length,
       pageSlice: pageSlice.length,
       pageInternalIds: pageInternalIds.length,
@@ -1127,7 +1116,7 @@ const getShippingDashboardList = async (params: ShippingDashboardParams) => {
   return {
     rows,
     counts,
-    vendorIds,
+    globalVendorIds,
     total: tabRows.length,
     page: safePage,
     limit: safeLimit,
@@ -1465,6 +1454,8 @@ const updateShipping = async (
 
   const wasDelivered = shipping.estado_pedido === "Entregado";
   const willBeDelivered = newData.estado_pedido === "Entregado";
+  const wasPickedUpBySeller = isSimplePackageOrder && (shipping as any)?.mostrar_recogido_por_vendedor === true;
+  const willBePickedUpBySeller = isSimplePackageOrder && newData?.mostrar_recogido_por_vendedor === true;
   const fromStatus = shipping.estado_pedido || "En Espera";
   const toStatus = newData.estado_pedido || fromStatus;
   const nextShippingState = {
@@ -1474,6 +1465,53 @@ const updateShipping = async (
 
   if (willBeDelivered && !(await canMarkDeliveredFromBranch(nextShippingState, options?.currentBranchId))) {
     throw new Error("Solo la sucursal destino puede marcar este pedido como entregado");
+  }
+
+  // A seller pickup is financially free. Keep an isolated backup so old orders,
+  // and the regular precio_original business field, are never repurposed.
+  if (willBePickedUpBySeller && !wasPickedUpBySeller) {
+    const sales = await SaleService.getSalesByShippingId(shippingId);
+    for (const sale of sales) {
+      const backup = (sale as any).precio_antes_recogido;
+      const saleId = (sale as any)._id || (sale as any).id_venta;
+      if (!saleId) continue;
+      await VentaModel.findByIdAndUpdate(saleId, {
+        $set: {
+          precio_unitario: 0,
+          ...(backup === undefined || backup === null ? { precio_antes_recogido: Number(sale.precio_unitario || 0) } : {}),
+        },
+      });
+    }
+    if (Array.isArray((shipping as any)?.productos_temporales)) {
+      newData.productos_temporales = (shipping as any).productos_temporales.map((product: any) => ({
+        ...product,
+        precio_unitario: 0,
+        ...(product.precio_antes_recogido === undefined || product.precio_antes_recogido === null
+          ? { precio_antes_recogido: Number(product.precio_unitario || 0) }
+          : {}),
+      }));
+    }
+  }
+
+  if (wasPickedUpBySeller && willBeDelivered && !willBePickedUpBySeller) {
+    const sales = await SaleService.getSalesByShippingId(shippingId);
+    for (const sale of sales) {
+      const backup = (sale as any).precio_antes_recogido;
+      if (backup === undefined || backup === null) continue;
+      const saleId = (sale as any)._id || (sale as any).id_venta;
+      if (!saleId) continue;
+      await VentaModel.findByIdAndUpdate(saleId, {
+        $set: { precio_unitario: Number(backup) },
+        $unset: { precio_antes_recogido: 1 },
+      });
+    }
+    if (Array.isArray((shipping as any)?.productos_temporales)) {
+      newData.productos_temporales = (shipping as any).productos_temporales.map((product: any) => {
+        if (product.precio_antes_recogido === undefined || product.precio_antes_recogido === null) return product;
+        const { precio_antes_recogido, ...rest } = product;
+        return { ...rest, precio_unitario: Number(precio_antes_recogido) };
+      });
+    }
   }
 
   let latePickupFee = 0;
@@ -1602,6 +1640,17 @@ const updateShipping = async (
       nextStatus === "Entregado"
         ? roundCurrency(Number((existingSource as any)?.amortizacion_vendedor || 0))
         : 0;
+    const packagePriceRestore = Number((existingSource as any)?.saldo_por_paquete_antes_recogido);
+    const packagePickupPricePatch = willBePickedUpBySeller && !wasPickedUpBySeller
+      ? {
+          saldo_por_paquete: 0,
+          ...((existingSource as any)?.saldo_por_paquete_antes_recogido === undefined || (existingSource as any)?.saldo_por_paquete_antes_recogido === null
+            ? { saldo_por_paquete_antes_recogido: Number((existingSource as any)?.saldo_por_paquete || 0) }
+            : {}),
+        }
+      : wasPickedUpBySeller && willBeDelivered && !willBePickedUpBySeller && !Number.isNaN(packagePriceRestore)
+        ? { saldo_por_paquete: packagePriceRestore, saldo_por_paquete_antes_recogido: undefined }
+        : {};
     const destinationBranchId = resolveBranchId((resShip as any).sucursal);
     const simplePackageUpdatePayload = {
       estado_pedido: (resShip as any).estado_pedido,
@@ -1617,12 +1666,15 @@ const updateShipping = async (
           : (resShip as any).public_tracking_ready_for_pickup_at,
       retirado_por_vendedor: (resShip as any).retirado_por_vendedor === true,
       seller_withdrawn_at: (resShip as any).seller_withdrawn_at,
+      mostrar_recogido_por_vendedor: (resShip as any).mostrar_recogido_por_vendedor === true,
+      producto_cubierto_por_recojo_vendedor: (resShip as any).producto_cubierto_por_recojo_vendedor === true,
       late_pickup_fee: (resShip as any).late_pickup_fee || 0,
       numero_guia: (resShip as any).numero_guia || "",
       guia_sequence: (resShip as any).guia_sequence,
       shipping_qr_code: (resShip as any).shipping_qr_code || "",
       shipping_qr_payload: (resShip as any).shipping_qr_payload || "",
       shipping_qr_image_path: (resShip as any).shipping_qr_image_path || "",
+      ...packagePickupPricePatch,
       ...(simplePackageDestinationEditRequested && destinationBranchId
         ? {
             destino_sucursal: Types.ObjectId.isValid(destinationBranchId)
@@ -1927,6 +1979,19 @@ const getDailySalesHistory = async (
     return paymentBranchId === sucursalId;
   }).map(({ pedido }) => pedido);
 
+  const simpleSellerPaymentCandidates = await SimplePackageRepository.getSellerPaymentHistoryRows({
+    from: fromLastClose ? periodStart : (date ? startOfDay : undefined),
+    to: periodEnd,
+    originBranchId: sucursalId,
+  });
+  const simpleSellerPaymentRows = simpleSellerPaymentCandidates.filter((row: any) => {
+    const recordedAt = row?.seller_payment_recorded_at ? new Date(row.seller_payment_recorded_at) : null;
+    if (!recordedAt || Number.isNaN(recordedAt.getTime())) return false;
+    if (fromLastClose) return recordedAt > periodStart && recordedAt <= periodEnd;
+    if (date) return recordedAt >= startOfDay && recordedAt <= periodEnd;
+    return true;
+  });
+
   const externalCandidates = await ExternalSaleRepository.getExternalSalesHistoryCandidates(
     fromLastClose ? periodStart : (date ? startOfDay : undefined),
     periodEnd,
@@ -2159,7 +2224,40 @@ const getDailySalesHistory = async (
     return rows;
   });
 
-  const resumen = [...resumenPedidos, ...resumenExternas].sort(
+  const resumenPagosVendedorSimples = simpleSellerPaymentRows.map((row: any) => {
+    const amount = roundCurrency(Number(row?.amortizacion_vendedor || 0));
+    const method = String(row?.seller_payment_method || "").trim().toLowerCase();
+    const isQr = method === "qr";
+    const productosBusqueda = buildHistorySearchText(row?.descripcion_paquete);
+    const busquedaGlobal = buildHistorySearchText(
+      row?.comprador,
+      row?.vendedor,
+      row?.descripcion_paquete,
+      row?.numero_guia,
+      row?.origen_sucursal?.nombre,
+      row?.destino_sucursal?.nombre,
+      amount
+    );
+
+    return {
+      _id: `${row._id}-simple-seller-payment`,
+      simple_package_id: row._id,
+      payment_kind: "seller",
+      fecha: row.seller_payment_recorded_at,
+      hora: dayjs(row.seller_payment_recorded_at).format("HH:mm"),
+      tipo_de_pago: isQr ? "Pago vendedor QR" : "Pago vendedor efectivo",
+      monto_total: amount,
+      subtotal_efectivo: isQr ? 0 : amount,
+      subtotal_qr: isQr ? amount : 0,
+      esta_pagado: "si",
+      is_simple_package_seller_payment: true,
+      exclude_from_box_close: true,
+      productos_busqueda: productosBusqueda,
+      busqueda_global: busquedaGlobal,
+    };
+  });
+
+  const resumen = [...resumenPedidos, ...resumenExternas, ...resumenPagosVendedorSimples].sort(
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
@@ -2169,7 +2267,14 @@ const getDailySalesHistory = async (
     return acc;
   }, { efectivo: 0, qr: 0 });
 
-  return { resumen, totales };
+  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number }, curr: any) => {
+    if (curr.exclude_from_box_close) return acc;
+    acc.efectivo += curr.subtotal_efectivo;
+    acc.qr += curr.subtotal_qr;
+    return acc;
+  }, { efectivo: 0, qr: 0 });
+
+  return { resumen, totales, totales_cierre: totalesCierre };
 };
 
 const saveQRCode = async (shippingId: string, qrCode: string) => {
@@ -2326,6 +2431,7 @@ const markSellerWithdrawal = async (params: {
           hora_entrega_real: withdrawnAt,
           retirado_por_vendedor: true,
           seller_withdrawn_at: withdrawnAt,
+          mostrar_recogido_por_vendedor: true,
         },
         shippingId,
         {
@@ -2352,6 +2458,7 @@ const markSellerWithdrawal = async (params: {
         hora_entrega_real: withdrawnAt,
         retirado_por_vendedor: true,
         seller_withdrawn_at: withdrawnAt,
+        mostrar_recogido_por_vendedor: true,
       });
       results.externalSales.updated += 1;
     } catch (error: any) {
