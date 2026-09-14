@@ -38,8 +38,7 @@ const GuiaEnvioSchema = new Schema({
         default: false
     },
     isRegistrado: {
-        type: Boolean,
-        default: false
+        type: Boolean
     }
 },{
     collection: 'GuiaEnvio',

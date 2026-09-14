@@ -69,6 +69,7 @@ export const uploadShipping = async (req: Request, res: Response) => {
             observaciones: req.body.observaciones,
             fecha_subida: new Date(),
             lista_productos_keys: [],
+            isRegistrado: false,
         }
         if (guideImage) {
             const imagen_s3_key = await uploadFileToS3(guideImage.buffer, guideImage.originalname, guideImage.mimetype);
