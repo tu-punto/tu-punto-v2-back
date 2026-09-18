@@ -60,7 +60,8 @@ const PAYMENT_TYPE_LABEL_BY_CODE: Record<string, string> = {
   "1": "Transferencia o QR",
   "2": "Efectivo",
   "3": "Pagado al dueño",
-  "4": "Efectivo + QR"
+  "4": "Efectivo + QR",
+  "5": "Correctivo"
 };
 
 const normalizePaymentType = (value: unknown): string | undefined => {
@@ -87,7 +88,7 @@ const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
     payload.tipo_de_pago = normalizedType;
   }
 
-  if (nextStatus === "Entregado" && nextPaidStatus === "si") {
+  if (nextStatus === "Entregado" && nextPaidStatus === "si" && normalizedType !== PAYMENT_TYPE_LABEL_BY_CODE["5"]) {
     payload.tipo_de_pago = PAYMENT_TYPE_LABEL_BY_CODE["3"];
   }
 
@@ -96,8 +97,16 @@ const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
     payload.adelanto_cliente = 0;
     payload.subtotal_qr = 0;
     payload.subtotal_efectivo = 0;
+    payload.subtotal_correctivo = 0;
+  } else if ((payload.tipo_de_pago || normalizedType) === PAYMENT_TYPE_LABEL_BY_CODE["5"]) {
+    payload.subtotal_qr = 0;
+    payload.subtotal_efectivo = 0;
+    payload.subtotal_correctivo = Number(
+      payload.subtotal_correctivo ?? currentShipping?.subtotal_correctivo ?? 0
+    ) || 0;
   } else if ("pagado_al_vendedor" in payload && nextPaidStatus !== "si") {
     payload.pagado_al_vendedor = false;
+    if ("tipo_de_pago" in payload) payload.subtotal_correctivo = 0;
   }
 };
 
@@ -2063,7 +2072,7 @@ const getDailySalesHistory = async (
     );
     const montoTotal =
       (p as any)?.simple_package_order
-        ? Number((p as any)?.subtotal_qr || 0) + Number((p as any)?.subtotal_efectivo || 0)
+        ? Number((p as any)?.subtotal_qr || 0) + Number((p as any)?.subtotal_efectivo || 0) + Number((p as any)?.subtotal_correctivo || 0)
         : montoBase;
 
     const productosBusqueda = buildHistorySearchText(
@@ -2083,7 +2092,8 @@ const getDailySalesHistory = async (
       productosBusqueda,
       montoTotal,
       p?.subtotal_efectivo,
-      p?.subtotal_qr
+      p?.subtotal_qr,
+      p?.subtotal_correctivo
     );
 
     return {
@@ -2094,6 +2104,7 @@ const getDailySalesHistory = async (
       monto_total: montoTotal,
       subtotal_efectivo: p.subtotal_efectivo || 0,
       subtotal_qr: p.subtotal_qr || 0,
+      subtotal_correctivo: p.subtotal_correctivo || 0,
       esta_pagado: p.esta_pagado,
       productos_busqueda: productosBusqueda,
       busqueda_global: busquedaGlobal,
@@ -2261,18 +2272,20 @@ const getDailySalesHistory = async (
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
-  const totales = resumen.reduce((acc: { efectivo: number; qr: number }, curr: any) => {
+  const totales = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number }, curr: any) => {
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
+    acc.correctivo += Number(curr.subtotal_correctivo || 0);
     return acc;
-  }, { efectivo: 0, qr: 0 });
+  }, { efectivo: 0, qr: 0, correctivo: 0 });
 
-  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number }, curr: any) => {
+  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number }, curr: any) => {
     if (curr.exclude_from_box_close) return acc;
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
+    acc.correctivo += Number(curr.subtotal_correctivo || 0);
     return acc;
-  }, { efectivo: 0, qr: 0 });
+  }, { efectivo: 0, qr: 0, correctivo: 0 });
 
   return { resumen, totales, totales_cierre: totalesCierre };
 };
