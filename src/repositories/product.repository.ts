@@ -456,6 +456,15 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
         variantes_obj: { $ifNull: ["$sucursales.combinaciones.variantes", {}] },
         precio: "$sucursales.combinaciones.precio",
         stock: { $ifNull: ["$sucursales.combinaciones.stock", 0] },
+        stockEnReserva: {
+          $sum: {
+            $map: {
+              input: { $ifNull: ["$sucursales.combinaciones.catalog_reservations", []] },
+              as: "reservation",
+              in: { $ifNull: ["$$reservation.quantity", 0] }
+            }
+          }
+        },
         sucursalId: "$sucursales.id_sucursal",
         categoria: { $arrayElemAt: ["$categoria_info.categoria", 0] },
         id_categoria: "$id_categoria",

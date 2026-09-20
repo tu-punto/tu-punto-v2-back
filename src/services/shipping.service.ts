@@ -1614,6 +1614,13 @@ const updateShipping = async (
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
   if (resShip) {
+    if (
+      (shipping as any)?.origen_pedido === "catalogo" &&
+      fromStatus !== "Entregado" &&
+      toStatus === "Entregado"
+    ) {
+      await CatalogOrderIntegrationService.clearDeliveredReservationIndicators(resShip);
+    }
     void CatalogOrderIntegrationService.syncOrderStatus(
       typeof (resShip as any).toObject === "function" ? (resShip as any).toObject() : resShip
     );
