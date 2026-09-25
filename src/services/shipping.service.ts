@@ -24,6 +24,7 @@ import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { addLatePickupFeeToPayment, calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
 import { resolveBranchTransferInitialStatus } from "../utils/branchTransferStatus";
 import { CatalogOrderIntegrationService } from "./catalogOrderIntegration.service";
+import { InternalOrderReservationService } from "./internalOrderReservation.service";
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { InventoryAuditActor } from "./inventoryAudit.service";
 import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
@@ -1620,6 +1621,9 @@ const updateShipping = async (
       toStatus === "Entregado"
     ) {
       await CatalogOrderIntegrationService.clearDeliveredReservationIndicators(resShip);
+    }
+    if ((shipping as any)?.origen_pedido !== "catalogo" && fromStatus !== toStatus) {
+      await InternalOrderReservationService.syncOrderReservationsSafe(String((resShip as any)._id));
     }
     void CatalogOrderIntegrationService.syncOrderStatus(
       typeof (resShip as any).toObject === "function" ? (resShip as any).toObject() : resShip

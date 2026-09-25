@@ -137,7 +137,7 @@ export const getProductsByShippingId = async (req: Request, res: Response) => {
         id_vendedor: producto.id_vendedor,
         variantes: venta.variantes,
         stockActual: combinacion?.stock ?? 0,
-        stockEnReserva: (combinacion?.catalog_reservations || []).reduce(
+        stockEnReserva: [...(combinacion?.catalog_reservations || []), ...(combinacion?.internal_reservations || [])].reduce(
           (total: number, reservation: any) => total + Number(reservation?.quantity || 0),
           0
         ),

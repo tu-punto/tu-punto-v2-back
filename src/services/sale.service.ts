@@ -11,6 +11,7 @@ import { applySellerCommissionCap } from "../utils/commissionCap";
 import { variantFingerprint, variantLabel } from "../utils/variantKey";
 import { InventoryAuditActor, InventoryAuditService } from "./inventoryAudit.service";
 import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
+import { InternalOrderReservationService } from "./internalOrderReservation.service";
 
 type VariantRecord = Record<string, string>;
 type StockAdjustmentAudit = {
@@ -370,6 +371,7 @@ const registerSale = async (sale: any, options?: { auditActor?: InventoryAuditAc
       await PedidoModel.findByIdAndUpdate(saleData.pedido, {
         $addToSet: { venta: saved._id },
       });
+      await InternalOrderReservationService.syncOrderReservationsSafe(String(saleData.pedido));
       await VendedorModel.findByIdAndUpdate(saleData.vendedor, {
         $addToSet: { venta: saved._id },
       });
@@ -760,6 +762,7 @@ const updateSaleById = async (id: string, fields: any, auditActor?: InventoryAud
     utilidad: nextUtilidad,
     ...others,
   } as any);
+  await InternalOrderReservationService.syncOrderReservationsSafe(String(venta.pedido?._id || venta.pedido));
 
   await SellerService.updateSellerSaldo(venta.vendedor, addPendingSaldo);
   await FinanceStatsAggregateService.markDateDirty(venta?.pedido?.fecha_pedido || new Date());
@@ -802,6 +805,7 @@ const deleteSaleById = async (id: string, id_sucursal?: string, auditActor?: Inv
   });
 
   const deleted = await SaleRepository.deleteSaleById(id);
+  await InternalOrderReservationService.syncOrderReservationsSafe(String(venta.pedido?._id || venta.pedido));
   await FinanceStatsAggregateService.markDateDirty(venta?.pedido?.fecha_pedido || new Date());
   await recordSaleAudit({
     eventType: "sale_deleted_stock_restored",

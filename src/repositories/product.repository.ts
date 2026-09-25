@@ -431,7 +431,13 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
   pipeline.push(
     { $unwind: { path: "$sucursales.combinaciones", preserveNullAndEmptyArrays: true } },
     { $match: { "sucursales.combinaciones.hidden_for_sellers": { $ne: true } } },
-    ...(inStock ? [{ $match: { "sucursales.combinaciones.stock": { $gt: 0 } } }] : []),
+    ...(inStock
+      ? [{ $match: { $or: [
+        { "sucursales.combinaciones.stock": { $gt: 0 } },
+        { "sucursales.combinaciones.catalog_reservations.quantity": { $gt: 0 } },
+        { "sucursales.combinaciones.internal_reservations.quantity": { $gt: 0 } }
+      ] } }]
+      : []),
     {
       $lookup: {
         from: "Categoria",
@@ -459,7 +465,10 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
         stockEnReserva: {
           $sum: {
             $map: {
-              input: { $ifNull: ["$sucursales.combinaciones.catalog_reservations", []] },
+              input: { $concatArrays: [
+                { $ifNull: ["$sucursales.combinaciones.catalog_reservations", []] },
+                { $ifNull: ["$sucursales.combinaciones.internal_reservations", []] }
+              ] },
               as: "reservation",
               in: { $ifNull: ["$$reservation.quantity", 0] }
             }
