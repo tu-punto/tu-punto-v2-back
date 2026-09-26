@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { QRInventoryEventModel, QRInventoryModel } from "../entities/implements/QRInventorySchema";
 import { ProductVariantQRService } from "./productVariantQR.service";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { variantLabel } from "../utils/variantKey";
 
 type Actor = { id: string; name?: string };
 const ensureId = (id: string, label: string) => { if (!Types.ObjectId.isValid(id)) throw new Error(`${label} invalido`); };
@@ -11,6 +12,7 @@ const view = (inventory: any) => {
   const data = inventory.toObject?.() || inventory;
   return { ...data, rows: (data.rows || []).map(rowView).sort((a: any, b: any) => new Date(b.lastModifiedAt).getTime() - new Date(a.lastModifiedAt).getTime()) };
 };
+const inventoryRowKey = (productId: unknown, variantKey: unknown) => `${String(productId)}::${String(variantKey)}`;
 
 const getEditable = async (id: string) => {
   ensureId(id, "inventario");
@@ -88,11 +90,46 @@ const transition = async (inventoryId: string, status: "paused" | "open" | "clos
   return view(inventory);
 };
 
+const getUnscannedDiscrepancyRows = async (inventory: any, rows: any[]) => {
+  const scannedKeys = new Set(rows.map((row) => inventoryRowKey(row.productId, row.variantKey)));
+  const missingSnapshots = (inventory.stockSnapshot || []).filter((snapshot: any) =>
+    Number(snapshot.stock || 0) > 0 && !scannedKeys.has(inventoryRowKey(snapshot.productId, snapshot.variantKey))
+  );
+  if (!missingSnapshots.length) return [];
+
+  const productIds = Array.from(new Set(missingSnapshots
+    .map((snapshot: any) => String(snapshot.productId || ""))
+    .filter((productId) => Types.ObjectId.isValid(productId))))
+    .map((productId) => new Types.ObjectId(productId));
+  const products = productIds.length
+    ? await ProductoModel.find({ _id: { $in: productIds } }).select("_id nombre_producto sucursales").lean()
+    : [];
+  const productsById = new Map(products.map((product: any) => [String(product._id), product]));
+
+  return missingSnapshots.map((snapshot: any) => {
+    const product = productsById.get(String(snapshot.productId));
+    const branch = (product?.sucursales || []).find((item: any) => String(item.id_sucursal) === String(inventory.sucursalId));
+    const combination = (branch?.combinaciones || []).find((item: any) => String(item.variantKey) === String(snapshot.variantKey));
+    const initialStock = Number(snapshot.stock || 0);
+
+    return {
+      productName: product?.nombre_producto || "Producto no disponible",
+      variantLabel: variantLabel(combination?.variantes) || String(snapshot.variantKey || ""),
+      initialStock,
+      countedStock: 0,
+      lastModifiedAt: null,
+      lastModifiedByName: ""
+    };
+  });
+};
+
 const exportReport = async (inventoryId: string) => {
   ensureId(inventoryId, "inventario"); const inventory = await QRInventoryModel.findById(inventoryId); if (!inventory) throw new Error("Inventario no encontrado");
   const book = new ExcelJS.Workbook(); const sheet = book.addWorksheet("Inventario QR");
   sheet.columns = ["Producto", "Variante", "Stock al iniciar", "Contado", "Diferencia", "Ultima actualizacion", "Ultimo usuario"].map((header) => ({ header, key: header, width: 24 }));
-  view(inventory).rows.forEach((row: any) => sheet.addRow({ Producto: row.productName, Variante: row.variantLabel, "Stock al iniciar": row.initialStock, Contado: row.countedStock, Diferencia: row.countedStock - row.initialStock, "Ultima actualizacion": row.lastModifiedAt, "Ultimo usuario": row.lastModifiedByName }));
+  const inventoryView = view(inventory);
+  const reportRows = [...inventoryView.rows, ...await getUnscannedDiscrepancyRows(inventory, inventoryView.rows)];
+  reportRows.forEach((row: any) => sheet.addRow({ Producto: row.productName, Variante: row.variantLabel, "Stock al iniciar": row.initialStock, Contado: row.countedStock, Diferencia: row.countedStock - row.initialStock, "Ultima actualizacion": row.lastModifiedAt, "Ultimo usuario": row.lastModifiedByName }));
   sheet.getRow(1).font = { bold: true }; sheet.views = [{ state: "frozen", ySplit: 1 }];
   return { buffer: Buffer.from(await book.xlsx.writeBuffer() as ArrayBuffer), filename: `inventario_qr_${String(inventory.sucursalId)}_${Date.now()}.xlsx` };
 };
