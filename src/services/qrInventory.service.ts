@@ -97,10 +97,11 @@ const getUnscannedDiscrepancyRows = async (inventory: any, rows: any[]) => {
   );
   if (!missingSnapshots.length) return [];
 
-  const productIds = Array.from(new Set(missingSnapshots
-    .map((snapshot: any) => String(snapshot.productId || ""))
-    .filter((productId) => Types.ObjectId.isValid(productId))))
-    .map((productId) => new Types.ObjectId(productId));
+  const productIdStrings = missingSnapshots
+    .map((snapshot: any): string => String(snapshot.productId || ""))
+    .filter((productId: string): boolean => Types.ObjectId.isValid(productId));
+  const productIds = Array.from(new Set<string>(productIdStrings))
+    .map((productId: string) => new Types.ObjectId(productId));
   const products = productIds.length
     ? await ProductoModel.find({ _id: { $in: productIds } }).select("_id nombre_producto sucursales").lean()
     : [];
