@@ -27,6 +27,11 @@ export interface ICombinacion {
     quantity: number;
     createdAt?: Date;
   }[];
+  internal_reservations?: {
+    orderId: string;
+    quantity: number;
+    createdAt?: Date;
+  }[];
 
   imagenes?: IImagenVariante[]; 
   descripcion?: string;

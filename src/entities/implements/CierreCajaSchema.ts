@@ -8,6 +8,7 @@ const CierreCajaSchema = new Schema<ICierreCajaDocument>({
   },  
   ventas_efectivo: Number,
   ventas_qr: Number,
+  ventas_correctivo: { type: Number, default: 0 },
   efectivo_inicial: Number,
   bancario_inicial: Number,
   ingresos_efectivo: Number,

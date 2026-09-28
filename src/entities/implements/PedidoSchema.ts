@@ -161,6 +161,10 @@ const PedidoSchema = new Schema({
     type: Number,
     default: 0
   },
+  subtotal_correctivo: {
+    type: Number,
+    default: 0
+  },
   trabajador: {
     type: Types.ObjectId,
     ref: 'Trabajador',

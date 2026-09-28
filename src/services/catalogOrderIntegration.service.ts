@@ -177,6 +177,32 @@ const restoreReservedStock = async (orderId: string, items: ReservedStockItem[])
   return restoredItems;
 };
 
+const clearDeliveredReservationIndicators = async (pedido: any) => {
+  const orderId = text(pedido?.catalog_order_id);
+  const items = Array.isArray(pedido?.catalog_stock_items) ? pedido.catalog_stock_items : [];
+  if (!orderId || !items.length) return;
+
+  for (const item of items as ReservedStockItem[]) {
+    try {
+      const product = await ProductoModel.findById(item.internalProductId).lean();
+      if (!product) continue;
+
+      const found = findCombination(product, item.internalVariantKey, item.internalBranchId);
+      if (!found) continue;
+
+      const reservationsPath =
+        `sucursales.${found.branchIndex}.combinaciones.${found.combinationIndex}.catalog_reservations`;
+      await ProductoModel.updateOne(
+        { _id: item.internalProductId },
+        { $pull: { [reservationsPath]: { orderId } } }
+      );
+    } catch (error) {
+      // El pedido ya fue entregado. No se debe bloquear ni revertir su estado si falla solo el indicador.
+      console.error("No se pudo limpiar la reserva visual del pedido de catalogo entregado:", error);
+    }
+  }
+};
+
 const createOrder = async (payload: CatalogOrderPayload) => {
   const orderId = text(payload?.orderId);
   if (!orderId) throw new Error("orderId es requerido");
@@ -460,4 +486,9 @@ const rejectOrder = async (shippingId: string, reason: string, rejectedBy: strin
   return pedido;
 };
 
-export const CatalogOrderIntegrationService = { createOrder, rejectOrder, syncOrderStatus };
+export const CatalogOrderIntegrationService = {
+  createOrder,
+  rejectOrder,
+  syncOrderStatus,
+  clearDeliveredReservationIndicators
+};

@@ -7,6 +7,7 @@ export interface ICierreCaja {
   };
   ventas_efectivo: number;
   ventas_qr: number;
+  ventas_correctivo?: number;
   efectivo_inicial: number;
   bancario_inicial: number;
   ingresos_efectivo: number;

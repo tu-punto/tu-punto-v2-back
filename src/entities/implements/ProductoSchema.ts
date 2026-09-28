@@ -25,6 +25,13 @@ const CombinacionSchema = new Schema({
       createdAt: { type: Date, default: Date.now }
     }
   ],
+  internal_reservations: [
+    {
+      orderId: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }
+  ],
 
   imagenes: [
     {

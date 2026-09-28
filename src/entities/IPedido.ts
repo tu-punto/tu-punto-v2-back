@@ -48,6 +48,7 @@ export interface IPedido {
 
   subtotal_qr: number;
   subtotal_efectivo: number;
+  subtotal_correctivo?: number;
 
   trabajador?: Types.ObjectId;
   sucursal?: Types.ObjectId;
