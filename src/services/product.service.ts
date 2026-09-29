@@ -13,6 +13,7 @@ import { Types } from 'mongoose';
 import ExcelJS from "exceljs";
 import { IProductoDocument } from "../entities/documents/IProductoDocument";
 import { ProductoModel } from "../entities/implements/ProductoSchema";
+import { CategoriaModel } from "../entities/implements/CategoriaSchema";
 import { ProductPromotionModel } from "../entities/implements/ProductPromotionSchema";
 import { IngresoModel } from "../entities/implements/IngresoSchema";
 import { ProductVariantKeyService } from "./productVariantKey.service";
@@ -26,6 +27,18 @@ interface Feature {
   feature: string;
   values: string[];
 }
+
+const TEMPORARY_PRODUCT_CATEGORY = "Temporal";
+
+const resolveTemporaryProductCategoryId = async () => {
+  const category = await CategoriaModel.findOneAndUpdate(
+    { categoria: TEMPORARY_PRODUCT_CATEGORY },
+    { $setOnInsert: { categoria: TEMPORARY_PRODUCT_CATEGORY } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+
+  return category._id;
+};
 
 const normalizeVariantsForEntry = (variants: any): Record<string, string> => {
   if (!variants) return {};
@@ -468,6 +481,10 @@ const registerProduct = async (product: IProducto, auditActor?: InventoryAuditAc
   
   try {
     console.log("📦 Datos de producto recibidos:", JSON.stringify(product, null, 2));
+
+    if (product.esTemporal) {
+      product.id_categoria = await resolveTemporaryProductCategoryId();
+    }
 
     const nuevoProducto = await ProductRepository.registerProduct(product);
     console.log("✅ Producto guardado en DB con _id:", nuevoProducto._id);
