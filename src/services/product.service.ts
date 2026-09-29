@@ -1587,7 +1587,7 @@ const completeMissingBranchVariantsForSuperadmin = async (sellerId: string) => {
           } else {
             product.sucursales.push({
               id_sucursal: new Types.ObjectId(branchId),
-              combinaciones
+              combinaciones: combinations
             } as any);
           }
         }
