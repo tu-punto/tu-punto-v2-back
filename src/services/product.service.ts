@@ -1570,38 +1570,50 @@ const previewMissingBranchVariantsForSuperadmin = async (sellerId: string) => {
 };
 
 const completeMissingBranchVariantsForSuperadmin = async (sellerId: string) => {
+  const applyPlan = async (plan: Awaited<ReturnType<typeof buildMissingBranchVariantsPlan>>, session?: any) => {
+    for (const { product, missingByBranch } of plan.plans) {
+      for (const [branchId, combinations] of missingByBranch) {
+        const existingBranch = product.sucursales.find(
+          (branch: any) => String(branch?.id_sucursal || "") === branchId
+        );
+        if (existingBranch) {
+          existingBranch.combinaciones.push(...combinations);
+        } else {
+          product.sucursales.push({
+            id_sucursal: new Types.ObjectId(branchId),
+            combinaciones: combinations
+          } as any);
+        }
+      }
+      await product.save(session ? { session } : undefined);
+    }
+
+    return {
+      variantsToCreate: plan.variantsToCreate,
+      productsToUpdate: plan.productsToUpdate,
+      enabledBranches: plan.enabledBranches
+    };
+  };
+
   const session = await ProductoModel.db.startSession();
   try {
     let result = { variantsToCreate: 0, productsToUpdate: 0, enabledBranches: 0 };
 
     await session.withTransaction(async () => {
       const plan = await buildMissingBranchVariantsPlan(sellerId, session);
-
-      for (const { product, missingByBranch } of plan.plans) {
-        for (const [branchId, combinations] of missingByBranch) {
-          const existingBranch = product.sucursales.find(
-            (branch: any) => String(branch?.id_sucursal || "") === branchId
-          );
-          if (existingBranch) {
-            existingBranch.combinaciones.push(...combinations);
-          } else {
-            product.sucursales.push({
-              id_sucursal: new Types.ObjectId(branchId),
-              combinaciones: combinations
-            } as any);
-          }
-        }
-        await product.save({ session });
-      }
-
-      result = {
-        variantsToCreate: plan.variantsToCreate,
-        productsToUpdate: plan.productsToUpdate,
-        enabledBranches: plan.enabledBranches
-      };
+      result = await applyPlan(plan, session);
     });
 
     return result;
+  } catch (error: any) {
+    const message = String(error?.message || "");
+    const transactionsUnavailable = /Transaction numbers are only allowed|replica set member|mongos/i.test(message);
+    if (!transactionsUnavailable) throw error;
+
+    // Mongo standalone no admite transacciones. El plan se vuelve a calcular antes
+    // de persistir para evitar usar datos leÃ­dos antes de que la transacciÃ³n fallara.
+    const plan = await buildMissingBranchVariantsPlan(sellerId);
+    return await applyPlan(plan);
   } finally {
     await session.endSession();
   }
