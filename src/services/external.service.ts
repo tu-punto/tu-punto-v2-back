@@ -782,7 +782,6 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   const nextDestinationBranchId = toTrimmed(
     externalSale.destino_sucursal_id ?? externalSale.destino_sucursal ?? existingDestinationBranchId ?? nextOriginBranchId
   );
-  const explicitRequestedStatus = String(externalSale.estado_pedido ?? "").trim();
   const shouldRecalculateRoutePricing =
     routeEditRequested ||
     serviceOrigin === "external" &&
@@ -801,12 +800,17 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   let price = toNumber(existing.precio_paquete ?? existing.precio_total, 0);
   let branchRoutePrice = roundCurrency(toNumber(existing.precio_entre_sucursal ?? existing.cargo_delivery, 0));
   let nextBranchRoute = null as Awaited<ReturnType<typeof resolveExternalBranchRoutePricing>> | null;
-  const nextStatus = routeEditRequested
-    ? explicitRequestedStatus || resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId)
-    : normalizeOrderStatus(
-        externalSale.estado_pedido ?? existing.estado_pedido,
-        externalSale.delivered === true || existing.delivered === true
-      );
+  // A route change determines where the order is physically located. Do not let
+  // the status submitted by the form keep an obsolete state from the prior route.
+  // Delivered orders are immutable in this respect and must retain that status.
+  const nextStatus = existingDelivered
+    ? "Entregado"
+    : routeEditRequested
+      ? resolveBranchTransferInitialStatus(nextOriginBranchId, nextDestinationBranchId)
+      : normalizeOrderStatus(
+          externalSale.estado_pedido ?? existing.estado_pedido,
+          externalSale.delivered === true || existing.delivered === true
+        );
   const nextReadyAt =
     nextStatus === READY_FOR_PICKUP_STATUS
       ? (routeEditRequested || !existing.public_tracking_ready_for_pickup_at
