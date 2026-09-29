@@ -1461,6 +1461,152 @@ const duplicateVariantForSuperadmin = async ({
   });
 };
 
+type MissingBranchVariantPlan = {
+  product: any;
+  missingByBranch: Map<string, any[]>;
+};
+
+const getVariantIdentity = (productId: string, combination: any) => {
+  const variantKey = String(combination?.variantKey || "").trim();
+  return variantKey || createVariantKey(productId, normalizeVariantsForEntry(combination?.variantes));
+};
+
+const cloneCombinationForEmptyStock = (combination: any) => {
+  const source = typeof combination?.toObject === "function" ? combination.toObject() : combination || {};
+
+  return {
+    variantes: normalizeVariantsForEntry(source.variantes),
+    ...(source.variantKey ? { variantKey: String(source.variantKey) } : {}),
+    ...(source.hidden_for_sellers !== undefined ? { hidden_for_sellers: Boolean(source.hidden_for_sellers) } : {}),
+    precio: Number(source.precio || 0),
+    stock: 0,
+    ...(Array.isArray(source.imagenes)
+      ? { imagenes: source.imagenes.map((image: any) => ({ url: String(image?.url || ""), ...(image?.key ? { key: String(image.key) } : {}) })) }
+      : {}),
+    ...(source.descripcion !== undefined ? { descripcion: String(source.descripcion) } : {}),
+    ...(source.uso !== undefined ? { uso: String(source.uso) } : {}),
+    ...(source.promocion ? { promocion: source.promocion } : {})
+  };
+};
+
+const buildMissingBranchVariantsPlan = async (sellerId: string, session?: any) => {
+  if (!Types.ObjectId.isValid(sellerId)) {
+    throw new Error("Vendedor invÃ¡lido");
+  }
+
+  const sellerQuery = VendedorModel.findById(sellerId).select("pago_sucursales");
+  if (session) sellerQuery.session(session);
+  const seller = await sellerQuery.lean();
+  if (!seller) {
+    throw new Error("Vendedor no encontrado");
+  }
+
+  const enabledBranchIds = (Array.isArray((seller as any).pago_sucursales) ? (seller as any).pago_sucursales : [])
+    .filter((branch: any) => branch?.activo !== false && Types.ObjectId.isValid(branch?.id_sucursal))
+    .map((branch: any) => String(branch.id_sucursal));
+
+  if (!enabledBranchIds.length) {
+    throw new Error("El vendedor no tiene sucursales habilitadas");
+  }
+
+  const productsQuery = ProductoModel.find({
+    id_vendedor: sellerId,
+    esTemporal: { $ne: true }
+  });
+  if (session) productsQuery.session(session);
+  const products = await productsQuery;
+  const plans: MissingBranchVariantPlan[] = [];
+  let variantsToCreate = 0;
+  let productsToUpdate = 0;
+
+  for (const product of products) {
+    const productId = String(product._id);
+    const branches = Array.isArray(product.sucursales) ? product.sucursales : [];
+    const branchById = new Map(branches.map((branch: any) => [String(branch?.id_sucursal || ""), branch]));
+    const canonicalVariants = new Map<string, any>();
+
+    for (const branchId of enabledBranchIds) {
+      const branch = branchById.get(branchId);
+      for (const combination of Array.isArray(branch?.combinaciones) ? branch.combinaciones : []) {
+        const identity = getVariantIdentity(productId, combination);
+        if (!canonicalVariants.has(identity)) canonicalVariants.set(identity, combination);
+      }
+    }
+
+    if (!canonicalVariants.size) continue;
+
+    const missingByBranch = new Map<string, any[]>();
+    for (const branchId of enabledBranchIds) {
+      const presentKeys = new Set(
+        (Array.isArray(branchById.get(branchId)?.combinaciones) ? branchById.get(branchId).combinaciones : [])
+          .map((combination: any) => getVariantIdentity(productId, combination))
+      );
+      const missing = [...canonicalVariants.entries()]
+        .filter(([identity]) => !presentKeys.has(identity))
+        .map(([, combination]) => cloneCombinationForEmptyStock(combination));
+
+      if (missing.length) {
+        missingByBranch.set(branchId, missing);
+        variantsToCreate += missing.length;
+      }
+    }
+
+    if (missingByBranch.size) {
+      productsToUpdate += 1;
+      plans.push({ product, missingByBranch });
+    }
+  }
+
+  return { plans, variantsToCreate, productsToUpdate, enabledBranches: enabledBranchIds.length };
+};
+
+const previewMissingBranchVariantsForSuperadmin = async (sellerId: string) => {
+  const result = await buildMissingBranchVariantsPlan(sellerId);
+  return {
+    variantsToCreate: result.variantsToCreate,
+    productsToUpdate: result.productsToUpdate,
+    enabledBranches: result.enabledBranches
+  };
+};
+
+const completeMissingBranchVariantsForSuperadmin = async (sellerId: string) => {
+  const session = await ProductoModel.db.startSession();
+  try {
+    let result = { variantsToCreate: 0, productsToUpdate: 0, enabledBranches: 0 };
+
+    await session.withTransaction(async () => {
+      const plan = await buildMissingBranchVariantsPlan(sellerId, session);
+
+      for (const { product, missingByBranch } of plan.plans) {
+        for (const [branchId, combinations] of missingByBranch) {
+          const existingBranch = product.sucursales.find(
+            (branch: any) => String(branch?.id_sucursal || "") === branchId
+          );
+          if (existingBranch) {
+            existingBranch.combinaciones.push(...combinations);
+          } else {
+            product.sucursales.push({
+              id_sucursal: new Types.ObjectId(branchId),
+              combinaciones
+            } as any);
+          }
+        }
+        await product.save({ session });
+      }
+
+      result = {
+        variantsToCreate: plan.variantsToCreate,
+        productsToUpdate: plan.productsToUpdate,
+        enabledBranches: plan.enabledBranches
+      };
+    });
+
+    return result;
+  } finally {
+    await session.endSession();
+  }
+};
+
 export const ProductService = {
   getAllProducts,
   registerProduct,
@@ -1492,6 +1638,8 @@ export const ProductService = {
   renameVariantForSuperadmin,
   deleteVariantForSuperadmin,
   deleteVariantForSeller,
-  duplicateVariantForSuperadmin
+  duplicateVariantForSuperadmin,
+  previewMissingBranchVariantsForSuperadmin,
+  completeMissingBranchVariantsForSuperadmin
 };
 

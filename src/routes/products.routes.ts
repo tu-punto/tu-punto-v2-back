@@ -89,6 +89,18 @@ productRouter.patch(
   requireRole("superadmin"),
   ProductController.updateVariantStockByBranchForSuperadmin
 );
+productRouter.post(
+  "/superadmin/complete-branch-variants/preview",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.previewMissingBranchVariantsForSuperadmin
+);
+productRouter.post(
+  "/superadmin/complete-branch-variants",
+  requireAuth,
+  requireRole("superadmin"),
+  ProductController.completeMissingBranchVariantsForSuperadmin
+);
 productRouter.patch(
   "/superadmin/variant-rename",
   requireAuth,

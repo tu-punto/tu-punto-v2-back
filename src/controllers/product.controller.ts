@@ -1070,6 +1070,49 @@ export const updateVariantStockByBranchForSuperadmin = async (req: Request, res:
   }
 };
 
+export const previewMissingBranchVariantsForSuperadmin = async (req: Request, res: Response) => {
+  try {
+    const sellerId = String(req.body?.sellerId || "").trim();
+    if (!sellerId) {
+      return res.status(400).json({ success: false, message: "sellerId es requerido" });
+    }
+
+    const result = await ProductService.previewMissingBranchVariantsForSuperadmin(sellerId);
+    return res.json({ success: true, result });
+  } catch (error: any) {
+    console.error("Error en previewMissingBranchVariantsForSuperadmin:", error);
+    return res.status(400).json({
+      success: false,
+      message: error?.message || "No se pudo calcular las variantes faltantes"
+    });
+  }
+};
+
+export const completeMissingBranchVariantsForSuperadmin = async (req: Request, res: Response) => {
+  try {
+    const sellerId = String(req.body?.sellerId || "").trim();
+    if (!sellerId) {
+      return res.status(400).json({ success: false, message: "sellerId es requerido" });
+    }
+
+    const result = await ProductService.completeMissingBranchVariantsForSuperadmin(sellerId);
+    return res.json({
+      success: true,
+      message:
+        result.variantsToCreate > 0
+          ? `Se completaron ${result.variantsToCreate} variantes con stock cero.`
+          : "No hay variantes faltantes para completar.",
+      result
+    });
+  } catch (error: any) {
+    console.error("Error en completeMissingBranchVariantsForSuperadmin:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "No se pudieron completar las variantes faltantes"
+    });
+  }
+};
+
 export const renameVariantForSuperadmin = async (req: Request, res: Response) => {
   try {
     const { productId, sellerId, variantKey, sucursalId, scope, variantAttributes } = req.body || {};
@@ -1422,6 +1465,8 @@ export const ProductController = {
   getAdminSellerProductInfoList,
   getSuperadminVariantInventoryList,
   updateVariantStockByBranchForSuperadmin,
+  previewMissingBranchVariantsForSuperadmin,
+  completeMissingBranchVariantsForSuperadmin,
   renameVariantForSuperadmin,
   deleteVariantForSuperadmin,
   deleteVariantForSeller,
