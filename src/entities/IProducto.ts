@@ -21,6 +21,8 @@ export interface ICombinacion {
   variantKey?: string;
   hidden_for_sellers?: boolean;
   precio: number;
+  previousPrice?: number;
+  priceChangedAt?: Date;
   stock: number;
   catalog_reservations?: {
     orderId: string;

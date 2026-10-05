@@ -37,6 +37,7 @@ import userTourProgressRouter from "./routes/userTourProgress.routes";
 import actionTraceRouter from "./routes/actionTrace.routes";
 import qrInventoryRouter from "./routes/qrInventory.routes";
 import dynamicQRRouter from "./routes/dynamicQR.routes";
+import personalInventoryRouter from "./routes/personalInventory.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -60,6 +61,7 @@ router.use("/product", productRouter);
 router.use("/feature", requireAuth, requireRole("admin", "operator", "seller"), featureRouter);
 router.use("/category", requireAuth, requireRole("admin", "operator", "seller"), categoryRouter);
 router.use("/sale", requireAuth, requireRole("admin", "operator", "seller"), saleRouter);
+router.use("/personal-inventory", requireAuth, requireRole("seller"), personalInventoryRouter);
 router.use("/group", requireAuth, requireRole("admin", "operator", "seller"), groupRouter);
 router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller"), shippingRouter);
 router.use("/sucursal", sucursalRouter);

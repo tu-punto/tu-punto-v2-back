@@ -148,6 +148,15 @@ const buildInventoryVariantKey = (row: {
 
 const roundMoney = (value: number) => Number(value.toFixed(2));
 
+const getPriceChangeAlert = (row: any) => {
+  const changedAt = row?.priceChangedAt ? new Date(row.priceChangedAt) : null;
+  const previousPrice = Number(row?.previousPrice);
+  const currentPrice = Number(row?.precio ?? row?.price);
+  if (!changedAt || Number.isNaN(changedAt.getTime()) || !Number.isFinite(previousPrice) || !Number.isFinite(currentPrice)) return null;
+  if (Date.now() - changedAt.getTime() > 7 * 24 * 60 * 60 * 1000) return null;
+  return { previousPrice, currentPrice, changedAt: changedAt.toISOString() };
+};
+
 const normalizePromotionTiers = (tiers: any[] = []) =>
   tiers
     .map((tier) => ({
@@ -214,7 +223,8 @@ const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
       ...row,
       precio_original: Number(row?.precio || row?.price || 0),
       precio: Number(row?.precio || row?.price || 0),
-      pricingPromotion: null
+      pricingPromotion: null,
+      priceChangeAlert: getPriceChangeAlert(row)
     }));
   }
 
@@ -270,7 +280,8 @@ const enrichRowsWithPromotionPricing = async (rows: any[], quantity = 1) => {
             pricingMode: pricing.conditionalQuestion ? "conditional" : (pricing.tiers.length > 0 ? "tiers" : "simple"),
             conditionalQuestion: pricing.conditionalQuestion
           }
-        : null
+        : null,
+      priceChangeAlert: getPriceChangeAlert(row)
     };
   });
 };
