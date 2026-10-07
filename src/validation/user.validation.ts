@@ -11,7 +11,7 @@ import {
   RequestValidationError,
 } from "./requestValidation";
 
-const USER_ROLES = ["admin", "operator", "seller"] as const;
+const USER_ROLES = ["admin", "operator", "seller", "farmer"] as const;
 
 const parsePasswordPair = (payload: Record<string, unknown>, required = true) => {
   const password = required
@@ -46,6 +46,10 @@ const parseOperatorFields = (payload: Record<string, unknown>) => {
   };
 };
 
+const parseFarmerFields = (payload: Record<string, unknown>) => ({
+  sucursal: parseObjectId(payload.sucursal ?? payload.sucursalId, "sucursal"),
+});
+
 export const validateLoginBody = (input: unknown) => {
   const payload = ensurePlainObject(input, "body");
   rejectUnexpectedKeys(payload, ["email", "password", "sucursalId"], "body");
@@ -70,6 +74,15 @@ export const validateRegisterUserBody = (input: unknown, _res?: Response) => {
       role,
       password,
       ...parseOperatorFields(payload),
+    };
+  }
+
+  if (role === "farmer") {
+    return {
+      email: parseEmail(payload.email),
+      role,
+      password,
+      ...parseFarmerFields(payload),
     };
   }
 
@@ -108,6 +121,15 @@ export const validateUpdateUserBody = (input: unknown, res?: Response) => {
       role,
       ...(password ? { password } : {}),
       ...parseOperatorFields(payload),
+    };
+  }
+
+  if (role === "farmer") {
+    return {
+      email,
+      role,
+      ...(password ? { password } : {}),
+      ...parseFarmerFields(payload),
     };
   }
 

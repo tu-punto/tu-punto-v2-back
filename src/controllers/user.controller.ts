@@ -91,7 +91,7 @@ const serializeUserForClient = (user: any) => {
 };
 
 const resolveUserBranchForRole = (role: string, branchValue: unknown) => {
-  if (role !== "operator") return null;
+  if (role !== "operator" && role !== "farmer") return null;
 
   const branchId =
     typeof branchValue === "object" && branchValue
@@ -99,7 +99,7 @@ const resolveUserBranchForRole = (role: string, branchValue: unknown) => {
       : String(branchValue || "");
 
   if (!Types.ObjectId.isValid(branchId)) {
-    throw new Error("Debe asignar una sucursal valida al operador");
+    throw new Error(`Debe asignar una sucursal valida al ${role === "farmer" ? "granjero" : "operador"}`);
   }
 
   return new Types.ObjectId(branchId);
@@ -255,25 +255,25 @@ export const loginUserController = async (req: Request, res: Response) => {
 
     const actualRole = normalizeUserRole(user.role);
 
-    if (actualRole === "operator") {
+    if (actualRole === "operator" || actualRole === "farmer") {
       const assignedBranchId = resolveIdString(user.sucursal);
       const selectedBranchId = String(sucursalId || "").trim();
 
       if (!Types.ObjectId.isValid(assignedBranchId)) {
         return res.status(403).json({
           success: false,
-          msg: "El operador no tiene una sucursal asignada",
+          msg: `El ${actualRole === "farmer" ? "granjero" : "operador"} no tiene una sucursal asignada`,
         });
       }
 
       if (!Types.ObjectId.isValid(selectedBranchId) || assignedBranchId !== selectedBranchId) {
         return res.status(403).json({
           success: false,
-          msg: "El operador solo puede ingresar a su sucursal asignada",
+          msg: `El ${actualRole === "farmer" ? "granjero" : "operador"} solo puede ingresar a su sucursal asignada`,
         });
       }
 
-      if (!canOperatorLogin(user.system_access_hours as AccessHours | undefined)) {
+      if (actualRole === "operator" && !canOperatorLogin(user.system_access_hours as AccessHours | undefined)) {
         return res.status(403).json({
           success: false,
           msg: "El acceso al sistema no esta habilitado en este horario",

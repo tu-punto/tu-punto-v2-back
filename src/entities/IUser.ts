@@ -19,9 +19,10 @@ export interface IUser {
   email: string;
   password: string;
   role: UserRole;
-  sucursal: Types.ObjectId;
-  vendedor: Types.ObjectId;
-  trabajador: Types.ObjectId;
+  sucursal?: Types.ObjectId;
+  vendedor?: Types.ObjectId;
+  trabajador?: Types.ObjectId;
+  vendedores_autorizados?: Types.ObjectId[];
   must_change_password?: boolean;
   password_changed_at?: Date;
   last_login_at?: Date | null;
