@@ -2136,6 +2136,8 @@ const getDailySalesHistory = async (
       subtotal_efectivo: p.subtotal_efectivo || 0,
       subtotal_qr: p.subtotal_qr || 0,
       subtotal_correctivo: p.subtotal_correctivo || 0,
+      adelanto_tu_punto_efectivo: p.adelanto_tu_punto_efectivo || 0,
+      adelanto_tu_punto_qr: p.adelanto_tu_punto_qr || 0,
       esta_pagado: p.esta_pagado,
       productos_busqueda: productosBusqueda,
       busqueda_global: busquedaGlobal,
