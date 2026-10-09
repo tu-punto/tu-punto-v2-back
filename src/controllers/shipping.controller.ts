@@ -3,6 +3,8 @@ import { ShippingService } from "../services/shipping.service";
 import { CatalogOrderIntegrationService } from "../services/catalogOrderIntegration.service";
 import { ActionTraceService } from "../services/actionTrace.service";
 import { getActionTraceActorFromResponse } from "../helpers/actionTrace";
+import { UserModel } from "../entities/implements/UserSchema";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
 
 const traceAction = (
   res: Response,
@@ -220,6 +222,19 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
 
   try {
     const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    if (String(auth?.role || "").toLowerCase() === "farmer") {
+      const [farmer, shipping] = await Promise.all([
+        UserModel.findById(auth?.id).select("vendedores_autorizados sucursal").lean(),
+        PedidoModel.findById(shippingId).select("granjero_registrador sucursal").lean(),
+      ]);
+      if (!farmer || !shipping || String((shipping as any).granjero_registrador || "") !== String(auth?.id || "")) {
+        return res.status(403).json({ success: false, msg: "No autorizado para este pedido" });
+      }
+      const allowedSellers = new Set(((farmer as any).vendedores_autorizados || []).map(String));
+      if (!Array.isArray(sales) || sales.some((sale: any) => !allowedSellers.has(String(sale?.id_vendedor || sale?.vendedor || "")))) {
+        return res.status(403).json({ success: false, msg: "El granjero solo puede registrar productos de sus vendedores autorizados" });
+      }
+    }
     const result = await ShippingService.processSalesForShipping(shippingId, sales, {
       auditActor: {
         userId: String(auth?.id || "").trim() || undefined,
