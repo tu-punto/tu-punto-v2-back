@@ -85,6 +85,26 @@ const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
   const nextStatus = payload.estado_pedido ?? currentShipping?.estado_pedido;
   const nextPaidStatus = payload.esta_pagado ?? currentShipping?.esta_pagado;
 
+  if (nextPaidStatus === "adelanto_tu_punto") {
+    const advance = Number(payload.adelanto_cliente ?? currentShipping?.adelanto_cliente ?? 0);
+    const advanceCash = Number(payload.adelanto_tu_punto_efectivo ?? currentShipping?.adelanto_tu_punto_efectivo ?? 0);
+    const advanceQr = Number(payload.adelanto_tu_punto_qr ?? currentShipping?.adelanto_tu_punto_qr ?? 0);
+
+    if (!Number.isFinite(advance) || advance <= 0) {
+      throw new Error("El adelanto a Tu Punto debe ser mayor a cero");
+    }
+    if (!Number.isFinite(advanceCash) || !Number.isFinite(advanceQr) || advanceCash < 0 || advanceQr < 0) {
+      throw new Error("Los subtotales del adelanto a Tu Punto son invalidos");
+    }
+    if (Math.abs((advanceCash + advanceQr) - advance) > 0.01) {
+      throw new Error("Efectivo y QR del adelanto a Tu Punto deben sumar el monto adelantado");
+    }
+
+    payload.adelanto_cliente = advance;
+    payload.adelanto_tu_punto_efectivo = advanceCash;
+    payload.adelanto_tu_punto_qr = advanceQr;
+  }
+
   if (normalizedType) {
     payload.tipo_de_pago = normalizedType;
   }
