@@ -22,6 +22,9 @@ const VentaSchema = new Schema<IVentaDocument>({
     type: Number,
     default: 0
   },
+  descuento_granjero: { type: Number, default: 0 },
+  monto_para_tu_punto_granjero: { type: Number, default: 0 },
+  saldo_granjero: { type: Number, default: 0 },
   comision: {
     type: Number,
     default: 0,
