@@ -11,6 +11,7 @@ import {
   changePasswordController,
   resetUserPasswordToCarnetController,
   resetSellerPasswordController,
+  getFarmerSummaryController,
 } from "../controllers/user.controller";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 import { rateLimiters } from "../middlewares/rateLimit.middleware";
@@ -50,6 +51,7 @@ userRouter.post(
 
 userRouter.get("/", requireAuth, requireRole("admin"), getAllUsersController);
 userRouter.get("/admins", requireAuth, requireRole("admin", "operator"), getAdminsController);
+userRouter.get("/farmers/:id/summary", requireAuth, requireRole("admin", "farmer"), getFarmerSummaryController);
 
 userRouter.put(
   "/:id",

@@ -10,6 +10,7 @@ import { getJwtSecret } from "../config/secrets";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
 import { TrabajadorModel } from "../entities/implements/TrabajadorSchema";
 import { UserModel } from "../entities/implements/UserSchema";
+import { VentaModel } from "../entities/implements/VentaSchema";
 import { Types } from "mongoose";
 import {
   ASSIGNABLE_USER_ROLES,
@@ -555,6 +556,29 @@ export const logoutUserController = async (req: Request, res: Response) => {
       .json({ msg: "Log out successfull" });
   } catch (error) {
     res.status(500).json({ msg: "Error logging out user" });
+  }
+};
+
+export const getFarmerSummaryController = async (req: Request, res: Response) => {
+  try {
+    const farmerId = String(req.params.id || "");
+    const auth = res.locals.auth as { id?: string; role?: string } | undefined;
+    const role = normalizeUserRole(auth?.role);
+    if (role === "farmer" && String(auth?.id || "") !== farmerId) return res.status(403).json({ success: false, msg: "No autorizado" });
+    const farmer = await UserModel.findById(farmerId).select("email role sucursal").populate("sucursal", "nombre").lean();
+    if (!farmer || farmer.role !== "farmer") return res.status(404).json({ success: false, msg: "Granjero no encontrado" });
+    const rows = await VentaModel.aggregate([
+      { $lookup: { from: "Pedido", localField: "pedido", foreignField: "_id", as: "pedido_data" } },
+      { $unwind: "$pedido_data" },
+      { $match: { "pedido_data.granjero_registrador": new Types.ObjectId(farmerId) } },
+      { $project: { pedido: 1, producto: 1, cantidad: 1, precio_unitario: 1, descuento_granjero: 1, monto_para_tu_punto_granjero: 1, saldo_granjero: 1, fecha_pedido: "$pedido_data.fecha_pedido", estado_pedido: "$pedido_data.estado_pedido" } },
+      { $sort: { fecha_pedido: -1 } },
+    ]);
+    const saldo_pendiente = rows.reduce((total, row) => total + Number(row.saldo_granjero || 0), 0);
+    return res.json({ success: true, data: { farmer, saldo_pendiente, entregas: rows } });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, msg: "No se pudo obtener el resumen del granjero" });
   }
 };
 
