@@ -47,6 +47,7 @@ export interface IPedido {
   adelanto_tu_punto_efectivo?: number;
   adelanto_tu_punto_qr?: number;
   adelanto_tu_punto_registrado_por?: Types.ObjectId;
+  granjero_registrador?: Types.ObjectId;
   pagado_al_vendedor: boolean;
 
   subtotal_qr: number;

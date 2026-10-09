@@ -64,7 +64,7 @@ router.use("/category", requireAuth, requireRole("admin", "operator", "seller"),
 router.use("/sale", requireAuth, requireRole("admin", "operator", "seller"), saleRouter);
 router.use("/personal-inventory", requireAuth, requireRole("seller"), personalInventoryRouter);
 router.use("/group", requireAuth, requireRole("admin", "operator", "seller"), groupRouter);
-router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller"), shippingRouter);
+router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller", "farmer"), shippingRouter);
 router.use("/sucursal", sucursalRouter);
 router.get(
   "/financeFlux/daily-service-income",

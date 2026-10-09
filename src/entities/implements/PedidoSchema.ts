@@ -178,6 +178,12 @@ const PedidoSchema = new Schema({
     ref: 'User',
     required: false
   },
+  granjero_registrador: {
+    type: Types.ObjectId,
+    ref: 'User',
+    required: false,
+    index: true,
+  },
   trabajador: {
     type: Types.ObjectId,
     ref: 'Trabajador',

@@ -183,6 +183,13 @@ export const getShippingByIds = async (req: Request, res: Response) => {
 export const registerShipping = async (req: Request, res: Response) => {
   const shipping = req.body;
   try {
+    if (String(res.locals.auth?.role || "").toLowerCase() === "farmer") {
+      if (shipping?.esta_pagado && shipping.esta_pagado !== "adelanto_tu_punto") {
+        return res.status(403).json({ error: "El granjero solo puede registrar Adelanto a Tu Punto" });
+      }
+      shipping.esta_pagado = "adelanto_tu_punto";
+      shipping.granjero_registrador = res.locals.auth?.id;
+    }
     const newShipping = await ShippingService.registerShipping(shipping);
     traceAction(res, {
       actionType: "shipping.create",
