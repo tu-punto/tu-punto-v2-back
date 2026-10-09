@@ -38,6 +38,7 @@ import actionTraceRouter from "./routes/actionTrace.routes";
 import qrInventoryRouter from "./routes/qrInventory.routes";
 import dynamicQRRouter from "./routes/dynamicQR.routes";
 import personalInventoryRouter from "./routes/personalInventory.routes";
+import farmerDiscountRuleRouter from "./routes/farmerDiscountRule.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -73,6 +74,7 @@ router.get(
 );
 router.use("/financeFlux", requireAuth, requireRole("admin"), financeFluxRouter);
 router.use("/financeFlux/category", requireAuth, requireRole("admin"), financeFluxCategoryRouter);
+router.use("/farmer-discount-rules", requireAuth, requireRole("admin"), farmerDiscountRuleRouter);
 router.use("/recurringExpense", requireAuth, requireRole("admin"), recurringExpenseRouter);
 router.use("/worker", requireAuth, requireRole("admin"), workerRouter);
 router.use("/pdf", requireAuth, requireRole("admin"), pdfRouter);
