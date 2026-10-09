@@ -115,6 +115,17 @@ const resolveIdString = (value: unknown): string => {
   return String(value);
 };
 
+const validateAuthorizedSellerIds = async (sellerIds: unknown) => {
+  const ids = Array.isArray(sellerIds) ? sellerIds.map(String) : [];
+  if (!ids.length) return [];
+  const uniqueIds = [...new Set(ids)];
+  const count = await VendedorModel.countDocuments({ _id: { $in: uniqueIds } });
+  if (count !== uniqueIds.length) {
+    throw new Error("Uno o más vendedores autorizados no existen");
+  }
+  return uniqueIds.map((id) => new Types.ObjectId(id));
+};
+
 const normalizeTimeString = (value: unknown): string => String(value || "").trim();
 
 const normalizeAccessWindow = (window?: AccessWindow | null): AccessWindow | undefined => {
@@ -193,6 +204,8 @@ export const registerUserController = async (req: Request, res: Response) => {
       role: normalizedRole,
       password: encryptPassword,
       sucursal: resolveUserBranchForRole(normalizedRole, user.sucursal ?? user.sucursalId),
+      vendedores_autorizados:
+        normalizedRole === "farmer" ? await validateAuthorizedSellerIds(user.vendedores_autorizados) : [],
       system_access_hours: normalizedRole === "operator" ? normalizeAccessHours(user.system_access_hours) : undefined,
       must_change_password: true,
     });
@@ -583,7 +596,7 @@ export const getAdminsController = async (req: Request, res: Response) => {
 export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, role, password, sucursal, sucursalId, system_access_hours } = req.body;
+    const { email, role, password, sucursal, sucursalId, system_access_hours, vendedores_autorizados } = req.body;
     const authRole = normalizeUserRole(res.locals.auth?.role);
     const existingUser = await UserService.getUserByIdService(id);
 
@@ -613,6 +626,8 @@ export const updateUserController = async (req: Request, res: Response) => {
       email,
       role: existingRole === "superadmin" ? "superadmin" : normalizedRole,
       sucursal: resolveUserBranchForRole(normalizedRole, sucursal ?? sucursalId),
+      vendedores_autorizados:
+        normalizedRole === "farmer" ? await validateAuthorizedSellerIds(vendedores_autorizados) : [],
     };
 
     if (normalizedRole === "operator") {

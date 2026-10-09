@@ -5,6 +5,7 @@ import {
   parseEmail,
   parseEnum,
   parseObjectId,
+  parseObjectIdArray,
   parseOptionalObjectId,
   parseRequiredString,
   rejectUnexpectedKeys,
@@ -48,6 +49,7 @@ const parseOperatorFields = (payload: Record<string, unknown>) => {
 
 const parseFarmerFields = (payload: Record<string, unknown>) => ({
   sucursal: parseObjectId(payload.sucursal ?? payload.sucursalId, "sucursal"),
+  vendedores_autorizados: parseObjectIdArray(payload.vendedores_autorizados, "vendedores_autorizados", { maxItems: 200 }) || [],
 });
 
 export const validateLoginBody = (input: unknown) => {
@@ -63,7 +65,7 @@ export const validateLoginBody = (input: unknown) => {
 
 export const validateRegisterUserBody = (input: unknown, _res?: Response) => {
   const payload = ensurePlainObject(input, "body");
-  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "system_access_hours"], "body");
+  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "system_access_hours", "vendedores_autorizados"], "body");
 
   const role = parseEnum(payload.role, "role", USER_ROLES);
   const password = parsePasswordPair(payload, true);
@@ -104,7 +106,7 @@ export const validateUpdateUserParams = (input: unknown) => {
 
 export const validateUpdateUserBody = (input: unknown, res?: Response) => {
   const payload = ensurePlainObject(input, "body");
-  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "system_access_hours"], "body");
+  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "system_access_hours", "vendedores_autorizados"], "body");
 
   const authRole = String(res?.locals.auth?.role || "").toLowerCase();
   const role = parseEnum(payload.role, "role", USER_ROLES);
