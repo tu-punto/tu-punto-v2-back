@@ -2303,20 +2303,24 @@ const getDailySalesHistory = async (
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
-  const totales = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number }, curr: any) => {
+  const totales = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number; adelantoTuPuntoEfectivo: number; adelantoTuPuntoQr: number }, curr: any) => {
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
     acc.correctivo += Number(curr.subtotal_correctivo || 0);
+    acc.adelantoTuPuntoEfectivo += Number(curr.adelanto_tu_punto_efectivo || 0);
+    acc.adelantoTuPuntoQr += Number(curr.adelanto_tu_punto_qr || 0);
     return acc;
-  }, { efectivo: 0, qr: 0, correctivo: 0 });
+  }, { efectivo: 0, qr: 0, correctivo: 0, adelantoTuPuntoEfectivo: 0, adelantoTuPuntoQr: 0 });
 
-  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number }, curr: any) => {
+  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number; adelantoTuPuntoEfectivo: number; adelantoTuPuntoQr: number }, curr: any) => {
     if (curr.exclude_from_box_close) return acc;
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
     acc.correctivo += Number(curr.subtotal_correctivo || 0);
+    acc.adelantoTuPuntoEfectivo += Number(curr.adelanto_tu_punto_efectivo || 0);
+    acc.adelantoTuPuntoQr += Number(curr.adelanto_tu_punto_qr || 0);
     return acc;
-  }, { efectivo: 0, qr: 0, correctivo: 0 });
+  }, { efectivo: 0, qr: 0, correctivo: 0, adelantoTuPuntoEfectivo: 0, adelantoTuPuntoQr: 0 });
 
   return { resumen, totales, totales_cierre: totalesCierre };
 };
