@@ -28,6 +28,7 @@ import { InternalOrderReservationService } from "./internalOrderReservation.serv
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { InventoryAuditActor } from "./inventoryAudit.service";
 import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
+import { AdelantoTuPuntoService } from "./adelantoTuPunto.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -1198,6 +1199,7 @@ const registerShipping = async (shipping: any) => {
     shipping.hora_entrega_real = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
   const savedShipping = await ShippingRepository.registerShipping(shipping);
+  await AdelantoTuPuntoService.syncForShipping(savedShipping);
   const trackingCode = await NotificationService.ensureBuyerTrackingCode(savedShipping);
 
   if (savedShipping && !(savedShipping as any).buyer_tracking_code) {
@@ -1397,6 +1399,7 @@ const updateShipping = async (
     changedBy?: string;
     note?: string;
     actorRole?: string;
+    advanceRegisteredBy?: string;
   }
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
@@ -1427,6 +1430,13 @@ const updateShipping = async (
 
   const explicitRequestedStatus = normalizeStatusValue(newData?.estado_pedido);
   normalizeOrderPaymentData(newData, shipping);
+  if (
+    String((shipping as any)?.esta_pagado || "") !== "adelanto_tu_punto" &&
+    String(newData?.esta_pagado || "") === "adelanto_tu_punto" &&
+    options?.advanceRegisteredBy
+  ) {
+    newData.adelanto_tu_punto_registrado_por = options.advanceRegisteredBy;
+  }
   if (
     String(newData?.estado_pedido || "") === "Cancelado" &&
     String((shipping as any)?.esta_pagado || "") === "adelanto_tu_punto"
@@ -1644,6 +1654,12 @@ const updateShipping = async (
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
   if (resShip) {
+    const removedAdvance =
+      String((shipping as any)?.esta_pagado || "") === "adelanto_tu_punto" &&
+      String((resShip as any)?.esta_pagado || "") !== "adelanto_tu_punto";
+    await AdelantoTuPuntoService.syncForShipping(resShip, removedAdvance
+      ? { reverted: true, reason: String(newData?.estado_pedido || "") === "Cancelado" ? "Pedido cancelado" : "Adelanto retirado del pedido" }
+      : undefined);
     if (
       (shipping as any)?.origen_pedido === "catalogo" &&
       fromStatus !== "Entregado" &&

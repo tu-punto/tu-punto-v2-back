@@ -186,6 +186,7 @@ export const getShippingByIds = async (req: Request, res: Response) => {
 export const registerShipping = async (req: Request, res: Response) => {
   const shipping = req.body;
   try {
+    shipping.adelanto_tu_punto_registrado_por = res.locals.auth?.id;
     if (String(res.locals.auth?.role || "").toLowerCase() === "farmer") {
       if (shipping?.esta_pagado && shipping.esta_pagado !== "adelanto_tu_punto") {
         return res.status(403).json({ error: "El granjero solo puede registrar Adelanto a Tu Punto" });
@@ -310,6 +311,7 @@ const updateShipping = async (req: Request, res: Response) => {
       source: "manual",
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
       actorRole: role,
+      advanceRegisteredBy: auth?.id,
     });
     traceAction(res, {
       actionType: "shipping.update",

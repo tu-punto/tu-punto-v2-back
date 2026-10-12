@@ -1,5 +1,6 @@
 import { ICierreCaja } from "../entities/ICierreCaja";
 import { BoxCloseRepository } from "../repositories/boxClose.repository";
+import { AdelantoTuPuntoService } from "./adelantoTuPunto.service";
 import { BoxClosePendingOperationRepository } from "../repositories/boxClosePendingOperation.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { Types } from "mongoose";
@@ -173,6 +174,7 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
 
 const registerBoxClose = async (boxClose: any) => {
   const created = await BoxCloseRepository.registerBoxClose(boxClose);
+  await AdelantoTuPuntoService.assignToBoxClose(created);
   const withPendingOperations = await attachPendingOperationsToBoxClose(created);
   return await createCompanyFinanceFluxForOperations(withPendingOperations);
 };
