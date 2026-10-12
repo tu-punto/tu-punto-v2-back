@@ -25,6 +25,8 @@ const VentaSchema = new Schema<IVentaDocument>({
   descuento_granjero: { type: Number, default: 0 },
   monto_para_tu_punto_granjero: { type: Number, default: 0 },
   saldo_granjero: { type: Number, default: 0 },
+  pagado_a_granjero: { type: Boolean, default: false, index: true },
+  pago_granjero: { type: Schema.Types.ObjectId, ref: 'PagoGranjero', required: false },
   comision: {
     type: Number,
     default: 0,

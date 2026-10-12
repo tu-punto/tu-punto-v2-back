@@ -12,6 +12,7 @@ import { TrabajadorModel } from "../entities/implements/TrabajadorSchema";
 import { UserModel } from "../entities/implements/UserSchema";
 import { VentaModel } from "../entities/implements/VentaSchema";
 import { Types } from "mongoose";
+import { PagoGranjeroModel } from "../entities/implements/PagoGranjeroSchema";
 import {
   ASSIGNABLE_USER_ROLES,
   getPublicUserRole,
@@ -571,14 +572,44 @@ export const getFarmerSummaryController = async (req: Request, res: Response) =>
       { $lookup: { from: "Pedido", localField: "pedido", foreignField: "_id", as: "pedido_data" } },
       { $unwind: "$pedido_data" },
       { $match: { "pedido_data.granjero_registrador": new Types.ObjectId(farmerId) } },
-      { $project: { pedido: 1, producto: 1, cantidad: 1, precio_unitario: 1, descuento_granjero: 1, monto_para_tu_punto_granjero: 1, saldo_granjero: 1, fecha_pedido: "$pedido_data.fecha_pedido", estado_pedido: "$pedido_data.estado_pedido" } },
+      { $project: { pedido: 1, producto: 1, cantidad: 1, precio_unitario: 1, descuento_granjero: 1, monto_para_tu_punto_granjero: 1, saldo_granjero: 1, pagado_a_granjero: 1, pago_granjero: 1, fecha_pedido: "$pedido_data.fecha_pedido", estado_pedido: "$pedido_data.estado_pedido" } },
       { $sort: { fecha_pedido: -1 } },
     ]);
-    const saldo_pendiente = rows.reduce((total, row) => total + Number(row.saldo_granjero || 0), 0);
-    return res.json({ success: true, data: { farmer, saldo_pendiente, entregas: rows } });
+    const saldo_pendiente = rows.filter((row) => !row.pagado_a_granjero).reduce((total, row) => total + Number(row.saldo_granjero || 0), 0);
+    const pagos = await PagoGranjeroModel.find({ granjero: farmerId }).sort({ pagado_en: -1 }).lean();
+    return res.json({ success: true, data: { farmer, saldo_pendiente, pago_pendiente: saldo_pendiente, entregas: rows, pagos } });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, msg: "No se pudo obtener el resumen del granjero" });
+  }
+};
+
+export const settleFarmerBalanceController = async (req: Request, res: Response) => {
+  try {
+    const farmerId = String(req.params.id || "");
+    if (!Types.ObjectId.isValid(farmerId)) return res.status(400).json({ success: false, msg: "Granjero inválido" });
+    const farmer = await UserModel.findById(farmerId).select("role").lean();
+    if (!farmer || farmer.role !== "farmer") return res.status(404).json({ success: false, msg: "Granjero no encontrado" });
+    const sales = await VentaModel.aggregate([
+      { $lookup: { from: "Pedido", localField: "pedido", foreignField: "_id", as: "pedido_data" } },
+      { $unwind: "$pedido_data" },
+      { $match: { "pedido_data.granjero_registrador": new Types.ObjectId(farmerId), pagado_a_granjero: { $ne: true } } },
+      { $project: { _id: 1, saldo_granjero: 1 } },
+    ]);
+    const amount = sales.reduce((total, sale) => total + Number(sale.saldo_granjero || 0), 0);
+    if (sales.length === 0 || amount <= 0) return res.status(400).json({ success: false, msg: "No hay saldo pendiente para liquidar" });
+    const payment = await PagoGranjeroModel.create({
+      granjero: farmerId,
+      ventas: sales.map((sale) => sale._id),
+      monto: amount,
+      registrado_por: res.locals.auth?.id,
+      observacion: String(req.body?.observacion || "").trim(),
+    });
+    await VentaModel.updateMany({ _id: { $in: sales.map((sale) => sale._id) } }, { $set: { pagado_a_granjero: true, pago_granjero: payment._id } });
+    return res.json({ success: true, data: payment, msg: "Pago del granjero registrado" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, msg: "No se pudo liquidar el saldo del granjero" });
   }
 };
 
