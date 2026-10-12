@@ -1427,6 +1427,15 @@ const updateShipping = async (
 
   const explicitRequestedStatus = normalizeStatusValue(newData?.estado_pedido);
   normalizeOrderPaymentData(newData, shipping);
+  if (
+    String(newData?.estado_pedido || "") === "Cancelado" &&
+    String((shipping as any)?.esta_pagado || "") === "adelanto_tu_punto"
+  ) {
+    newData.adelanto_cliente = 0;
+    newData.adelanto_tu_punto_efectivo = 0;
+    newData.adelanto_tu_punto_qr = 0;
+    newData.esta_pagado = "no";
+  }
   await normalizeShippingBranches(newData, shipping);
   const simplePackageDestination = isSimplePackageOrder
     ? simplePackageDestinationEditRequested
