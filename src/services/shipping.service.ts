@@ -2178,13 +2178,19 @@ const getDailySalesHistory = async (
     const hasIndependentAdvance = independentAdvanceOrderIds.has(String(p._id));
     const legacyAdvanceCash = hasIndependentAdvance ? 0 : Number(p.adelanto_tu_punto_efectivo || 0);
     const legacyAdvanceQr = hasIndependentAdvance ? 0 : Number(p.adelanto_tu_punto_qr || 0);
+    const advanceAmount = hasIndependentAdvance ? Number(p.adelanto_cliente || 0) : 0;
+    const amountCollectedOnDelivery = hasIndependentAdvance
+      ? Math.max(0, Number((montoTotal - advanceAmount).toFixed(2)))
+      : montoTotal;
+    const paymentMethod = String(p.tipo_de_pago || "").trim() || "Sin método";
 
     return {
       _id: p._id,
       fecha: getHistoryDate(p),
       hora: dayjs(getHistoryDate(p)).format("HH:mm"),
-      tipo_de_pago: p.tipo_de_pago,
-      monto_total: montoTotal,
+      tipo_de_pago: hasIndependentAdvance ? `Saldo de pedido · ${paymentMethod}` : p.tipo_de_pago,
+      monto_total: amountCollectedOnDelivery,
+      monto_pedido_original: hasIndependentAdvance ? montoTotal : undefined,
       subtotal_efectivo: Number(p.subtotal_efectivo || 0) + legacyAdvanceCash,
       subtotal_qr: Number(p.subtotal_qr || 0) + legacyAdvanceQr,
       subtotal_correctivo: p.subtotal_correctivo || 0,
