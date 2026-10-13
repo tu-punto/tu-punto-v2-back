@@ -29,6 +29,7 @@ import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGua
 import { InventoryAuditActor } from "./inventoryAudit.service";
 import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 import { AdelantoTuPuntoService } from "./adelantoTuPunto.service";
+import { AdelantoTuPuntoModel } from "../entities/implements/AdelantoTuPuntoSchema";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -2105,6 +2106,28 @@ const getDailySalesHistory = async (
     return Array.from(new Set(items)).join(" | ");
   };
 
+  // Un Adelanto a Tu Punto es un cobro en sí mismo: se lista por su fecha de
+  // recepción, no por la fecha en que se entrega el pedido.
+  const advanceDateFilter: any = {
+    sucursal: sucursalId,
+    estado: "activo",
+  };
+  if (fromLastClose) {
+    advanceDateFilter.created_at = { $gt: periodStart, $lte: periodEnd };
+  } else if (date) {
+    advanceDateFilter.created_at = { $gte: startOfDay, $lte: periodEnd };
+  }
+  const independentAdvances = await AdelantoTuPuntoModel.find(advanceDateFilter)
+    .populate("pedido", "cliente telefono_cliente numero_guia")
+    .sort({ created_at: -1 })
+    .lean();
+  // Esta lista no se restringe por fecha: evita volver a contar el adelanto
+  // dentro de la fila de entrega cuando ambos cobros ocurren en días distintos.
+  const allActiveAdvanceOrders = await AdelantoTuPuntoModel.find({ sucursal: sucursalId, estado: "activo" })
+    .select("pedido")
+    .lean();
+  const independentAdvanceOrderIds = new Set(allActiveAdvanceOrders.map((advance: any) => String(advance.pedido || "")));
+
   const resumenPedidos = pedidosFiltrados.map(p => {
     const ventasNormales = (Array.isArray(p.venta) ? p.venta : []).filter((v: any) =>
       v && typeof v === 'object' &&
@@ -2152,20 +2175,50 @@ const getDailySalesHistory = async (
       p?.subtotal_correctivo
     );
 
+    const hasIndependentAdvance = independentAdvanceOrderIds.has(String(p._id));
+    const legacyAdvanceCash = hasIndependentAdvance ? 0 : Number(p.adelanto_tu_punto_efectivo || 0);
+    const legacyAdvanceQr = hasIndependentAdvance ? 0 : Number(p.adelanto_tu_punto_qr || 0);
+
     return {
       _id: p._id,
       fecha: getHistoryDate(p),
       hora: dayjs(getHistoryDate(p)).format("HH:mm"),
       tipo_de_pago: p.tipo_de_pago,
       monto_total: montoTotal,
-      subtotal_efectivo: p.subtotal_efectivo || 0,
-      subtotal_qr: p.subtotal_qr || 0,
+      subtotal_efectivo: Number(p.subtotal_efectivo || 0) + legacyAdvanceCash,
+      subtotal_qr: Number(p.subtotal_qr || 0) + legacyAdvanceQr,
       subtotal_correctivo: p.subtotal_correctivo || 0,
       adelanto_tu_punto_efectivo: p.adelanto_tu_punto_efectivo || 0,
       adelanto_tu_punto_qr: p.adelanto_tu_punto_qr || 0,
       esta_pagado: p.esta_pagado,
       productos_busqueda: productosBusqueda,
       busqueda_global: busquedaGlobal,
+    };
+  });
+
+  const resumenAdelantosTuPunto = independentAdvances.map((advance: any) => {
+    const recordedAt = advance.created_at || advance.updated_at || new Date();
+    const order = advance.pedido || {};
+    const amount = Number(advance.monto || 0);
+    const cash = Number(advance.efectivo || 0);
+    const qr = Number(advance.qr || 0);
+    const productosBusqueda = "Adelanto a Tu Punto";
+    return {
+      _id: `${advance._id}-tu-punto-advance`,
+      pedido_id: order?._id || advance.pedido,
+      payment_kind: "tu_punto_advance",
+      fecha: recordedAt,
+      hora: dayjs(recordedAt).format("HH:mm"),
+      tipo_de_pago: "Adelanto a Tu Punto",
+      monto_total: amount,
+      subtotal_efectivo: cash,
+      subtotal_qr: qr,
+      subtotal_correctivo: 0,
+      adelanto_tu_punto_efectivo: cash,
+      adelanto_tu_punto_qr: qr,
+      esta_pagado: "adelanto_tu_punto",
+      productos_busqueda: productosBusqueda,
+      busqueda_global: buildHistorySearchText("Adelanto a Tu Punto", order?.cliente, order?.telefono_cliente, order?.numero_guia, amount),
     };
   });
 
@@ -2326,7 +2379,7 @@ const getDailySalesHistory = async (
     };
   });
 
-  const resumen = [...resumenPedidos, ...resumenExternas, ...resumenPagosVendedorSimples].sort(
+  const resumen = [...resumenPedidos, ...resumenAdelantosTuPunto, ...resumenExternas, ...resumenPagosVendedorSimples].sort(
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
