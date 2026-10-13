@@ -233,6 +233,23 @@ export const getSellersBasic = async (req: Request, res: Response) => {
       return res.json(sellerList);
     }
 
+    if (authRole === "farmer" && authUserId) {
+      const farmer = await UserModel.findById(authUserId).select("vendedores_autorizados").lean();
+      const authorizedSellerIds = Array.isArray((farmer as any)?.vendedores_autorizados)
+        ? (farmer as any).vendedores_autorizados.map((id: any) => String(id))
+        : [];
+      if (!authorizedSellerIds.length) return res.json([]);
+
+      const sellerList = await SellerService.getAllSellersBasic({
+        sucursalId,
+        onlyProductInfoAccess,
+        onlySimplePackageAccess,
+        includeProductInfoStatus,
+        onlyActiveOrRenewal,
+      });
+      return res.json(sellerList.filter((seller: any) => authorizedSellerIds.includes(String(seller?._id))));
+    }
+
     const sellerList = await SellerService.getAllSellersBasic({
       sucursalId,
       onlyProductInfoAccess,

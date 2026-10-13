@@ -11,7 +11,8 @@ sellerRouter.get('/clients/simple-package', requireRole("admin", "operator", "su
 sellerRouter.get('/clients/payment-requests-since-july-2026', requireRole("admin", "operator", "superadmin"), SellerController.getPaymentRequestClientsSinceJuly2026);
 sellerRouter.get('/payment-limit', requireRole("admin", "operator", "seller", "superadmin"), SellerController.getSellerPaymentLimit);
 sellerRouter.put('/payment-limit', requireRole("superadmin"), SellerController.updateSellerPaymentLimit);
-sellerRouter.get('/basic', requireRole("admin", "operator", "seller", "superadmin"), SellerController.getSellersBasic);
+// El granjero solo recibe los vendedores autorizados (el controlador aplica ese filtro).
+sellerRouter.get('/basic', requireRole("admin", "operator", "seller", "farmer", "superadmin"), SellerController.getSellersBasic);
 sellerRouter.get('/metrics', requireRole("admin", "operator", "superadmin"), SellerController.getSellerMetrics);
 sellerRouter.get('/summary', requireRole("admin", "operator", "superadmin"), SellerController.getSellersSummary);
 sellerRouter.get('/alerts', requireRole("admin", "operator", "superadmin"), SellerController.getSellerAlerts);
