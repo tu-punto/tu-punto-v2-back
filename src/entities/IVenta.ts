@@ -13,6 +13,11 @@ export interface IVenta {
   precio_original?: number;
   precio_antes_recogido?: number;
   utilidad: number;
+  descuento_granjero?: number;
+  monto_para_tu_punto_granjero?: number;
+  saldo_granjero?: number;
+  pagado_a_granjero?: boolean;
+  pago_granjero?: Types.ObjectId;
   deposito_realizado: boolean;
 
   producto: IProducto;
