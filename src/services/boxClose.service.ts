@@ -175,7 +175,27 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
 const registerBoxClose = async (boxClose: any) => {
   const created = await BoxCloseRepository.registerBoxClose(boxClose);
   await AdelantoTuPuntoService.assignToBoxClose(created);
-  const withPendingOperations = await attachPendingOperationsToBoxClose(created);
+  const advanceTotals = await AdelantoTuPuntoService.getTotalsForBoxClose(created._id);
+  const reportedCash = Number(created.adelantos_tu_punto_efectivo || 0);
+  const reportedQr = Number(created.adelantos_tu_punto_qr || 0);
+  const missingCash = advanceTotals.efectivo - reportedCash;
+  const missingQr = advanceTotals.qr - reportedQr;
+
+  // La pantalla normalmente ya incluye el adelanto en ventas. Esta
+  // conciliación protege el cierre si la pantalla no alcanzó a recibir ese
+  // movimiento: registra el desglose real y suma solamente la diferencia.
+  const reconciled = await BoxCloseRepository.updateBoxClose(String(created._id), {
+    adelantos_tu_punto_efectivo: advanceTotals.efectivo,
+    adelantos_tu_punto_qr: advanceTotals.qr,
+    ventas_efectivo: Number(created.ventas_efectivo || 0) + missingCash,
+    ventas_qr: Number(created.ventas_qr || 0) + missingQr,
+    ingresos_efectivo: Number(created.ingresos_efectivo || created.ventas_efectivo || 0) + missingCash,
+    efectivo_esperado: Number(created.efectivo_esperado || 0) + missingCash,
+    bancario_esperado: Number(created.bancario_esperado || 0) + missingQr,
+    diferencia_efectivo: Number(created.diferencia_efectivo || 0) - missingCash,
+    diferencia_bancario: Number(created.diferencia_bancario || 0) - missingQr,
+  } as Partial<ICierreCaja>);
+  const withPendingOperations = await attachPendingOperationsToBoxClose(reconciled || created);
   return await createCompanyFinanceFluxForOperations(withPendingOperations);
 };
 

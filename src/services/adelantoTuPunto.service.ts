@@ -55,4 +55,25 @@ const assignToBoxClose = async (boxClose: any) => {
   );
 };
 
-export const AdelantoTuPuntoService = { syncForShipping, assignToBoxClose };
+const getTotalsForBoxClose = async (boxCloseId: unknown) => {
+  const closeId = objectIdOrUndefined(boxCloseId);
+  if (!closeId) return { efectivo: 0, qr: 0 };
+
+  const [totals] = await AdelantoTuPuntoModel.aggregate([
+    { $match: { cierre_caja: closeId, estado: "activo" } },
+    {
+      $group: {
+        _id: null,
+        efectivo: { $sum: "$efectivo" },
+        qr: { $sum: "$qr" },
+      },
+    },
+  ]);
+
+  return {
+    efectivo: Number(totals?.efectivo || 0),
+    qr: Number(totals?.qr || 0),
+  };
+};
+
+export const AdelantoTuPuntoService = { syncForShipping, assignToBoxClose, getTotalsForBoxClose };
