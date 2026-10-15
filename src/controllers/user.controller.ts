@@ -575,7 +575,9 @@ export const getFarmerSummaryController = async (req: Request, res: Response) =>
       { $project: { pedido: 1, producto: 1, cantidad: 1, precio_unitario: 1, descuento_granjero: 1, monto_para_tu_punto_granjero: 1, saldo_granjero: 1, pagado_a_granjero: 1, pago_granjero: 1, fecha_pedido: "$pedido_data.fecha_pedido", estado_pedido: "$pedido_data.estado_pedido" } },
       { $sort: { fecha_pedido: -1 } },
     ]);
-    const saldo_pendiente = rows.filter((row) => !row.pagado_a_granjero).reduce((total, row) => total + Number(row.saldo_granjero || 0), 0);
+    const saldo_pendiente = rows
+      .filter((row) => String(row.estado_pedido || "").toLowerCase() === "entregado" && !row.pagado_a_granjero)
+      .reduce((total, row) => total + Number(row.saldo_granjero || 0), 0);
     const pagos = await PagoGranjeroModel.find({ granjero: farmerId }).sort({ pagado_en: -1 }).lean();
     return res.json({ success: true, data: { farmer, saldo_pendiente, pago_pendiente: saldo_pendiente, entregas: rows, pagos } });
   } catch (error) {
@@ -593,7 +595,13 @@ export const settleFarmerBalanceController = async (req: Request, res: Response)
     const sales = await VentaModel.aggregate([
       { $lookup: { from: "Pedido", localField: "pedido", foreignField: "_id", as: "pedido_data" } },
       { $unwind: "$pedido_data" },
-      { $match: { "pedido_data.granjero_registrador": new Types.ObjectId(farmerId), pagado_a_granjero: { $ne: true } } },
+      {
+        $match: {
+          "pedido_data.granjero_registrador": new Types.ObjectId(farmerId),
+          "pedido_data.estado_pedido": "Entregado",
+          pagado_a_granjero: { $ne: true },
+        },
+      },
       { $project: { _id: 1, saldo_granjero: 1 } },
     ]);
     const amount = sales.reduce((total, sale) => total + Number(sale.saldo_granjero || 0), 0);
