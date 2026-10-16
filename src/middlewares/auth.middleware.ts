@@ -141,6 +141,18 @@ export const requireRole = (...allowedRoles: string[]) => {
   };
 };
 
+export const requireSellerFeature = (feature: "can_access_seller_dashboard" | "can_access_personal_inventory") => {
+  return async (_req: Request, res: Response, next: NextFunction) => {
+    const auth = res.locals.auth as { role?: string; sellerId?: string } | undefined;
+    if (String(auth?.role || "").toLowerCase() !== "seller") return next();
+    const sellerId = String(auth?.sellerId || "").trim();
+    if (!sellerId) return res.status(403).json({ success: false, msg: "No se pudo identificar al vendedor" });
+    const seller = await VendedorModel.findById(sellerId).select(feature).lean();
+    if ((seller as any)?.[feature] !== true) return res.status(403).json({ success: false, msg: "Este modulo no esta habilitado" });
+    next();
+  };
+};
+
 const resolveSellerIdForAuthenticatedUser = async (userId: string): Promise<string | null> => {
   const user = await UserModel.findById(userId).select("role vendedor email").lean();
   if (!user || String(user.role).toLowerCase() !== "seller") {

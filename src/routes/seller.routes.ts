@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as SellerController from '../controllers/seller.controller'
-import { requireRole, requireSellerOwnership } from "../middlewares/auth.middleware";
+import { requireRole, requireSellerFeature, requireSellerOwnership } from "../middlewares/auth.middleware";
 import upload from "../config/multerConfig";
 
 const sellerRouter = Router();
@@ -21,7 +21,7 @@ sellerRouter.post('/register', requireRole("admin"), SellerController.registerSe
 sellerRouter.post('/auto-renew', requireRole("admin"), SellerController.autoRenewSellers);
 sellerRouter.put('/update/:id', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.updateSeller);
 sellerRouter.get('/:id', requireRole("admin", "operator", "seller"), requireSellerOwnership("id"), SellerController.getSeller);
-sellerRouter.get('/:id/dashboard', requireRole("admin", "seller"), requireSellerOwnership("id"), SellerController.getSellerDashboard);
+sellerRouter.get('/:id/dashboard', requireRole("admin", "seller"), requireSellerFeature("can_access_seller_dashboard"), requireSellerOwnership("id"), SellerController.getSellerDashboard);
 sellerRouter.put("/renew/:id", requireRole("admin"), SellerController.renewSeller);
 sellerRouter.post("/:id/payment-request", requireRole("seller"), requireSellerOwnership("id"), upload.single("qr_pago"), SellerController.requestSellerPayment);
 sellerRouter.post("/:id/cancel-payment-request", requireRole("admin"), SellerController.cancelSellerPaymentRequest);

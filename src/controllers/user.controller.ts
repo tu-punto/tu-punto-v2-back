@@ -62,6 +62,9 @@ const clearAuthCookie = (res: Response) =>
   });
 
 type SellerProductInfoAccessShape = {
+  is_external?: boolean;
+  can_access_seller_dashboard?: boolean;
+  can_access_personal_inventory?: boolean;
   pago_sucursales?: {
     alquiler?: number;
     exhibicion?: number;
@@ -534,6 +537,9 @@ export const getUserInfoController = async (req: Request, res: Response) => {
           : [],
       });
       userObj.seller_can_access_inventory = userObj.seller_has_commission_service === true;
+      userObj.seller_is_external = sellerAccessData?.is_external === true;
+      userObj.seller_can_access_dashboard = sellerAccessData?.can_access_seller_dashboard === true;
+      userObj.seller_can_access_personal_inventory = sellerAccessData?.can_access_personal_inventory === true;
       userObj.seller_amortizacion = sellerAccessData?.amortizacion ?? null;
       userObj.seller_precio_paquete = sellerAccessData?.precio_paquete ?? null;
     }

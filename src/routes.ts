@@ -42,7 +42,7 @@ import farmerDiscountRuleRouter from "./routes/farmerDiscountRule.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
-import { requireAuth, requireRole } from "./middlewares/auth.middleware";
+import { requireAuth, requireRole, requireSellerFeature } from "./middlewares/auth.middleware";
 import { rateLimiters } from "./middlewares/rateLimit.middleware";
 import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller";
@@ -62,7 +62,7 @@ router.use("/product", productRouter);
 router.use("/feature", requireAuth, requireRole("admin", "operator", "seller"), featureRouter);
 router.use("/category", requireAuth, requireRole("admin", "operator", "seller"), categoryRouter);
 router.use("/sale", requireAuth, requireRole("admin", "operator", "seller"), saleRouter);
-router.use("/personal-inventory", requireAuth, requireRole("seller"), personalInventoryRouter);
+router.use("/personal-inventory", requireAuth, requireRole("seller"), requireSellerFeature("can_access_personal_inventory"), personalInventoryRouter);
 router.use("/group", requireAuth, requireRole("admin", "operator", "seller"), groupRouter);
 router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller", "farmer"), shippingRouter);
 router.use("/sucursal", sucursalRouter);
