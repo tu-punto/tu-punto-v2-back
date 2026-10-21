@@ -319,6 +319,11 @@ export const updateSeller = async (req: Request, res: Response) => {
     const authRole = String(res.locals.auth?.role || "").toLowerCase();
     const incomingData = req.body?.newData || {};
 
+    const specialFields = ["is_external", "can_access_seller_dashboard", "can_access_personal_inventory"];
+    if (authRole === "seller" && specialFields.some((field) => Object.prototype.hasOwnProperty.call(incomingData, field))) {
+      return res.status(403).json({ ok: false, msg: "No autorizado para editar pantallas especiales" });
+    }
+
     if (
       authRole === "seller" &&
       Object.prototype.hasOwnProperty.call(incomingData, "pago_sucursales")
