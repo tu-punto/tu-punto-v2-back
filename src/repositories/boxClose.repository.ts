@@ -1,5 +1,6 @@
 import { CierreCajaModel } from "../entities/implements/CierreCajaSchema";
 import { ICierreCaja } from "../entities/ICierreCaja";
+import { ICierreCajaDocument } from "../entities/documents/ICierreCajaDocument";
 import { Types } from "mongoose";
 
 const findAll = async (sucursalIds?: string[]): Promise<ICierreCaja[]> => {
@@ -19,7 +20,7 @@ const findAll = async (sucursalIds?: string[]): Promise<ICierreCaja[]> => {
     .lean() 
     .exec();
 };
-const registerBoxClose = async (boxClose: ICierreCaja): Promise<ICierreCaja> => {
+const registerBoxClose = async (boxClose: ICierreCaja): Promise<ICierreCajaDocument> => {
   const newBoxClose = new CierreCajaModel(boxClose);
   return await newBoxClose.save();
 };
