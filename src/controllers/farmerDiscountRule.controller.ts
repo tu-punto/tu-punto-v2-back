@@ -25,6 +25,23 @@ const validateRule = async (rule: ReturnType<typeof normalize>, excludeId?: stri
 export const listFarmerDiscountRules = async (_req: Request, res: Response) =>
   res.json({ success: true, data: await FarmerDiscountRuleModel.find().sort({ limite_inferior: 1 }).lean() });
 
+export const listFarmerBonusRules = async (_req: Request, res: Response) => {
+  try {
+    const rules = await FarmerDiscountRuleModel.find().sort({ limite_inferior: 1 }).lean();
+    return res.json({
+      success: true,
+      data: rules.map((rule) => ({
+        limite_inferior: rule.limite_inferior,
+        limite_superior: rule.limite_superior,
+        bono_granjero: Number(rule.monto_descontado || 0) - Number(rule.monto_para_tu_punto || 0),
+      })),
+    });
+  } catch (error) {
+    console.error("Error al consultar bonos de granjero:", error);
+    return res.status(500).json({ success: false, msg: "No se pudieron consultar los bonos" });
+  }
+};
+
 export const createFarmerDiscountRule = async (req: Request, res: Response) => {
   try { const rule = normalize(req.body); await validateRule(rule); res.status(201).json({ success: true, data: await FarmerDiscountRuleModel.create(rule) }); }
   catch (error: any) { res.status(400).json({ success: false, msg: error.message || "No se pudo crear la regla" }); }

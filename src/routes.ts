@@ -47,6 +47,7 @@ import { rateLimiters } from "./middlewares/rateLimit.middleware";
 import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller";
 import { getRenewalMonthlyPaymentSummary } from "./controllers/seller.controller";
+import { listFarmerBonusRules } from "./controllers/farmerDiscountRule.controller";
 
 const router = Router();
 
@@ -74,6 +75,7 @@ router.get(
 );
 router.use("/financeFlux", requireAuth, requireRole("admin"), financeFluxRouter);
 router.use("/financeFlux/category", requireAuth, requireRole("admin"), financeFluxCategoryRouter);
+router.get("/farmer-discount-rules/bonus", requireAuth, requireRole("farmer"), listFarmerBonusRules);
 router.use("/farmer-discount-rules", requireAuth, requireRole("admin"), farmerDiscountRuleRouter);
 router.use("/recurringExpense", requireAuth, requireRole("admin"), recurringExpenseRouter);
 router.use("/worker", requireAuth, requireRole("admin"), workerRouter);
