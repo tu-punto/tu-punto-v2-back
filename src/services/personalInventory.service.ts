@@ -13,7 +13,10 @@ const cleanName = (value: unknown) => String(value || "").trim();
 export const PersonalInventoryService = {
   async listProducts(sellerId: string, q?: string) {
     const filter: any = { sellerId };
-    if (cleanName(q)) filter.name = { $regex: cleanName(q), $options: "i" };
+    if (cleanName(q)) {
+      const search = cleanName(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [{ name: { $regex: search, $options: "i" } }, { code: { $regex: search, $options: "i" } }];
+    }
     return PersonalProductModel.find(filter).sort({ name: 1 }).lean();
   },
 
@@ -21,7 +24,9 @@ export const PersonalInventoryService = {
     const name = cleanName(input.name);
     if (!name || !validMoney(input.salePrice) || !validMoney(input.stock)) throw new Error("Datos de producto invalidos");
     if (input.purchaseCost !== undefined && input.purchaseCost !== null && !validMoney(input.purchaseCost)) throw new Error("Costo de compra invalido");
-    const product = await PersonalProductModel.create({ sellerId, name, salePrice: money(input.salePrice), purchaseCost: input.purchaseCost == null ? undefined : money(input.purchaseCost), stock: Number(input.stock) });
+    const code = cleanName(input.code);
+    if (code.length > 100) throw new Error("Código demasiado largo");
+    const product = await PersonalProductModel.create({ sellerId, name, code: code || undefined, salePrice: money(input.salePrice), purchaseCost: input.purchaseCost == null || input.purchaseCost === "" ? undefined : money(input.purchaseCost), stock: Number(input.stock) });
     if (product.stock > 0) await PersonalInventoryMovementModel.create({ sellerId, productId: product._id, type: "initial", quantityDelta: product.stock, reason: "Stock inicial" });
     return product;
   },
@@ -29,10 +34,12 @@ export const PersonalInventoryService = {
   async updateProduct(sellerId: string, id: string, input: any) {
     if (!isObjectId(id)) throw new Error("Producto no encontrado");
     const update: any = {};
+    const unset: any = {};
     if (input.name !== undefined) { const name = cleanName(input.name); if (!name) throw new Error("Nombre requerido"); update.name = name; }
+    if (input.code !== undefined) { const code = cleanName(input.code); if (code.length > 100) throw new Error("Código demasiado largo"); if (code) update.code = code; else unset.code = 1; }
     if (input.salePrice !== undefined) { if (!validMoney(input.salePrice)) throw new Error("Precio invalido"); update.salePrice = money(input.salePrice); }
-    if (input.purchaseCost !== undefined) { if (input.purchaseCost === null || input.purchaseCost === "") update.purchaseCost = undefined; else if (!validMoney(input.purchaseCost)) throw new Error("Costo invalido"); else update.purchaseCost = money(input.purchaseCost); }
-    const product = await PersonalProductModel.findOneAndUpdate({ _id: id, sellerId }, { $set: update }, { new: true });
+    if (input.purchaseCost !== undefined) { if (input.purchaseCost === null || input.purchaseCost === "") unset.purchaseCost = 1; else if (!validMoney(input.purchaseCost)) throw new Error("Costo invalido"); else update.purchaseCost = money(input.purchaseCost); }
+    const product = await PersonalProductModel.findOneAndUpdate({ _id: id, sellerId }, { ...(Object.keys(update).length ? { $set: update } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { new: true });
     if (!product) throw new Error("Producto no encontrado");
     return product;
   },
@@ -40,7 +47,7 @@ export const PersonalInventoryService = {
   async adjustStock(sellerId: string, id: string, input: any) {
     const delta = Number(input.quantityDelta);
     const reason = cleanName(input.reason);
-    if (!isObjectId(id) || !Number.isInteger(delta) || !delta || !reason) throw new Error("Ajuste de stock invalido");
+    if (!isObjectId(id) || !Number.isInteger(delta) || !delta) throw new Error("Ajuste de stock invalido");
     const product = await PersonalProductModel.findOneAndUpdate({ _id: id, sellerId, ...(delta < 0 ? { stock: { $gte: -delta } } : {}) }, { $inc: { stock: delta } }, { new: true });
     if (!product) throw new Error("Stock insuficiente o producto no encontrado");
     await PersonalInventoryMovementModel.create({ sellerId, productId: id, type: "adjustment", quantityDelta: delta, reason });
@@ -58,22 +65,27 @@ export const PersonalInventoryService = {
   async createSale(sellerId: string, input: any) {
     const rawItems = Array.isArray(input.items) ? input.items : [];
     if (!rawItems.length) throw new Error("Agrega al menos un producto");
-    const quantities = new Map<string, number>();
+    const quantities = new Map<string, { quantity: number; unitPrice?: number }>();
     for (const row of rawItems) {
       const id = String(row?.productId || ""), quantity = Number(row?.quantity);
       if (!isObjectId(id) || !Number.isInteger(quantity) || quantity < 1) throw new Error("Linea de venta invalida");
-      quantities.set(id, (quantities.get(id) || 0) + quantity);
+      if (row.unitPrice !== undefined && (row.unitPrice === null || row.unitPrice === "" || !validMoney(row.unitPrice))) throw new Error("Precio de venta invalido");
+      const unitPrice = row.unitPrice === undefined ? undefined : money(row.unitPrice);
+      const previous = quantities.get(id);
+      if (previous && previous.unitPrice !== unitPrice) throw new Error("El producto tiene precios distintos en la misma venta");
+      quantities.set(id, { quantity: (previous?.quantity || 0) + quantity, unitPrice });
     }
     const decremented: Array<{ productId: string; quantity: number }> = [];
     let createdSale: any = null;
     try {
       const items: any[] = [];
-      for (const [productId, quantity] of quantities) {
+      for (const [productId, { quantity, unitPrice }] of quantities) {
         // La condicion stock >= quantity conserva el limite aun en Mongo standalone.
         const product = await PersonalProductModel.findOneAndUpdate({ _id: productId, sellerId, stock: { $gte: quantity } }, { $inc: { stock: -quantity } }, { new: true });
         if (!product) throw new Error("Stock insuficiente o producto no encontrado");
         decremented.push({ productId, quantity });
-        items.push({ productId: product._id, name: product.name, quantity, unitPrice: product.salePrice, subtotal: money(product.salePrice * quantity) });
+        const price = unitPrice === undefined ? product.salePrice : unitPrice;
+        items.push({ productId: product._id, name: product.name, quantity, unitPrice: price, unitCost: product.purchaseCost, subtotal: money(price * quantity) });
       }
       createdSale = await PersonalSaleModel.create({ sellerId, items, total: money(items.reduce((sum, item) => sum + item.subtotal, 0)) });
       await PersonalInventoryMovementModel.insertMany(items.map((item) => ({ sellerId, productId: item.productId, type: "sale", quantityDelta: -item.quantity, reason: "Venta personal", saleId: createdSale._id })));
@@ -91,7 +103,7 @@ export const PersonalInventoryService = {
     const productId = cleanName(query.productId);
     const [sales, expenses, movements] = await Promise.all([
       (!type || type === "sale" ? PersonalSaleModel.find({ sellerId, ...(productId && isObjectId(productId) ? { "items.productId": productId } : {}), ...(Object.keys(dates).length ? { createdAt: dates } : {}) }).lean() : []),
-      (!type || type === "expense" ? PersonalExpenseModel.find({ sellerId, ...(Object.keys(dates).length ? { occurredAt: dates } : {}) }).lean() : []),
+      ((!type || type === "expense") && !productId ? PersonalExpenseModel.find({ sellerId, ...(Object.keys(dates).length ? { occurredAt: dates } : {}) }).lean() : []),
       (!type || type === "adjustment" || type === "movement" ? PersonalInventoryMovementModel.find({ sellerId, ...(productId && isObjectId(productId) ? { productId } : {}), ...(Object.keys(dates).length ? { createdAt: dates } : {}) }).populate("productId", "name").lean() : []),
     ]);
     return [

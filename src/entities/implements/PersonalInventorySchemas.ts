@@ -5,6 +5,7 @@ const owned = { type: Schema.Types.ObjectId, ref: "Vendedor", required: true, in
 export const PersonalProductModel = model("PersonalProduct", new Schema({
   sellerId: owned,
   name: { type: String, required: true, trim: true },
+  code: { type: String, trim: true, maxlength: 100 },
   salePrice: { type: Number, required: true, min: 0 },
   purchaseCost: { type: Number, min: 0 },
   stock: { type: Number, required: true, min: 0, default: 0 },
@@ -18,6 +19,7 @@ export const PersonalSaleModel = model("PersonalSale", new Schema({
     name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
+    unitCost: { type: Number, min: 0 },
     subtotal: { type: Number, required: true, min: 0 },
   }],
 }, { timestamps: true, collection: "PersonalSale" }));
