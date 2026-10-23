@@ -25,6 +25,10 @@ const GuiaEnvioSchema = new Schema({
         type: String,
         required: false
     },
+    enviado_por_flota: {
+        type: Boolean,
+        required: false
+    },
     lista_productos_keys: {
         type: [String],
         default: []

@@ -14,7 +14,7 @@ const SERVICE_ANNOUNCEMENT_ROLES = ["admin", "operator", "seller"] as const;
 
 export const validateShippingGuideBody = (input: unknown, role?: string, sellerId?: string) => {
   const payload = ensurePlainObject(input, "body");
-  rejectUnexpectedKeys(payload, ["vendedor", "sucursal", "descripcion", "observaciones"], "body");
+  rejectUnexpectedKeys(payload, ["vendedor", "sucursal", "descripcion", "observaciones", "enviado_por_flota"], "body");
 
   const normalizedRole = String(role || "").toLowerCase();
   const targetSellerId = payload.vendedor ? parseObjectId(payload.vendedor, "vendedor") : undefined;
@@ -23,6 +23,8 @@ export const validateShippingGuideBody = (input: unknown, role?: string, sellerI
   if (normalizedRole === "seller" && !targetSellerId && !authenticatedSellerId) {
     throw new RequestValidationError("No se pudo identificar el vendedor");
   }
+  const enviadoPorFlota = parseOptionalBoolean(payload.enviado_por_flota);
+  if (enviadoPorFlota === undefined) throw new RequestValidationError("enviado_por_flota es requerido");
 
   return {
     ...(targetSellerId ? { vendedor: targetSellerId } : {}),
@@ -33,6 +35,7 @@ export const validateShippingGuideBody = (input: unknown, role?: string, sellerI
     ...(payload.observaciones !== undefined
       ? { observaciones: parseOptionalString(payload.observaciones, "observaciones", { maxLength: 1000 }) || "" }
       : {}),
+    enviado_por_flota: enviadoPorFlota,
   };
 };
 
