@@ -20,6 +20,8 @@ export interface IVentaExterna {
     fecha_pedido: Date;
 
     service_origin?: ExternalServiceOrigin;
+    pricing_version?: "package-pricing-v2";
+    external_pricing_snapshot?: { small_price: number; large_price: number; weekly_fee: number; fee_cap: number };
     package_size?: PackageSize;
     delivery_spaces?: number;
     precio_paquete_unitario?: number;
@@ -67,6 +69,7 @@ export interface IVentaExterna {
     public_tracking_received_at?: Date;
     public_tracking_schedule_base_at?: Date;
     public_tracking_ready_for_pickup_at?: Date;
+    pickup_fee_started_at?: Date;
     public_tracking_ready_for_pickup_whatsapp_sent_at?: Date;
     public_tracking_frozen?: boolean;
     public_tracking_frozen_status?: string;

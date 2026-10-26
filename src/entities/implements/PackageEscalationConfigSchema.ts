@@ -43,6 +43,12 @@ const PackageEscalationConfigSchema = new Schema(
       type: [PackageEscalationRangeSchema],
       default: [],
     },
+    external_pricing: {
+      small_price: { type: Number, required: false, min: 0, default: 0 },
+      large_price: { type: Number, required: false, min: 0, default: 0 },
+      weekly_fee: { type: Number, required: false, min: 0, default: 0 },
+      fee_cap: { type: Number, required: false, min: 0, default: 0 },
+    },
     delivery_spaces: {
       type: [PackageDeliverySpaceSchema],
       default: undefined,

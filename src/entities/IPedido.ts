@@ -71,6 +71,7 @@ export interface IPedido {
   numero_guia?: string;
   guia_sequence?: number;
   simple_package_order?: boolean;
+  pricing_version?: "package-pricing-v2";
   simple_package_source_id?: Types.ObjectId;
 
   venta: Types.ObjectId[];

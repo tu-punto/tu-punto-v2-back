@@ -259,6 +259,11 @@ const PedidoSchema = new Schema({
     type: Boolean,
     default: false,
   },
+    pricing_version: {
+      type: String,
+      required: false,
+      default: undefined,
+    },
   simple_package_source_id: {
     type: Schema.Types.ObjectId,
     ref: 'VentaExterna',

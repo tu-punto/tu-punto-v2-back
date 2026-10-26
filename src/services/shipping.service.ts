@@ -1565,7 +1565,7 @@ const updateShipping = async (
   }
 
   let latePickupFee = 0;
-  if (willBeDelivered && !wasDelivered && isSimplePackageOrder) {
+  if (willBeDelivered && !wasDelivered && isSimplePackageOrder && (shipping as any)?.pricing_version !== "package-pricing-v2") {
     latePickupFee = await resolveLatePickupFeeForShippingDelivery(
       nextShippingState,
       newData.hora_entrega_real || new Date()
@@ -1750,7 +1750,9 @@ const updateShipping = async (
           }
         : {}),
     };
-    const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
+    const lateFee = (resShip as any)?.pricing_version === "package-pricing-v2"
+      ? 0
+      : roundCurrency(Number((resShip as any).late_pickup_fee || 0));
     const simplePackageFinancialPatch =
       lateFee > 0
         ? {

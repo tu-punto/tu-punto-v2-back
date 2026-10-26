@@ -66,6 +66,7 @@ const upsertGlobalByOrigin = async (params: {
   serviceOrigin: PackageEscalationServiceOrigin;
   ranges: any[];
   deliverySpaces?: any[];
+  externalPricing?: any;
 }) => {
   await ensureLegacySucursalOriginIndexRemoved();
 
@@ -82,6 +83,7 @@ const upsertGlobalByOrigin = async (params: {
   if (params.deliverySpaces !== undefined) {
     updatePayload.delivery_spaces = params.deliverySpaces;
   }
+  if (params.externalPricing !== undefined) updatePayload.external_pricing = params.externalPricing;
 
   if (existing) {
     existing.set(updatePayload);
@@ -102,6 +104,7 @@ const upsertByRouteAndOrigin = async (params: {
   serviceOrigin: PackageEscalationServiceOrigin;
   ranges: any[];
   deliverySpaces?: any[];
+  externalPricing?: any;
 }) => {
   await ensureLegacySucursalOriginIndexRemoved();
 
@@ -114,6 +117,7 @@ const upsertByRouteAndOrigin = async (params: {
   if (params.deliverySpaces !== undefined) {
     updatePayload.delivery_spaces = params.deliverySpaces;
   }
+  if (params.externalPricing !== undefined) updatePayload.external_pricing = params.externalPricing;
 
   return await PackageEscalationConfigModel.findOneAndUpdate(
     {

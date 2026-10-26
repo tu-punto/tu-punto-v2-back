@@ -91,6 +91,23 @@ const resolveStorageFeeStartForExternal = (row: any) =>
     : row?.fecha_pedido;
 
 const resolveLatePickupFeeForExternalDelivery = (row: any, pickedUpAt: unknown) => {
+  if (row?.pricing_version === "package-pricing-v2") {
+    if (String(row?.service_origin || "external") !== "external") return 0;
+    const snapshot = row?.external_pricing_snapshot;
+    const start = row?.pickup_fee_started_at;
+    if (!snapshot || !start) return 0;
+    const elapsedDays = moment.tz(pickedUpAt || new Date(), "America/La_Paz").diff(
+      moment.tz(start, "America/La_Paz"),
+      "days"
+    );
+    const weeks = Math.max(0, Math.floor(elapsedDays / 7));
+    const basePrice = roundCurrency(Number(row?.precio_paquete || 0));
+    const cappedGross = Math.min(
+      Math.max(0, Number(snapshot?.fee_cap || 0)),
+      basePrice + weeks * Math.max(0, Number(snapshot?.weekly_fee || 0))
+    );
+    return roundCurrency(Math.max(0, cappedGross - basePrice));
+  }
   if (row?.public_tracking_frozen === true) {
     return roundCurrency(Number(row?.late_pickup_fee || 0));
   }
@@ -494,12 +511,8 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
           fallbackRoutePrice: branchRoute.precioEntreSucursal,
         });
   const branchRoutePrice = deliveryPricing.total;
-  const configuredPackagePrice = await PackageEscalationConfigService.getExternalUnitPrice({
-    routeId: branchRoute.routeId,
-    packageCount: batchPackageCount,
-    packageSize,
-  });
-  const packagePrice = getOptionalNonNegativeAmount(input.precio_paquete) ?? configuredPackagePrice;
+  const externalPricing = await PackageEscalationConfigService.getExternalPricing(branchRoute.routeId);
+  const packagePrice = externalPricing[packageSize === "grande" ? "large_price" : "small_price"];
   const totalServicePrice = roundCurrency(packagePrice + branchRoutePrice);
   const buyerName = toTrimmed(input.comprador ?? input.nombre_comprador);
   const buyerPhone = toTrimmed(input.telefono_comprador);
@@ -548,6 +561,8 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     origen_sucursal: toObjectIdOrUndefined(branchRoute.originBranchId),
     destino_sucursal: toObjectIdOrUndefined(branchRoute.destinationBranchId),
     service_origin: "external",
+    pricing_version: "package-pricing-v2",
+    external_pricing_snapshot: externalPricing,
     package_size: packageSize,
     delivery_spaces: effectiveDeliverySpaces,
     precio_paquete_unitario: packagePrice,
@@ -566,6 +581,8 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
     monto_paga_comprador: montoPagaComprador,
     saldo_cobrar: totalSaldoCobrar,
     estado_pedido: estadoPedido,
+    pickup_fee_started_at:
+      estadoPedido === READY_FOR_PICKUP_STATUS ? moment().tz("America/La_Paz").toDate() : undefined,
     delivered,
     is_external: true,
     hora_entrega_real: delivered
@@ -741,6 +758,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   }
   assertEditableIfNotDeliveredOlderThanFiveDays(existing as any);
   const existingDelivered = existing.estado_pedido === "Entregado" || existing.delivered === true;
+  const usesPackagePricingV2 = existing.pricing_version === "package-pricing-v2";
 
   const serviceOrigin = (String(existing.service_origin || "external").trim() || "external") as
     | "external"
@@ -817,6 +835,12 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
           ? moment().tz("America/La_Paz").toDate()
           : existing.public_tracking_ready_for_pickup_at)
       : null;
+  const nextPickupFeeStartedAt =
+    usesPackagePricingV2 && nextStatus === READY_FOR_PICKUP_STATUS
+      ? (existing.estado_pedido === READY_FOR_PICKUP_STATUS && existing.pickup_fee_started_at
+          ? existing.pickup_fee_started_at
+          : moment().tz("America/La_Paz").toDate())
+      : undefined;
 
   if (shouldRecalculateRoutePricing) {
     nextBranchRoute = await resolveExternalBranchRoutePricing(nextOriginBranchId, nextDestinationBranchId);
@@ -843,12 +867,14 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
           });
 
     branchRoutePrice = deliveryPricing.total;
-    const configuredPrice = await PackageEscalationConfigService.getExternalUnitPrice({
-      routeId: nextBranchRoute.routeId,
-      packageCount: packagePriceCount,
-      packageSize: nextPackageSize,
-    });
-    price = getOptionalNonNegativeAmount(externalSale.precio_paquete) ?? configuredPrice;
+    if (!usesPackagePricingV2) {
+      const configuredPrice = await PackageEscalationConfigService.getExternalUnitPrice({
+        routeId: nextBranchRoute.routeId,
+        packageCount: packagePriceCount,
+        packageSize: nextPackageSize,
+      });
+      price = getOptionalNonNegativeAmount(externalSale.precio_paquete) ?? configuredPrice;
+    }
   }
 
   const simplePackageFinancials = getSimplePackageFinancials({
@@ -970,6 +996,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
     is_external: true,
     service_origin: serviceOrigin,
     public_tracking_ready_for_pickup_at: nextReadyAt,
+    ...(usesPackagePricingV2 ? { pickup_fee_started_at: nextPickupFeeStartedAt } : {}),
   };
 
   if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
