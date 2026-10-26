@@ -28,6 +28,8 @@ import { InternalOrderReservationService } from "./internalOrderReservation.serv
 import { assertEditableIfNotDeliveredOlderThanFiveDays } from "./deliveryEditGuard";
 import { InventoryAuditActor } from "./inventoryAudit.service";
 import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
+import { AdelantoTuPuntoService } from "./adelantoTuPunto.service";
+import { AdelantoTuPuntoModel } from "../entities/implements/AdelantoTuPuntoSchema";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -84,6 +86,26 @@ const normalizeOrderPaymentData = (payload: any, currentShipping?: any) => {
   const normalizedType = normalizePaymentType(payload.tipo_de_pago ?? currentShipping?.tipo_de_pago);
   const nextStatus = payload.estado_pedido ?? currentShipping?.estado_pedido;
   const nextPaidStatus = payload.esta_pagado ?? currentShipping?.esta_pagado;
+
+  if (nextPaidStatus === "adelanto_tu_punto") {
+    const advance = Number(payload.adelanto_cliente ?? currentShipping?.adelanto_cliente ?? 0);
+    const advanceCash = Number(payload.adelanto_tu_punto_efectivo ?? currentShipping?.adelanto_tu_punto_efectivo ?? 0);
+    const advanceQr = Number(payload.adelanto_tu_punto_qr ?? currentShipping?.adelanto_tu_punto_qr ?? 0);
+
+    if (!Number.isFinite(advance) || advance <= 0) {
+      throw new Error("El adelanto a Tu Punto debe ser mayor a cero");
+    }
+    if (!Number.isFinite(advanceCash) || !Number.isFinite(advanceQr) || advanceCash < 0 || advanceQr < 0) {
+      throw new Error("Los subtotales del adelanto a Tu Punto son invalidos");
+    }
+    if (Math.abs((advanceCash + advanceQr) - advance) > 0.01) {
+      throw new Error("Efectivo y QR del adelanto a Tu Punto deben sumar el monto adelantado");
+    }
+
+    payload.adelanto_cliente = advance;
+    payload.adelanto_tu_punto_efectivo = advanceCash;
+    payload.adelanto_tu_punto_qr = advanceQr;
+  }
 
   if (normalizedType) {
     payload.tipo_de_pago = normalizedType;
@@ -1178,6 +1200,7 @@ const registerShipping = async (shipping: any) => {
     shipping.hora_entrega_real = moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss");
   }
   const savedShipping = await ShippingRepository.registerShipping(shipping);
+  await AdelantoTuPuntoService.syncForShipping(savedShipping);
   const trackingCode = await NotificationService.ensureBuyerTrackingCode(savedShipping);
 
   if (savedShipping && !(savedShipping as any).buyer_tracking_code) {
@@ -1377,6 +1400,7 @@ const updateShipping = async (
     changedBy?: string;
     note?: string;
     actorRole?: string;
+    advanceRegisteredBy?: string;
   }
 ) => {
   const shipping = await ShippingRepository.findById(shippingId);
@@ -1407,6 +1431,22 @@ const updateShipping = async (
 
   const explicitRequestedStatus = normalizeStatusValue(newData?.estado_pedido);
   normalizeOrderPaymentData(newData, shipping);
+  if (
+    String((shipping as any)?.esta_pagado || "") !== "adelanto_tu_punto" &&
+    String(newData?.esta_pagado || "") === "adelanto_tu_punto" &&
+    options?.advanceRegisteredBy
+  ) {
+    newData.adelanto_tu_punto_registrado_por = options.advanceRegisteredBy;
+  }
+  if (
+    String(newData?.estado_pedido || "") === "Cancelado" &&
+    String((shipping as any)?.esta_pagado || "") === "adelanto_tu_punto"
+  ) {
+    newData.adelanto_cliente = 0;
+    newData.adelanto_tu_punto_efectivo = 0;
+    newData.adelanto_tu_punto_qr = 0;
+    newData.esta_pagado = "no";
+  }
   await normalizeShippingBranches(newData, shipping);
   const simplePackageDestination = isSimplePackageOrder
     ? simplePackageDestinationEditRequested
@@ -1525,7 +1565,7 @@ const updateShipping = async (
   }
 
   let latePickupFee = 0;
-  if (willBeDelivered && !wasDelivered && isSimplePackageOrder) {
+  if (willBeDelivered && !wasDelivered && isSimplePackageOrder && (shipping as any)?.pricing_version !== "package-pricing-v2") {
     latePickupFee = await resolveLatePickupFeeForShippingDelivery(
       nextShippingState,
       newData.hora_entrega_real || new Date()
@@ -1615,6 +1655,12 @@ const updateShipping = async (
 
   const resShip = await ShippingRepository.updateShipping(newData, shippingId);
   if (resShip) {
+    const removedAdvance =
+      String((shipping as any)?.esta_pagado || "") === "adelanto_tu_punto" &&
+      String((resShip as any)?.esta_pagado || "") !== "adelanto_tu_punto";
+    await AdelantoTuPuntoService.syncForShipping(resShip, removedAdvance
+      ? { reverted: true, reason: String(newData?.estado_pedido || "") === "Cancelado" ? "Pedido cancelado" : "Adelanto retirado del pedido" }
+      : undefined);
     if (
       (shipping as any)?.origen_pedido === "catalogo" &&
       fromStatus !== "Entregado" &&
@@ -1704,7 +1750,9 @@ const updateShipping = async (
           }
         : {}),
     };
-    const lateFee = roundCurrency(Number((resShip as any).late_pickup_fee || 0));
+    const lateFee = (resShip as any)?.pricing_version === "package-pricing-v2"
+      ? 0
+      : roundCurrency(Number((resShip as any).late_pickup_fee || 0));
     const simplePackageFinancialPatch =
       lateFee > 0
         ? {
@@ -2060,6 +2108,28 @@ const getDailySalesHistory = async (
     return Array.from(new Set(items)).join(" | ");
   };
 
+  // Un Adelanto a Tu Punto es un cobro en sí mismo: se lista por su fecha de
+  // recepción, no por la fecha en que se entrega el pedido.
+  const advanceDateFilter: any = {
+    sucursal: sucursalId,
+    estado: "activo",
+  };
+  if (fromLastClose) {
+    advanceDateFilter.created_at = { $gt: periodStart, $lte: periodEnd };
+  } else if (date) {
+    advanceDateFilter.created_at = { $gte: startOfDay, $lte: periodEnd };
+  }
+  const independentAdvances = await AdelantoTuPuntoModel.find(advanceDateFilter)
+    .populate("pedido", "cliente telefono_cliente numero_guia")
+    .sort({ created_at: -1 })
+    .lean();
+  // Esta lista no se restringe por fecha: evita volver a contar el adelanto
+  // dentro de la fila de entrega cuando ambos cobros ocurren en días distintos.
+  const allActiveAdvanceOrders = await AdelantoTuPuntoModel.find({ sucursal: sucursalId, estado: "activo" })
+    .select("pedido")
+    .lean();
+  const independentAdvanceOrderIds = new Set(allActiveAdvanceOrders.map((advance: any) => String(advance.pedido || "")));
+
   const resumenPedidos = pedidosFiltrados.map(p => {
     const ventasNormales = (Array.isArray(p.venta) ? p.venta : []).filter((v: any) =>
       v && typeof v === 'object' &&
@@ -2107,18 +2177,56 @@ const getDailySalesHistory = async (
       p?.subtotal_correctivo
     );
 
+    const hasIndependentAdvance = independentAdvanceOrderIds.has(String(p._id));
+    const legacyAdvanceCash = hasIndependentAdvance ? 0 : Number(p.adelanto_tu_punto_efectivo || 0);
+    const legacyAdvanceQr = hasIndependentAdvance ? 0 : Number(p.adelanto_tu_punto_qr || 0);
+    const advanceAmount = hasIndependentAdvance ? Number(p.adelanto_cliente || 0) : 0;
+    const amountCollectedOnDelivery = hasIndependentAdvance
+      ? Math.max(0, Number((montoTotal - advanceAmount).toFixed(2)))
+      : montoTotal;
+    const paymentMethod = String(p.tipo_de_pago || "").trim() || "Sin método";
+
     return {
       _id: p._id,
       fecha: getHistoryDate(p),
       hora: dayjs(getHistoryDate(p)).format("HH:mm"),
-      tipo_de_pago: p.tipo_de_pago,
-      monto_total: montoTotal,
-      subtotal_efectivo: p.subtotal_efectivo || 0,
-      subtotal_qr: p.subtotal_qr || 0,
+      tipo_de_pago: hasIndependentAdvance ? `Saldo de pedido · ${paymentMethod}` : p.tipo_de_pago,
+      monto_total: amountCollectedOnDelivery,
+      monto_pedido_original: hasIndependentAdvance ? montoTotal : undefined,
+      subtotal_efectivo: Number(p.subtotal_efectivo || 0) + legacyAdvanceCash,
+      subtotal_qr: Number(p.subtotal_qr || 0) + legacyAdvanceQr,
       subtotal_correctivo: p.subtotal_correctivo || 0,
+      adelanto_tu_punto_efectivo: p.adelanto_tu_punto_efectivo || 0,
+      adelanto_tu_punto_qr: p.adelanto_tu_punto_qr || 0,
       esta_pagado: p.esta_pagado,
       productos_busqueda: productosBusqueda,
       busqueda_global: busquedaGlobal,
+    };
+  });
+
+  const resumenAdelantosTuPunto = independentAdvances.map((advance: any) => {
+    const recordedAt = advance.created_at || advance.updated_at || new Date();
+    const order = advance.pedido || {};
+    const amount = Number(advance.monto || 0);
+    const cash = Number(advance.efectivo || 0);
+    const qr = Number(advance.qr || 0);
+    const productosBusqueda = "Adelanto a Tu Punto";
+    return {
+      _id: `${advance._id}-tu-punto-advance`,
+      pedido_id: order?._id || advance.pedido,
+      payment_kind: "tu_punto_advance",
+      fecha: recordedAt,
+      hora: dayjs(recordedAt).format("HH:mm"),
+      tipo_de_pago: "Adelanto a Tu Punto",
+      monto_total: amount,
+      subtotal_efectivo: cash,
+      subtotal_qr: qr,
+      subtotal_correctivo: 0,
+      adelanto_tu_punto_efectivo: cash,
+      adelanto_tu_punto_qr: qr,
+      esta_pagado: "adelanto_tu_punto",
+      productos_busqueda: productosBusqueda,
+      busqueda_global: buildHistorySearchText("Adelanto a Tu Punto", order?.cliente, order?.telefono_cliente, order?.numero_guia, amount),
     };
   });
 
@@ -2279,24 +2387,28 @@ const getDailySalesHistory = async (
     };
   });
 
-  const resumen = [...resumenPedidos, ...resumenExternas, ...resumenPagosVendedorSimples].sort(
+  const resumen = [...resumenPedidos, ...resumenAdelantosTuPunto, ...resumenExternas, ...resumenPagosVendedorSimples].sort(
     (a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
   );
 
-  const totales = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number }, curr: any) => {
+  const totales = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number; adelantoTuPuntoEfectivo: number; adelantoTuPuntoQr: number }, curr: any) => {
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
     acc.correctivo += Number(curr.subtotal_correctivo || 0);
+    acc.adelantoTuPuntoEfectivo += Number(curr.adelanto_tu_punto_efectivo || 0);
+    acc.adelantoTuPuntoQr += Number(curr.adelanto_tu_punto_qr || 0);
     return acc;
-  }, { efectivo: 0, qr: 0, correctivo: 0 });
+  }, { efectivo: 0, qr: 0, correctivo: 0, adelantoTuPuntoEfectivo: 0, adelantoTuPuntoQr: 0 });
 
-  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number }, curr: any) => {
+  const totalesCierre = resumen.reduce((acc: { efectivo: number; qr: number; correctivo: number; adelantoTuPuntoEfectivo: number; adelantoTuPuntoQr: number }, curr: any) => {
     if (curr.exclude_from_box_close) return acc;
     acc.efectivo += curr.subtotal_efectivo;
     acc.qr += curr.subtotal_qr;
     acc.correctivo += Number(curr.subtotal_correctivo || 0);
+    acc.adelantoTuPuntoEfectivo += Number(curr.adelanto_tu_punto_efectivo || 0);
+    acc.adelantoTuPuntoQr += Number(curr.adelanto_tu_punto_qr || 0);
     return acc;
-  }, { efectivo: 0, qr: 0, correctivo: 0 });
+  }, { efectivo: 0, qr: 0, correctivo: 0, adelantoTuPuntoEfectivo: 0, adelantoTuPuntoQr: 0 });
 
   return { resumen, totales, totales_cierre: totalesCierre };
 };

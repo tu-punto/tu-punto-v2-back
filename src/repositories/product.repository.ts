@@ -125,6 +125,7 @@ const updatePriceInSucursal = async (
   };
 
   let updatedBranches = 0;
+  let matchedBranches = 0;
 
   for (const sucursal of producto.sucursales || []) {
     const combinacion = sucursal.combinaciones.find((item) => {
@@ -144,12 +145,21 @@ const updatePriceInSucursal = async (
     });
 
     if (!combinacion) continue;
+    matchedBranches += 1;
 
-    combinacion.precio = params.precio;
-    updatedBranches += 1;
+    const nextPrice = Number(params.precio);
+    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+      throw new Error("Precio invalido");
+    }
+    if (Number(combinacion.precio) !== nextPrice) {
+      combinacion.previousPrice = Number(combinacion.precio);
+      combinacion.priceChangedAt = new Date();
+      combinacion.precio = nextPrice;
+      updatedBranches += 1;
+    }
   }
 
-  if (!updatedBranches) {
+  if (!matchedBranches) {
     throw new Error("No se encontró la variante para actualizar el precio");
   }
 
@@ -461,6 +471,8 @@ const buildFlatProductPipeline = (params?: FlatInventoryParams): any[] => {
         variante: variantLabelExpression,
         variantes_obj: { $ifNull: ["$sucursales.combinaciones.variantes", {}] },
         precio: "$sucursales.combinaciones.precio",
+        previousPrice: "$sucursales.combinaciones.previousPrice",
+        priceChangedAt: "$sucursales.combinaciones.priceChangedAt",
         stock: { $ifNull: ["$sucursales.combinaciones.stock", 0] },
         stockEnReserva: {
           $sum: {

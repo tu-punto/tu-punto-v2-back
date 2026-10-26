@@ -146,7 +146,7 @@ const PedidoSchema = new Schema({
   },
   esta_pagado: {
     type: String,
-    enum: ['si', 'no', 'adelanto'],
+    enum: ['si', 'no', 'adelanto', 'adelanto_tu_punto'],
     default: 'no'
   },
   pagado_al_vendedor: {
@@ -164,6 +164,25 @@ const PedidoSchema = new Schema({
   subtotal_correctivo: {
     type: Number,
     default: 0
+  },
+  adelanto_tu_punto_efectivo: {
+    type: Number,
+    default: 0
+  },
+  adelanto_tu_punto_qr: {
+    type: Number,
+    default: 0
+  },
+  adelanto_tu_punto_registrado_por: {
+    type: Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  granjero_registrador: {
+    type: Types.ObjectId,
+    ref: 'User',
+    required: false,
+    index: true,
   },
   trabajador: {
     type: Types.ObjectId,
@@ -240,6 +259,11 @@ const PedidoSchema = new Schema({
     type: Boolean,
     default: false,
   },
+    pricing_version: {
+      type: String,
+      required: false,
+      default: undefined,
+    },
   simple_package_source_id: {
     type: Schema.Types.ObjectId,
     ref: 'VentaExterna',

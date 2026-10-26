@@ -39,6 +39,7 @@ export const upsertPackageEscalationConfig = async (req: Request, res: Response)
       deliverySpaces: Array.isArray(req.body?.deliverySpaces || req.body?.delivery_spaces)
         ? req.body.deliverySpaces || req.body.delivery_spaces
         : undefined,
+      externalPricing: req.body?.externalPricing || req.body?.external_pricing,
     });
 
     return res.json({ success: true, data });

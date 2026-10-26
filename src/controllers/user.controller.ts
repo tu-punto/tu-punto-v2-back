@@ -10,7 +10,9 @@ import { getJwtSecret } from "../config/secrets";
 import { VendedorModel } from "../entities/implements/VendedorSchema"; 
 import { TrabajadorModel } from "../entities/implements/TrabajadorSchema";
 import { UserModel } from "../entities/implements/UserSchema";
+import { VentaModel } from "../entities/implements/VentaSchema";
 import { Types } from "mongoose";
+import { PagoGranjeroModel } from "../entities/implements/PagoGranjeroSchema";
 import {
   ASSIGNABLE_USER_ROLES,
   getPublicUserRole,
@@ -60,6 +62,9 @@ const clearAuthCookie = (res: Response) =>
   });
 
 type SellerProductInfoAccessShape = {
+  is_external?: boolean;
+  can_access_seller_dashboard?: boolean;
+  can_access_personal_inventory?: boolean;
   pago_sucursales?: {
     alquiler?: number;
     exhibicion?: number;
@@ -91,7 +96,7 @@ const serializeUserForClient = (user: any) => {
 };
 
 const resolveUserBranchForRole = (role: string, branchValue: unknown) => {
-  if (role !== "operator") return null;
+  if (role !== "operator" && role !== "farmer") return null;
 
   const branchId =
     typeof branchValue === "object" && branchValue
@@ -99,7 +104,7 @@ const resolveUserBranchForRole = (role: string, branchValue: unknown) => {
       : String(branchValue || "");
 
   if (!Types.ObjectId.isValid(branchId)) {
-    throw new Error("Debe asignar una sucursal valida al operador");
+    throw new Error(`Debe asignar una sucursal valida al ${role === "farmer" ? "granjero" : "operador"}`);
   }
 
   return new Types.ObjectId(branchId);
@@ -113,6 +118,17 @@ const resolveIdString = (value: unknown): string => {
     return String((value as any)._id || (value as any).$oid || value || "");
   }
   return String(value);
+};
+
+const validateAuthorizedSellerIds = async (sellerIds: unknown) => {
+  const ids = Array.isArray(sellerIds) ? sellerIds.map(String) : [];
+  if (!ids.length) return [];
+  const uniqueIds = [...new Set(ids)];
+  const count = await VendedorModel.countDocuments({ _id: { $in: uniqueIds } });
+  if (count !== uniqueIds.length) {
+    throw new Error("Uno o más vendedores autorizados no existen");
+  }
+  return uniqueIds.map((id) => new Types.ObjectId(id));
 };
 
 const normalizeTimeString = (value: unknown): string => String(value || "").trim();
@@ -193,6 +209,8 @@ export const registerUserController = async (req: Request, res: Response) => {
       role: normalizedRole,
       password: encryptPassword,
       sucursal: resolveUserBranchForRole(normalizedRole, user.sucursal ?? user.sucursalId),
+      vendedores_autorizados:
+        normalizedRole === "farmer" ? await validateAuthorizedSellerIds(user.vendedores_autorizados) : [],
       system_access_hours: normalizedRole === "operator" ? normalizeAccessHours(user.system_access_hours) : undefined,
       must_change_password: true,
     });
@@ -255,25 +273,25 @@ export const loginUserController = async (req: Request, res: Response) => {
 
     const actualRole = normalizeUserRole(user.role);
 
-    if (actualRole === "operator") {
+    if (actualRole === "operator" || actualRole === "farmer") {
       const assignedBranchId = resolveIdString(user.sucursal);
       const selectedBranchId = String(sucursalId || "").trim();
 
       if (!Types.ObjectId.isValid(assignedBranchId)) {
         return res.status(403).json({
           success: false,
-          msg: "El operador no tiene una sucursal asignada",
+          msg: `El ${actualRole === "farmer" ? "granjero" : "operador"} no tiene una sucursal asignada`,
         });
       }
 
       if (!Types.ObjectId.isValid(selectedBranchId) || assignedBranchId !== selectedBranchId) {
         return res.status(403).json({
           success: false,
-          msg: "El operador solo puede ingresar a su sucursal asignada",
+          msg: `El ${actualRole === "farmer" ? "granjero" : "operador"} solo puede ingresar a su sucursal asignada`,
         });
       }
 
-      if (!canOperatorLogin(user.system_access_hours as AccessHours | undefined)) {
+      if (actualRole === "operator" && !canOperatorLogin(user.system_access_hours as AccessHours | undefined)) {
         return res.status(403).json({
           success: false,
           msg: "El acceso al sistema no esta habilitado en este horario",
@@ -519,6 +537,9 @@ export const getUserInfoController = async (req: Request, res: Response) => {
           : [],
       });
       userObj.seller_can_access_inventory = userObj.seller_has_commission_service === true;
+      userObj.seller_is_external = sellerAccessData?.is_external === true;
+      userObj.seller_can_access_dashboard = sellerAccessData?.can_access_seller_dashboard === true;
+      userObj.seller_can_access_personal_inventory = sellerAccessData?.can_access_personal_inventory === true;
       userObj.seller_amortizacion = sellerAccessData?.amortizacion ?? null;
       userObj.seller_precio_paquete = sellerAccessData?.precio_paquete ?? null;
     }
@@ -542,6 +563,67 @@ export const logoutUserController = async (req: Request, res: Response) => {
       .json({ msg: "Log out successfull" });
   } catch (error) {
     res.status(500).json({ msg: "Error logging out user" });
+  }
+};
+
+export const getFarmerSummaryController = async (req: Request, res: Response) => {
+  try {
+    const farmerId = String(req.params.id || "");
+    const auth = res.locals.auth as { id?: string; role?: string } | undefined;
+    const role = normalizeUserRole(auth?.role);
+    if (role === "farmer" && String(auth?.id || "") !== farmerId) return res.status(403).json({ success: false, msg: "No autorizado" });
+    const farmer = await UserModel.findById(farmerId).select("email role sucursal").populate("sucursal", "nombre").lean();
+    if (!farmer || farmer.role !== "farmer") return res.status(404).json({ success: false, msg: "Granjero no encontrado" });
+    const rows = await VentaModel.aggregate([
+      { $lookup: { from: "Pedido", localField: "pedido", foreignField: "_id", as: "pedido_data" } },
+      { $unwind: "$pedido_data" },
+      { $match: { "pedido_data.granjero_registrador": new Types.ObjectId(farmerId) } },
+      { $project: { pedido: 1, producto: 1, cantidad: 1, precio_unitario: 1, descuento_granjero: 1, monto_para_tu_punto_granjero: 1, saldo_granjero: 1, pagado_a_granjero: 1, pago_granjero: 1, fecha_pedido: "$pedido_data.fecha_pedido", estado_pedido: "$pedido_data.estado_pedido" } },
+      { $sort: { fecha_pedido: -1 } },
+    ]);
+    const saldo_pendiente = rows
+      .filter((row) => String(row.estado_pedido || "").toLowerCase() === "entregado" && !row.pagado_a_granjero)
+      .reduce((total, row) => total + Number(row.saldo_granjero || 0), 0);
+    const pagos = await PagoGranjeroModel.find({ granjero: farmerId }).sort({ pagado_en: -1 }).lean();
+    return res.json({ success: true, data: { farmer, saldo_pendiente, pago_pendiente: saldo_pendiente, entregas: rows, pagos } });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, msg: "No se pudo obtener el resumen del granjero" });
+  }
+};
+
+export const settleFarmerBalanceController = async (req: Request, res: Response) => {
+  try {
+    const farmerId = String(req.params.id || "");
+    if (!Types.ObjectId.isValid(farmerId)) return res.status(400).json({ success: false, msg: "Granjero inválido" });
+    const farmer = await UserModel.findById(farmerId).select("role").lean();
+    if (!farmer || farmer.role !== "farmer") return res.status(404).json({ success: false, msg: "Granjero no encontrado" });
+    const sales = await VentaModel.aggregate([
+      { $lookup: { from: "Pedido", localField: "pedido", foreignField: "_id", as: "pedido_data" } },
+      { $unwind: "$pedido_data" },
+      {
+        $match: {
+          "pedido_data.granjero_registrador": new Types.ObjectId(farmerId),
+          "pedido_data.estado_pedido": "Entregado",
+          pagado_a_granjero: { $ne: true },
+        },
+      },
+      { $project: { _id: 1, saldo_granjero: 1 } },
+    ]);
+    const amount = sales.reduce((total, sale) => total + Number(sale.saldo_granjero || 0), 0);
+    if (sales.length === 0 || amount <= 0) return res.status(400).json({ success: false, msg: "No hay saldo pendiente para liquidar" });
+    const payment = await PagoGranjeroModel.create({
+      granjero: farmerId,
+      ventas: sales.map((sale) => sale._id),
+      monto: amount,
+      registrado_por: res.locals.auth?.id,
+      observacion: String(req.body?.observacion || "").trim(),
+    });
+    await VentaModel.updateMany({ _id: { $in: sales.map((sale) => sale._id) } }, { $set: { pagado_a_granjero: true, pago_granjero: payment._id } });
+    return res.json({ success: true, data: payment, msg: "Pago del granjero registrado" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, msg: "No se pudo liquidar el saldo del granjero" });
   }
 };
 
@@ -583,7 +665,7 @@ export const getAdminsController = async (req: Request, res: Response) => {
 export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, role, password, sucursal, sucursalId, system_access_hours } = req.body;
+    const { email, role, password, sucursal, sucursalId, system_access_hours, vendedores_autorizados } = req.body;
     const authRole = normalizeUserRole(res.locals.auth?.role);
     const existingUser = await UserService.getUserByIdService(id);
 
@@ -613,6 +695,8 @@ export const updateUserController = async (req: Request, res: Response) => {
       email,
       role: existingRole === "superadmin" ? "superadmin" : normalizedRole,
       sucursal: resolveUserBranchForRole(normalizedRole, sucursal ?? sucursalId),
+      vendedores_autorizados:
+        normalizedRole === "farmer" ? await validateAuthorizedSellerIds(vendedores_autorizados) : [],
     };
 
     if (normalizedRole === "operator") {

@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import {
   IPackageDeliverySpace,
+  IExternalPackagePricing,
   IPackageEscalationRange,
   PackageEscalationServiceOrigin,
 } from "../entities/IPackageEscalationConfig";
@@ -36,6 +37,26 @@ const normalizeServiceOrigin = (value: unknown): PackageEscalationServiceOrigin 
 };
 
 const roundCurrency = (value: number) => +Number(value || 0).toFixed(2);
+
+const DEFAULT_EXTERNAL_PRICING: IExternalPackagePricing = {
+  small_price: 3,
+  large_price: 6,
+  weekly_fee: 3,
+  fee_cap: 15,
+};
+
+const normalizeExternalPricing = (value: any): IExternalPackagePricing => ({
+  small_price: roundCurrency(Math.max(0, Number(value?.small_price ?? DEFAULT_EXTERNAL_PRICING.small_price))),
+  large_price: roundCurrency(Math.max(0, Number(value?.large_price ?? DEFAULT_EXTERNAL_PRICING.large_price))),
+  weekly_fee: roundCurrency(Math.max(0, Number(value?.weekly_fee ?? DEFAULT_EXTERNAL_PRICING.weekly_fee))),
+  fee_cap: roundCurrency(Math.max(0, Number(value?.fee_cap ?? DEFAULT_EXTERNAL_PRICING.fee_cap))),
+});
+
+const validateExternalPricing = (pricing: IExternalPackagePricing) => {
+  if (pricing.fee_cap < Math.max(pricing.small_price, pricing.large_price)) {
+    throw new Error("El tope de multa debe ser mayor o igual al precio base mas alto");
+  }
+};
 
 const normalizeRanges = (
   ranges: any[],
@@ -180,6 +201,7 @@ const getConfigForRoute = async (routeId: string) => {
   return {
     routeId,
     external: normalizeRanges((byOrigin.get("external") as any)?.ranges || [], "external"),
+    external_pricing: normalizeExternalPricing((byOrigin.get("external") as any)?.external_pricing),
     simple_package: globalSimple
       ? mergeGlobalBoundsWithRoutePrices(
           (globalSimple as any)?.ranges,
@@ -198,11 +220,14 @@ const upsertConfig = async (params: {
   serviceOrigin: unknown;
   ranges: any[];
   deliverySpaces?: any[];
+  externalPricing?: any;
 }) => {
   const routeId = String(params.routeId || "").trim();
   const serviceOrigin = normalizeServiceOrigin(params.serviceOrigin);
   const ranges = normalizeRanges(params.ranges, serviceOrigin);
   validateRanges(ranges);
+  const externalPricing = serviceOrigin === "external" ? normalizeExternalPricing(params.externalPricing) : undefined;
+  if (externalPricing) validateExternalPricing(externalPricing);
   if (serviceOrigin === "simple_package") {
     await PackageEscalationConfigRepository.upsertGlobalByOrigin({
       serviceOrigin,
@@ -235,8 +260,14 @@ const upsertConfig = async (params: {
     routeId,
     serviceOrigin,
     ranges,
+    externalPricing,
     deliverySpaces: serviceOrigin === "delivery" ? normalizeDeliverySpaces(params.deliverySpaces) : undefined,
   });
+};
+
+const getExternalPricing = async (routeId?: string) => {
+  const config = routeId ? await PackageEscalationConfigRepository.findByRouteAndOrigin(routeId, "external") : null;
+  return normalizeExternalPricing((config as any)?.external_pricing);
 };
 
 const getExternalUnitPrice = async (params: {
@@ -368,6 +399,8 @@ export const PackageEscalationConfigService = {
   getConfigForRoute,
   upsertConfig,
   getExternalUnitPrice,
+  getExternalPricing,
+  DEFAULT_EXTERNAL_PRICING,
   getSimpleUnitPrice,
   getSimpleUnitPriceForPosition,
   getSimpleUnitPriceForSizeChange,

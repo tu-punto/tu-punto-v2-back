@@ -3,6 +3,9 @@ import { ShippingService } from "../services/shipping.service";
 import { CatalogOrderIntegrationService } from "../services/catalogOrderIntegration.service";
 import { ActionTraceService } from "../services/actionTrace.service";
 import { getActionTraceActorFromResponse } from "../helpers/actionTrace";
+import { UserModel } from "../entities/implements/UserSchema";
+import { PedidoModel } from "../entities/implements/PedidoSchema";
+import { FarmerDiscountRuleModel } from "../entities/implements/FarmerDiscountRuleSchema";
 
 const traceAction = (
   res: Response,
@@ -183,6 +186,14 @@ export const getShippingByIds = async (req: Request, res: Response) => {
 export const registerShipping = async (req: Request, res: Response) => {
   const shipping = req.body;
   try {
+    shipping.adelanto_tu_punto_registrado_por = res.locals.auth?.id;
+    if (String(res.locals.auth?.role || "").toLowerCase() === "farmer") {
+      if (shipping?.esta_pagado && shipping.esta_pagado !== "adelanto_tu_punto") {
+        return res.status(403).json({ error: "El granjero solo puede registrar Adelanto a Tu Punto" });
+      }
+      shipping.esta_pagado = "adelanto_tu_punto";
+      shipping.granjero_registrador = res.locals.auth?.id;
+    }
     const newShipping = await ShippingService.registerShipping(shipping);
     traceAction(res, {
       actionType: "shipping.create",
@@ -213,6 +224,31 @@ export const registerSaleToShipping = async (req: Request, res: Response) => {
 
   try {
     const auth = res.locals.auth as { id?: string; role?: string; email?: string; sellerId?: string } | undefined;
+    if (String(auth?.role || "").toLowerCase() === "farmer") {
+      const [farmer, shipping] = await Promise.all([
+        UserModel.findById(auth?.id).select("vendedores_autorizados sucursal").lean(),
+        PedidoModel.findById(shippingId).select("granjero_registrador sucursal").lean(),
+      ]);
+      if (!farmer || !shipping || String((shipping as any).granjero_registrador || "") !== String(auth?.id || "")) {
+        return res.status(403).json({ success: false, msg: "No autorizado para este pedido" });
+      }
+      const allowedSellers = new Set(((farmer as any).vendedores_autorizados || []).map(String));
+      if (!Array.isArray(sales) || sales.some((sale: any) => !allowedSellers.has(String(sale?.id_vendedor || sale?.vendedor || "")))) {
+        return res.status(403).json({ success: false, msg: "El granjero solo puede registrar productos de sus vendedores autorizados" });
+      }
+      for (const sale of sales) {
+        const price = Number(sale?.precio_unitario || 0);
+        const quantity = Number(sale?.cantidad || 0);
+        const rule = await FarmerDiscountRuleModel.findOne({ limite_inferior: { $lte: price }, limite_superior: { $gte: price } }).lean();
+        if (!rule) return res.status(400).json({ success: false, msg: `No existe regla de granjero para el precio Bs. ${price}` });
+        const discounted = Number((rule as any).monto_descontado || 0) * quantity;
+        const companyAmount = Number((rule as any).monto_para_tu_punto || 0) * quantity;
+        sale.utilidad = Number(sale.utilidad || 0) + discounted;
+        sale.descuento_granjero = discounted;
+        sale.monto_para_tu_punto_granjero = companyAmount;
+        sale.saldo_granjero = discounted - companyAmount;
+      }
+    }
     const result = await ShippingService.processSalesForShipping(shippingId, sales, {
       auditActor: {
         userId: String(auth?.id || "").trim() || undefined,
@@ -275,6 +311,7 @@ const updateShipping = async (req: Request, res: Response) => {
       source: "manual",
       changedBy: auth?.id ? `${String(auth.role || "user")}:${String(auth.id)}` : undefined,
       actorRole: role,
+      advanceRegisteredBy: auth?.id,
     });
     traceAction(res, {
       actionType: "shipping.update",

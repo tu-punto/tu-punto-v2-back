@@ -29,6 +29,9 @@ export const VendedorSchema = new Schema({
     type: String,
     required: true
   },
+  is_external: { type: Boolean, default: false },
+  can_access_seller_dashboard: { type: Boolean, default: false },
+  can_access_personal_inventory: { type: Boolean, default: false },
 
   saldo_pendiente: {
     type: Number,

@@ -42,6 +42,18 @@ const resolveSellerIdByAuthUser = async (userId: string): Promise<string | null>
   return null;
 };
 
+const canAuthenticatedFarmerUseSeller = async (res: Response, sellerId: unknown): Promise<boolean> => {
+  const auth = res.locals.auth as { id?: string; role?: string } | undefined;
+  if (String(auth?.role || "").toLowerCase() !== "farmer") return true;
+  if (!auth?.id) return false;
+
+  const farmer = await UserModel.findById(auth.id).select("vendedores_autorizados").lean();
+  const authorizedSellerIds = Array.isArray((farmer as any)?.vendedores_autorizados)
+    ? (farmer as any).vendedores_autorizados.map((id: any) => String(id))
+    : [];
+  return authorizedSellerIds.includes(String(sellerId || ""));
+};
+
 const canAuthenticatedSellerAccessProductInfo = async (sellerId: string): Promise<boolean> => {
   const seller = await VendedorModel.findById(sellerId)
     .select("pago_sucursales comision_porcentual comision_fija fecha_vigencia")
@@ -388,6 +400,10 @@ export const resolveVariantQRPayload = async (req: Request, res: Response) => {
       });
     }
 
+    if (!await canAuthenticatedFarmerUseSeller(res, (item as any)?.id_vendedor || (item as any)?.sellerId)) {
+      return res.status(403).json({ success: false, message: "El granjero solo puede usar QR de sus vendedores autorizados" });
+    }
+
     res.json({
       success: true,
       item
@@ -556,6 +572,17 @@ export const resolveVariantQRGroupPayload = async (req: Request, res: Response) 
         success: false,
         message: "No se pudo resolver el QR de grupo"
       });
+    }
+
+    const groupSellerIds = Array.from(new Set([
+      (group as any)?.sellerId,
+      ...((group as any)?.items || []).map((item: any) => item?.sellerId || item?.id_vendedor),
+    ].filter(Boolean)));
+    const hasUnauthorizedSeller = (await Promise.all(
+      groupSellerIds.map((sellerId) => canAuthenticatedFarmerUseSeller(res, sellerId))
+    )).some((allowed) => !allowed);
+    if (hasUnauthorizedSeller) {
+      return res.status(403).json({ success: false, message: "El granjero solo puede usar QR de sus vendedores autorizados" });
     }
 
     res.json({

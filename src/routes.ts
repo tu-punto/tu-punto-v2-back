@@ -37,14 +37,17 @@ import userTourProgressRouter from "./routes/userTourProgress.routes";
 import actionTraceRouter from "./routes/actionTrace.routes";
 import qrInventoryRouter from "./routes/qrInventory.routes";
 import dynamicQRRouter from "./routes/dynamicQR.routes";
+import personalInventoryRouter from "./routes/personalInventory.routes";
+import farmerDiscountRuleRouter from "./routes/farmerDiscountRule.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
-import { requireAuth, requireRole } from "./middlewares/auth.middleware";
+import { requireAuth, requireRole, requireSellerFeature } from "./middlewares/auth.middleware";
 import { rateLimiters } from "./middlewares/rateLimit.middleware";
 import { getDailyServiceIncome } from "./controllers/financeFlux.controller";
 import { exportPagadoAlDuenoLegacyXlsx } from "./controllers/reports.controller";
 import { getRenewalMonthlyPaymentSummary } from "./controllers/seller.controller";
+import { listFarmerBonusRules } from "./controllers/farmerDiscountRule.controller";
 
 const router = Router();
 
@@ -60,8 +63,9 @@ router.use("/product", productRouter);
 router.use("/feature", requireAuth, requireRole("admin", "operator", "seller"), featureRouter);
 router.use("/category", requireAuth, requireRole("admin", "operator", "seller"), categoryRouter);
 router.use("/sale", requireAuth, requireRole("admin", "operator", "seller"), saleRouter);
+router.use("/personal-inventory", requireAuth, requireRole("seller"), requireSellerFeature("can_access_personal_inventory"), personalInventoryRouter);
 router.use("/group", requireAuth, requireRole("admin", "operator", "seller"), groupRouter);
-router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller"), shippingRouter);
+router.use("/shipping", requireAuth, requireRole("admin", "operator", "seller", "farmer"), shippingRouter);
 router.use("/sucursal", sucursalRouter);
 router.get(
   "/financeFlux/daily-service-income",
@@ -71,6 +75,8 @@ router.get(
 );
 router.use("/financeFlux", requireAuth, requireRole("admin"), financeFluxRouter);
 router.use("/financeFlux/category", requireAuth, requireRole("admin"), financeFluxCategoryRouter);
+router.get("/farmer-discount-rules/bonus", requireAuth, requireRole("farmer"), listFarmerBonusRules);
+router.use("/farmer-discount-rules", requireAuth, requireRole("admin"), farmerDiscountRuleRouter);
 router.use("/recurringExpense", requireAuth, requireRole("admin"), recurringExpenseRouter);
 router.use("/worker", requireAuth, requireRole("admin"), workerRouter);
 router.use("/pdf", requireAuth, requireRole("admin"), pdfRouter);

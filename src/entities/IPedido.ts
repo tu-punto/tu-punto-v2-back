@@ -42,8 +42,12 @@ export interface IPedido {
   motivo_rechazo?: string;
   mostrar_recogido_por_vendedor?: boolean;
   producto_cubierto_por_recojo_vendedor?: boolean;
-  esta_pagado: 'si' | 'no' | 'adelanto';
+  esta_pagado: 'si' | 'no' | 'adelanto' | 'adelanto_tu_punto';
   adelanto_cliente: number;
+  adelanto_tu_punto_efectivo?: number;
+  adelanto_tu_punto_qr?: number;
+  adelanto_tu_punto_registrado_por?: Types.ObjectId;
+  granjero_registrador?: Types.ObjectId;
   pagado_al_vendedor: boolean;
 
   subtotal_qr: number;
@@ -67,6 +71,7 @@ export interface IPedido {
   numero_guia?: string;
   guia_sequence?: number;
   simple_package_order?: boolean;
+  pricing_version?: "package-pricing-v2";
   simple_package_source_id?: Types.ObjectId;
 
   venta: Types.ObjectId[];

@@ -19,25 +19,25 @@ const serviceAnnouncementRouter = Router();
 serviceAnnouncementRouter.get(
   "/mine",
   requireAuth,
-  requireRole("admin", "operator", "seller"),
+  requireRole("admin", "operator", "seller", "farmer"),
   listMyServiceAnnouncementsController
 );
 serviceAnnouncementRouter.get(
   "/pending",
   requireAuth,
-  requireRole("admin", "operator", "seller"),
+  requireRole("admin", "operator", "seller", "farmer"),
   getPendingServiceAnnouncementController
 );
 serviceAnnouncementRouter.post(
   "/:id/acknowledge",
   requireAuth,
-  requireRole("admin", "operator", "seller"),
+  requireRole("admin", "operator", "seller", "farmer"),
   acknowledgeServiceAnnouncementController
 );
 serviceAnnouncementRouter.post(
   "/:id/accept",
   requireAuth,
-  requireRole("admin", "operator", "seller"),
+  requireRole("admin", "operator", "seller", "farmer"),
   acceptServiceAnnouncementController
 );
 serviceAnnouncementRouter.get(

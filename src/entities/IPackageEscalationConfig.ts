@@ -14,12 +14,20 @@ export interface IPackageDeliverySpace {
   spaces: number;
 }
 
+export interface IExternalPackagePricing {
+  small_price: number;
+  large_price: number;
+  weekly_fee: number;
+  fee_cap: number;
+}
+
 export interface IPackageEscalationConfig {
   _id?: Types.ObjectId;
   route?: Types.ObjectId;
   sucursal?: Types.ObjectId;
   service_origin: PackageEscalationServiceOrigin;
   ranges: IPackageEscalationRange[];
+  external_pricing?: IExternalPackagePricing;
   delivery_spaces?: IPackageDeliverySpace[];
   updated_at?: Date;
 }

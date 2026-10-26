@@ -49,6 +49,17 @@ const VentaExternaSchema = new Schema({
         enum: ["external", "simple_package"],
         default: "external"
     },
+    pricing_version: {
+        type: String,
+        required: false,
+        default: undefined,
+    },
+    external_pricing_snapshot: {
+        small_price: { type: Number, required: false },
+        large_price: { type: Number, required: false },
+        weekly_fee: { type: Number, required: false },
+        fee_cap: { type: Number, required: false },
+    },
     package_size: {
         type: String,
         enum: ["estandar", "grande"],
@@ -315,6 +326,10 @@ const VentaExternaSchema = new Schema({
         required: false,
     },
     public_tracking_received_at: {
+        type: Date,
+        required: false,
+    },
+    pickup_fee_started_at: {
         type: Date,
         required: false,
     },

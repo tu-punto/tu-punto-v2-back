@@ -303,6 +303,7 @@ const buildSimplePackageShippingPayload = (row: any, orderCreatedAt?: unknown) =
     subtotal_qr: paymentData.subtotal_qr,
     subtotal_efectivo: paymentData.subtotal_efectivo,
     simple_package_order: true,
+    pricing_version: "package-pricing-v2",
     simple_package_source_id: row?._id,
     numero_guia: row?.numero_guia || undefined,
     guia_sequence: row?.guia_sequence || undefined,
@@ -344,7 +345,6 @@ const buildSimplePackageRecord = async (params: {
   originBranchId?: string;
   deliveryEscalationSpaces?: number;
   allowManualBranchPrice?: boolean;
-  allowManualPackagePrice?: boolean;
 }) => {
   const {
     row,
@@ -355,7 +355,6 @@ const buildSimplePackageRecord = async (params: {
     originBranchId,
     deliveryEscalationSpaces,
     allowManualBranchPrice,
-    allowManualPackagePrice,
   } = params;
   ensureBuyerIdentity(row);
   ensureDescription(row);
@@ -396,24 +395,10 @@ const buildSimplePackageRecord = async (params: {
           String(row?.precio_entre_sucursal).trim() !== ""
         ? roundCurrency(Math.max(0, toNumber(row?.precio_entre_sucursal, deliveryPricing.total)))
         : deliveryPricing.total;
-  const requestedPackagePrice =
-    allowManualPackagePrice &&
-    row?.precio_paquete !== undefined &&
-    row?.precio_paquete !== null &&
-    String(row?.precio_paquete).trim() !== ""
-      ? roundCurrency(Math.max(0, toNumber(row?.precio_paquete, 0)))
-      : null;
-  const precioPaquete = requestedPackagePrice ?? await PackageEscalationConfigService.getSimpleUnitPrice({
-    routeId: branchRoutePricing.routeId,
-    sellerId,
-    packageIndexInBatch: index,
-    packageSize,
-    fallbackSmallPrice: seller?.precio_paquete,
-    fallbackLargePrice:
-      seller?.precio_paquete === null || seller?.precio_paquete === undefined
-        ? seller?.precio_paquete
-        : Number(seller.precio_paquete) * 2,
-  });
+  if (seller?.precio_paquete === null || seller?.precio_paquete === undefined) {
+    throw new Error("El vendedor debe tener configurado un precio fijo de paquete");
+  }
+  const precioPaquete = roundCurrency(Math.max(0, Number(seller.precio_paquete)));
   const precioPaqueteUnitario = precioPaquete;
   const amortizacionVendedor = roundCurrency(toNumber(row?.amortizacion_vendedor ?? seller?.amortizacion ?? 0));
   if (amortizacionVendedor < 0) {
@@ -446,6 +431,7 @@ const buildSimplePackageRecord = async (params: {
     telefono_comprador: toTrimmed(row?.telefono_comprador) || undefined,
     fecha_pedido: normalizeDate(row?.fecha_pedido) as unknown as Date,
     service_origin: "simple_package" as const,
+    pricing_version: "package-pricing-v2" as const,
     package_size: packageSize,
     metodo_pago: paymentMethod,
     esta_pagado: "no",
@@ -501,7 +487,6 @@ const registerSimplePackages = async (params: {
         originBranchId,
         deliveryEscalationSpaces: totalDeliverySpaces,
         allowManualBranchPrice: role === "admin" || role === "operator" || role === "superadmin",
-        allowManualPackagePrice: role === "admin" || role === "operator" || role === "superadmin",
       })
     )
   );

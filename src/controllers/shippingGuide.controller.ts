@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { ShippingGuideService } from "../services/shippingGuide.service";
 import { IGuiaEnvio } from "../entities/IGuiaEnvio";
 import { uploadFileToS3 } from "../helpers/S3Client";
+import { imageMimeTypes } from "../config/multerConfig";
 
 export const getAllShippings = async (req: Request, res: Response) => {
     try {
@@ -55,6 +56,15 @@ export const uploadShipping = async (req: Request, res: Response) => {
         if (!listFiles.length) {
             return res.status(400).json({ success: false, message: "La lista de productos es obligatoria" });
         }
+        if (req.body.enviado_por_flota && !guideImage) {
+            return res.status(400).json({ success: false, message: "La foto de la guia de envio es obligatoria" });
+        }
+        if (!req.body.enviado_por_flota && guideImage) {
+            return res.status(400).json({ success: false, message: "No debes adjuntar una guia si el envio no es por flota" });
+        }
+        if (guideImage && !imageMimeTypes.includes(guideImage.mimetype.toLowerCase() as (typeof imageMimeTypes)[number])) {
+            return res.status(400).json({ success: false, message: "La guia debe ser una imagen" });
+        }
         if (listFiles.length > 3) {
             return res.status(400).json({ success: false, message: "La lista de productos admite hasta 3 archivos" });
         }
@@ -67,6 +77,7 @@ export const uploadShipping = async (req: Request, res: Response) => {
             sucursal: new Types.ObjectId(sucursalId),
             descripcion: req.body.descripcion,
             observaciones: req.body.observaciones,
+            enviado_por_flota: req.body.enviado_por_flota,
             fecha_subida: new Date(),
             lista_productos_keys: [],
             isRegistrado: false,

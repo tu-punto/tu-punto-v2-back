@@ -17,6 +17,8 @@ const CombinacionSchema = new Schema({
     default: false
   },
   precio: { type: Number, required: true },
+  previousPrice: { type: Number, required: false },
+  priceChangedAt: { type: Date, required: false },
   stock: { type: Number, required: true },
   catalog_reservations: [
     {

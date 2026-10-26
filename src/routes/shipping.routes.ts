@@ -22,6 +22,12 @@ import {
 import { requireRole, requireSellerOwnership } from "../middlewares/auth.middleware";
 
 const shippingRouter = Router();
+shippingRouter.use((req, res, next) => {
+  if (String(res.locals.auth?.role || "").toLowerCase() !== "farmer") return next();
+  const allowed = req.method === "POST" && ["/register", "/register/sales"].includes(req.path);
+  if (!allowed) return res.status(403).json({ success: false, msg: "El granjero solo puede registrar entregas desde carrito" });
+  return next();
+});
 //rutas
 shippingRouter.get("/", getShipping);
 shippingRouter.get("/dashboard", getShippingDashboardList);
