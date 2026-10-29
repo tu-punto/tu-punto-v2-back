@@ -19,6 +19,7 @@ type SendAttempt = {
 };
 
 const DEFAULT_BUYER_PICKUP_TEMPLATE = "recojo_de_sucursal";
+const DEFAULT_EXTERNAL_PICKUP_TEMPLATE = "order_pedido";
 const DEFAULT_SELLER_TEMPLATE = "paquetes_entregados_sucursal";
 const GUIDE_WHATSAPP_MESSAGES_DISABLED = process.env.W_DISABLE_GUIDE_WHATSAPP_MESSAGES !== undefined;
 
@@ -129,6 +130,27 @@ const getBranchLocationButtonValue = (branchName: string) => {
   return toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_BUTTON_VALUE) || BRANCH_LOCATION_LINKS[0].buttonValue;
 };
 
+const getBranchLocationUrl = (branchName: string) => {
+  const normalized = normalizeName(branchName);
+  const matchedUrl = BRANCH_LOCATION_LINKS.find((entry) =>
+    entry.matches.some((match) => normalized.includes(normalizeName(match)))
+  )?.url;
+  return matchedUrl || toTrimmed(process.env.W_DEFAULT_BRANCH_LOCATION_URL) || BRANCH_LOCATION_LINKS[0].url;
+};
+
+const isExternalWithLatePickupFee = (row: any) =>
+  row?.is_external === true && Number.isFinite(Number(row?.external_pricing_snapshot?.weekly_fee));
+
+const formatAmount = (value: unknown) => {
+  const amount = Math.max(0, Number(value) || 0);
+  return String(Math.round(amount * 100) / 100);
+};
+
+const getBuyerPickupAmount = (row: any) =>
+  Number(row?.precio_paquete || 0) +
+  Number(row?.precio_entre_sucursal ?? row?.cargo_delivery ?? 0) -
+  Number(row?.monto_paga_vendedor ?? row?.amortizacion_vendedor ?? 0);
+
 const getBranchPickupSchedule = (branch: any) => {
   const legacyWeekdaysOpen = toTrimmed(branch?.delivery_cutoff_weekdays_registration_time);
   const legacyWeekdaysClose = toTrimmed(branch?.delivery_cutoff_weekdays_closing_time);
@@ -178,6 +200,7 @@ const buildBuyerBodyData = async (row: any) => {
 
   return {
     destinationName,
+    locationUrl: getBranchLocationUrl(destinationName),
     weekdaysHours: formatPickupHours(schedule.weekdaysOpen, schedule.weekdaysClose),
     saturdayHours: formatPickupHours(schedule.saturdayOpen, schedule.saturdayClose),
   };
@@ -192,7 +215,10 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
   const phone = normalizeWhatsAppPhone(row?.telefono_comprador);
   const guide = getGuide(row);
   const buyerName = toTrimmed(row?.comprador) || "cliente";
-  const templateName = toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE;
+  const usesFeeTemplate = isExternalWithLatePickupFee(row);
+  const templateName = usesFeeTemplate
+    ? toTrimmed(process.env.W_EXTERNAL_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_EXTERNAL_PICKUP_TEMPLATE
+    : toTrimmed(process.env.W_BUYER_PICKUP_TEMPLATE_NAME) || DEFAULT_BUYER_PICKUP_TEMPLATE;
   const languageCode = toTrimmed(process.env.W_GUIDE_TEMPLATE_LANGUAGE) || "es";
   const bodyData = await buildBuyerBodyData(row);
   const locationButtonValue = getBranchLocationButtonValue(bodyData.destinationName);
@@ -231,13 +257,20 @@ const sendBuyerTemplate = async (row: any): Promise<SendAttempt> => {
       templateParam(bodyData.saturdayHours),
       templateParam(guide),
     ];
+    if (usesFeeTemplate) {
+      bodyParameters.push(
+        templateParam(formatAmount(getBuyerPickupAmount(row))),
+        templateParam(formatAmount(row?.external_pricing_snapshot?.weekly_fee)),
+        templateParam(bodyData.locationUrl)
+      );
+    }
     const response = await sendTemplateMessage({
       phone,
       templateName,
       languageCode,
       components: [
         { type: "body", parameters: bodyParameters },
-        ...(locationButtonValue
+        ...(!usesFeeTemplate && locationButtonValue
           ? [{ type: "button" as const, sub_type: "url" as const, index: "0", parameters: [templateParam(locationButtonValue)] }]
           : []),
         ...(guide
