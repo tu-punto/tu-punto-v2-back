@@ -624,12 +624,29 @@ const sendExternalGuideMessages = async (params: { id: string; target?: "seller"
   });
 };
 
-const sendExternalRowsBestEffort = async (rows: any[]) =>
-  sendForRowsBestEffort(rows, "external-guide-whatsapp", {
+const sendExternalRowsBestEffort = async (rows: any[]) => {
+  const result = await sendForRowsBestEffort(rows, "external-guide-whatsapp", {
     includeSeller: true,
     includeBuyer: true,
     sellerRows: rows,
   });
+
+  const buyerOrderIds = result.attempts
+    .filter((attempt) => attempt.type === "buyer" && attempt.success && attempt.orderId)
+    .map((attempt) => String(attempt.orderId));
+
+  if (buyerOrderIds.length) {
+    await Promise.all(
+      buyerOrderIds.map((id) =>
+        ExternalSaleRepository.updateExternalSaleByID(id, {
+          public_tracking_ready_for_pickup_whatsapp_sent_at: new Date(),
+        } as any)
+      )
+    );
+  }
+
+  return result;
+};
 
 const sendSimplePackageGuideMessages = async (params: {
   packageIds: string[];
