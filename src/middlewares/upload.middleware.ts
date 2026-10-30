@@ -67,6 +67,15 @@ export const uploadFinanceFluxAttachment = multer({
   },
 });
 
+export const uploadTermsDocument = multer({
+  storage,
+  limits: { files: 1, fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype !== "application/pdf") return cb(new Error("Solo se permite un archivo PDF"));
+    cb(null, true);
+  },
+});
+
 export const validateUploadedFiles = (options: {
   fieldLabel: string;
   allowedMimeTypes: readonly string[];
