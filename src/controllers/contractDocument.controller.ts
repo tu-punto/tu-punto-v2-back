@@ -102,7 +102,7 @@ const serviceOrderBuffer = async (seller: any, input: any, documents: any[]) => 
     ["Versión de Políticas Operativas aceptada", policy ? `Versión/fecha: ${policy.version}` : "No configurada"],
     ["Versión de Tarifario informada", tariff ? `Versión/fecha: ${tariff.version}` : "No configurada"],
   ];
-  const table = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: rows.map(([left, right]) => new TableRow({ children: [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: left, bold: true })] })] }), new TableCell({ children: right.split("\n").map((text) => new Paragraph(text)) })] })) });
+  const table = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: rows.map(([left, right]) => new TableRow({ children: [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: left, bold: true })] })] }), new TableCell({ children: right.split("\n").map((text: string) => new Paragraph(text)) })] })) });
   const branchTable = new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [
     new TableRow({ children: ["Sucursal", "Almacenamiento", "Exhibición", "Entrega simple"].map((text) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })] })) }),
     ...branches.map((branch: any) => new TableRow({ children: [branch.sucursalName || "Sucursal", money(branch.alquiler), money(branch.exhibicion), money(branch.entrega_simple ?? branch.delivery)].map((text) => new TableCell({ children: [new Paragraph(text)] })) })),
