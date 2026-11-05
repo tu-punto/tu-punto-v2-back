@@ -40,6 +40,7 @@ import qrInventoryRouter from "./routes/qrInventory.routes";
 import dynamicQRRouter from "./routes/dynamicQR.routes";
 import personalInventoryRouter from "./routes/personalInventory.routes";
 import farmerDiscountRuleRouter from "./routes/farmerDiscountRule.routes";
+import contractDocumentRouter from "./routes/contractDocument.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -88,6 +89,7 @@ router.use("/user", userRouter);
   router.use("/tracking", trackingRouter);
 router.use("/service-announcements", serviceAnnouncementRouter);
 router.use("/terms-document", termsDocumentRouter);
+router.use("/contract-documents", contractDocumentRouter);
 router.use("/maintenance-mode", maintenanceModeRouter);
 router.use("/whats", requireAuth, requireRole("admin"), whatsRouter);
 router.use("/boxClose", requireAuth, requireRole("admin", "operator"), boxCloseRouter);

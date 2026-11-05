@@ -76,6 +76,19 @@ export const uploadTermsDocument = multer({
   },
 });
 
+export const uploadContractDocument = multer({
+  storage,
+  limits: { files: 1, fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (![
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ].includes(file.mimetype)) return cb(new Error("Solo se permiten PDF, DOC o DOCX"));
+    cb(null, true);
+  },
+});
+
 export const validateUploadedFiles = (options: {
   fieldLabel: string;
   allowedMimeTypes: readonly string[];
