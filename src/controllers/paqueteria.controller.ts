@@ -20,7 +20,7 @@ const normalizePayload = (input: any) => ({
   rutas_habilitadas: (Array.isArray(input?.rutas_habilitadas) ? input.rutas_habilitadas : [])
     .map(String)
     .filter(Types.ObjectId.isValid)
-    .map((id) => new Types.ObjectId(id)),
+    .map((id: string) => new Types.ObjectId(id)),
 });
 
 const validate = (data: ReturnType<typeof normalizePayload>) => {
