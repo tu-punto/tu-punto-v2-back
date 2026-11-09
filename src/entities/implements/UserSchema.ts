@@ -49,6 +49,11 @@ const UserSchema = new Schema<IUserDocument>({
     ref: 'Trabajador',
     required: false
   },
+  paqueteria: {
+    type: Schema.Types.ObjectId,
+    ref: 'Paqueteria',
+    required: false,
+  },
   vendedores_autorizados: [{
     type: Schema.Types.ObjectId,
     ref: 'Vendedor',
@@ -86,6 +91,7 @@ const UserSchema = new Schema<IUserDocument>({
 UserSchema.index({ email: 1 }); 
 UserSchema.index({ role: 1 }); 
 UserSchema.index({ vendedores_autorizados: 1 });
+UserSchema.index({ paqueteria: 1 });
 UserSchema.index({ createdAt: -1 }); 
 
 export const UserModel = model<IUserDocument>('User', UserSchema);

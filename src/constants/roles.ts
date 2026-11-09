@@ -1,6 +1,6 @@
-export const USER_ROLES = ["admin", "operator", "seller", "farmer", "superadmin"] as const;
+export const USER_ROLES = ["admin", "operator", "seller", "farmer", "paqueteria", "superadmin"] as const;
 
-export const ASSIGNABLE_USER_ROLES = ["admin", "operator", "seller", "farmer"] as const;
+export const ASSIGNABLE_USER_ROLES = ["admin", "operator", "seller", "farmer", "paqueteria"] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 export type AssignableUserRole = (typeof ASSIGNABLE_USER_ROLES)[number];

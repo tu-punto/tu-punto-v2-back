@@ -22,6 +22,7 @@ export interface IUser {
   sucursal?: Types.ObjectId;
   vendedor?: Types.ObjectId;
   trabajador?: Types.ObjectId;
+  paqueteria?: Types.ObjectId;
   vendedores_autorizados?: Types.ObjectId[];
   must_change_password?: boolean;
   password_changed_at?: Date;

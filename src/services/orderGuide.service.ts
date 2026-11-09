@@ -21,12 +21,12 @@ const indexToLetters = (index: number): string => {
   return letters.padStart(2, "A");
 };
 
-const buildGuideCode = (sequence: number, binarySuffix: 0 | 1): string => {
+const buildGuideCode = (sequence: number, suffix: number): string => {
   const safeSequence = Math.max(1, Math.floor(sequence));
   const letterIndex = Math.floor((safeSequence - 1) / GUIDE_NUMBER_LIMIT);
   const numericPart = ((safeSequence - 1) % GUIDE_NUMBER_LIMIT) + 1;
 
-  return `${indexToLetters(letterIndex)}-${String(numericPart).padStart(5, "0")}-${binarySuffix}`;
+  return `${indexToLetters(letterIndex)}-${String(numericPart).padStart(5, "0")}-${Math.max(0, Math.floor(suffix))}`;
 };
 
 const resolveGuideBinarySuffix = (order: any): 0 | 1 => {
@@ -39,6 +39,13 @@ const resolveGuideBinarySuffix = (order: any): 0 | 1 => {
 
   if (!originBranchId || !destinationBranchId) return 0;
   return String(originBranchId) === String(destinationBranchId) ? 0 : 1;
+};
+
+const resolveGuideSuffix = (order: any): number => {
+  const courierCode = Number(order?.paqueteria_codigo_guia);
+  return Number.isInteger(courierCode) && courierCode >= 2
+    ? courierCode
+    : resolveGuideBinarySuffix(order);
 };
 
 const getNextGuideSequence = async (): Promise<number> => {
@@ -55,8 +62,8 @@ const assignOrderGuide = async <T>(order: T & any): Promise<T> => {
   if (order.numero_guia) return order;
 
   const sequence = await getNextGuideSequence();
-  const binarySuffix = resolveGuideBinarySuffix(order);
-  const guideCode = buildGuideCode(sequence, binarySuffix);
+  const suffix = resolveGuideSuffix(order);
+  const guideCode = buildGuideCode(sequence, suffix);
 
   order.guia_sequence = sequence;
   order.numero_guia = guideCode;
@@ -66,11 +73,11 @@ const assignOrderGuide = async <T>(order: T & any): Promise<T> => {
 
 const buildMissingGuideUpdate = async (order: any) => {
   const sequence = await getNextGuideSequence();
-  const binarySuffix = resolveGuideBinarySuffix(order);
+  const suffix = resolveGuideSuffix(order);
 
   return {
     guia_sequence: sequence,
-    numero_guia: buildGuideCode(sequence, binarySuffix),
+    numero_guia: buildGuideCode(sequence, suffix),
   };
 };
 
@@ -79,4 +86,5 @@ export const OrderGuideService = {
   buildGuideCode,
   buildMissingGuideUpdate,
   resolveGuideBinarySuffix,
+  resolveGuideSuffix,
 };

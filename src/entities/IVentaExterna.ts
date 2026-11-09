@@ -9,6 +9,9 @@ export interface IVentaExterna {
     _id?: Types.ObjectId;
 
     id_vendedor?: Types.ObjectId;
+    paqueteria?: Types.ObjectId;
+    paqueteria_codigo_guia?: number;
+    paqueteria_pricing_snapshot?: { fixed_price: number; fine_every_days: number; fine_amount: number };
     carnet_vendedor: string;
     vendedor: string;
     telefono_vendedor?: string;

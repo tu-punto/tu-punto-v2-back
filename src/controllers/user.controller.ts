@@ -209,6 +209,7 @@ export const registerUserController = async (req: Request, res: Response) => {
       role: normalizedRole,
       password: encryptPassword,
       sucursal: resolveUserBranchForRole(normalizedRole, user.sucursal ?? user.sucursalId),
+      paqueteria: normalizedRole === "paqueteria" ? new Types.ObjectId(String(user.paqueteria)) : undefined,
       vendedores_autorizados:
         normalizedRole === "farmer" ? await validateAuthorizedSellerIds(user.vendedores_autorizados) : [],
       system_access_hours: normalizedRole === "operator" ? normalizeAccessHours(user.system_access_hours) : undefined,
@@ -665,7 +666,7 @@ export const getAdminsController = async (req: Request, res: Response) => {
 export const updateUserController = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, role, password, sucursal, sucursalId, system_access_hours, vendedores_autorizados } = req.body;
+    const { email, role, password, sucursal, sucursalId, paqueteria, system_access_hours, vendedores_autorizados } = req.body;
     const authRole = normalizeUserRole(res.locals.auth?.role);
     const existingUser = await UserService.getUserByIdService(id);
 
@@ -695,6 +696,7 @@ export const updateUserController = async (req: Request, res: Response) => {
       email,
       role: existingRole === "superadmin" ? "superadmin" : normalizedRole,
       sucursal: resolveUserBranchForRole(normalizedRole, sucursal ?? sucursalId),
+      paqueteria: normalizedRole === "paqueteria" ? new Types.ObjectId(String(paqueteria)) : null,
       vendedores_autorizados:
         normalizedRole === "farmer" ? await validateAuthorizedSellerIds(vendedores_autorizados) : [],
     };

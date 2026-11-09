@@ -12,7 +12,7 @@ import {
   RequestValidationError,
 } from "./requestValidation";
 
-const USER_ROLES = ["admin", "operator", "seller", "farmer"] as const;
+const USER_ROLES = ["admin", "operator", "seller", "farmer", "paqueteria"] as const;
 
 const parsePasswordPair = (payload: Record<string, unknown>, required = true) => {
   const password = required
@@ -65,7 +65,7 @@ export const validateLoginBody = (input: unknown) => {
 
 export const validateRegisterUserBody = (input: unknown, _res?: Response) => {
   const payload = ensurePlainObject(input, "body");
-  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "system_access_hours", "vendedores_autorizados"], "body");
+  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "paqueteria", "system_access_hours", "vendedores_autorizados"], "body");
 
   const role = parseEnum(payload.role, "role", USER_ROLES);
   const password = parsePasswordPair(payload, true);
@@ -88,6 +88,10 @@ export const validateRegisterUserBody = (input: unknown, _res?: Response) => {
     };
   }
 
+  if (role === "paqueteria") {
+    return { email: parseEmail(payload.email), role, password, paqueteria: parseObjectId(payload.paqueteria, "paqueteria") };
+  }
+
   return {
     email: parseEmail(payload.email),
     role,
@@ -106,7 +110,7 @@ export const validateUpdateUserParams = (input: unknown) => {
 
 export const validateUpdateUserBody = (input: unknown, res?: Response) => {
   const payload = ensurePlainObject(input, "body");
-  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "system_access_hours", "vendedores_autorizados"], "body");
+  rejectUnexpectedKeys(payload, ["email", "role", "password", "confirmPassword", "sucursal", "sucursalId", "paqueteria", "system_access_hours", "vendedores_autorizados"], "body");
 
   const authRole = String(res?.locals.auth?.role || "").toLowerCase();
   const role = parseEnum(payload.role, "role", USER_ROLES);
@@ -133,6 +137,10 @@ export const validateUpdateUserBody = (input: unknown, res?: Response) => {
       ...(password ? { password } : {}),
       ...parseFarmerFields(payload),
     };
+  }
+
+  if (role === "paqueteria") {
+    return { email, role, ...(password ? { password } : {}), paqueteria: parseObjectId(payload.paqueteria, "paqueteria"), sucursal: null };
   }
 
   return {

@@ -69,7 +69,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     };
 
     const user = await UserModel.findById(decoded.id)
-      .select("must_change_password role email")
+      .select("must_change_password role email paqueteria")
       .lean();
     if (!user) {
       return res.status(401).json({ success: false, msg: "Usuario no encontrado" });
@@ -77,6 +77,9 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
 
     if ((user as any)?.email) {
       authData.email = String((user as any).email).trim().toLowerCase();
+    }
+    if (role === "paqueteria" && (user as any)?.paqueteria) {
+      authData.paqueteriaId = String((user as any).paqueteria);
     }
 
     if (role === "seller") {

@@ -7,6 +7,22 @@ const VentaExternaSchema = new Schema({
         ref: 'Vendedor',
         required: false
     },
+    paqueteria: {
+        type: Types.ObjectId,
+        ref: 'Paqueteria',
+        required: false,
+        index: true,
+    },
+    paqueteria_codigo_guia: {
+        type: Number,
+        required: false,
+        min: 2,
+    },
+    paqueteria_pricing_snapshot: {
+        fixed_price: { type: Number, required: false, min: 0 },
+        fine_every_days: { type: Number, required: false, min: 1 },
+        fine_amount: { type: Number, required: false, min: 0 },
+    },
     carnet_vendedor: {
         type: String,
         required: true,
