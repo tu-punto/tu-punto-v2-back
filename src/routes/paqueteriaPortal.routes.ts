@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { annulMyCourierOrder, createMyCourierOrders, listMyCourierOrders, updateMyCourierOrder } from "../controllers/paqueteriaPortal.controller";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware";
+const router = Router();
+router.use(requireAuth, requireRole("paqueteria"));
+router.get("/orders", listMyCourierOrders);
+router.post("/orders", createMyCourierOrders);
+router.put("/orders/:id", updateMyCourierOrder);
+router.post("/orders/:id/annul", annulMyCourierOrder);
+export default router;

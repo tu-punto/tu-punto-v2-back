@@ -91,6 +91,19 @@ const resolveStorageFeeStartForExternal = (row: any) =>
     : row?.fecha_pedido;
 
 const resolveLatePickupFeeForExternalDelivery = (row: any, pickedUpAt: unknown) => {
+  if (row?.paqueteria && row?.paqueteria_pricing_snapshot) {
+    const snapshot = row.paqueteria_pricing_snapshot;
+    const start = row.pickup_fee_started_at;
+    if (!start) return 0;
+    const elapsedDays = moment.tz(pickedUpAt || new Date(), "America/La_Paz").diff(
+      moment.tz(start, "America/La_Paz"),
+      "days"
+    );
+    return roundCurrency(
+      Math.floor(Math.max(0, elapsedDays) / Math.max(1, Number(snapshot.fine_every_days || 1))) *
+        Math.max(0, Number(snapshot.fine_amount || 0))
+    );
+  }
   if (row?.pricing_version === "package-pricing-v2") {
     if (String(row?.service_origin || "external") !== "external") return 0;
     const snapshot = row?.external_pricing_snapshot;
@@ -835,8 +848,9 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
           ? moment().tz("America/La_Paz").toDate()
           : existing.public_tracking_ready_for_pickup_at)
       : null;
+  const usesCourierPricing = Boolean(existing.paqueteria && existing.paqueteria_pricing_snapshot);
   const nextPickupFeeStartedAt =
-    usesPackagePricingV2 && nextStatus === READY_FOR_PICKUP_STATUS
+    (usesPackagePricingV2 || usesCourierPricing) && nextStatus === READY_FOR_PICKUP_STATUS
       ? (existing.estado_pedido === READY_FOR_PICKUP_STATUS && existing.pickup_fee_started_at
           ? existing.pickup_fee_started_at
           : moment().tz("America/La_Paz").toDate())
@@ -996,7 +1010,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
     is_external: true,
     service_origin: serviceOrigin,
     public_tracking_ready_for_pickup_at: nextReadyAt,
-    ...(usesPackagePricingV2 ? { pickup_fee_started_at: nextPickupFeeStartedAt } : {}),
+    ...((usesPackagePricingV2 || usesCourierPricing) ? { pickup_fee_started_at: nextPickupFeeStartedAt } : {}),
   };
 
   if (serviceOrigin === "simple_package" || serviceOrigin === "external") {
@@ -1072,7 +1086,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   const previousSellerAmount = roundCurrency(Number(existing.monto_paga_vendedor || 0));
   const updated = await ExternalSaleRepository.updateExternalSaleByID(id, updatePayload);
 
-  if (updated && status === READY_FOR_PICKUP_STATUS && status !== existing.estado_pedido && !existing.public_tracking_ready_for_pickup_whatsapp_sent_at) {
+  if (updated && !existing.paqueteria && status === READY_FOR_PICKUP_STATUS && status !== existing.estado_pedido && !existing.public_tracking_ready_for_pickup_whatsapp_sent_at) {
     try {
       await OrderGuideWhatsappService.sendPickupReadyMessage(updated);
       await ExternalSaleRepository.updateExternalSaleByID(id, {
