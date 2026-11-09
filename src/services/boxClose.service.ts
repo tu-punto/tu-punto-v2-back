@@ -135,7 +135,7 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
   const nextOperations = [];
   for (const operation of operations) {
     const affectsCompany = operation?.afecta_empresa === true;
-    if (!affectsCompany || operation?.finance_flux_id) {
+    if (!affectsCompany || !operation?.metodo) {
       nextOperations.push(operation);
       continue;
     }
@@ -148,7 +148,7 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
 
     const branchId = String(operation?.id_sucursal || plainBoxClose?.id_sucursal || "").trim();
     const sellerId = String(operation?.id_vendedor || "").trim();
-    const financeFlux = await FinanceFluxRepository.registerFinanceFlux({
+    const financeFluxPayload = {
       tipo: normalizeOperationType(operation?.tipo),
       categoria: getOperationCategory(operation?.tipo),
       concepto: String(operation?.concepto || operation?.descripcion || "Operacion de caja").trim(),
@@ -157,7 +157,15 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
       esDeuda: false,
       id_sucursal: branchId && Types.ObjectId.isValid(branchId) ? new Types.ObjectId(branchId) : undefined,
       id_vendedor: sellerId && Types.ObjectId.isValid(sellerId) ? new Types.ObjectId(sellerId) : undefined,
-    } as any);
+    } as any;
+
+    if (operation?.finance_flux_id) {
+      await FinanceFluxRepository.updateById(String(operation.finance_flux_id), financeFluxPayload);
+      nextOperations.push(operation);
+      continue;
+    }
+
+    const financeFlux = await FinanceFluxRepository.registerFinanceFlux(financeFluxPayload);
 
     changed = true;
     nextOperations.push({
@@ -167,6 +175,24 @@ const createCompanyFinanceFluxForOperations = async (boxClose: any) => {
   }
 
   if (!changed) return boxClose;
+  return await BoxCloseRepository.updateBoxClose(String(plainBoxClose._id), {
+    operaciones_adicionales: nextOperations,
+  } as Partial<ICierreCaja>);
+};
+
+const upsertOperationInBoxClose = async (boxClose: any, operation: any) => {
+  const plainBoxClose = typeof boxClose?.toObject === "function" ? boxClose.toObject() : boxClose;
+  const sourceKey = String(operation?.source_key || "").trim();
+  const operations = Array.isArray(plainBoxClose?.operaciones_adicionales)
+    ? plainBoxClose.operaciones_adicionales
+    : [];
+  const index = sourceKey
+    ? operations.findIndex((item: any) => String(item?.source_key || "").trim() === sourceKey)
+    : -1;
+  const nextOperations = index >= 0
+    ? operations.map((item: any, itemIndex: number) => itemIndex === index ? { ...item, ...operation } : item)
+    : [...operations, operation];
+
   return await BoxCloseRepository.updateBoxClose(String(plainBoxClose._id), {
     operaciones_adicionales: nextOperations,
   } as Partial<ICierreCaja>);
@@ -298,12 +324,7 @@ const registerPendingBoxCloseOperation = async (params: {
     return { success: false, stored: false };
   }
 
-  const existing = await BoxClosePendingOperationRepository.findBySourceKey(sourceKey);
-  if (existing) {
-    return { success: true, stored: true, target: "pending" as const };
-  }
-
-  await BoxClosePendingOperationRepository.registerPendingOperation({
+  const pendingPayload = {
     source_key: sourceKey,
     business_date: businessDate,
     id_sucursal: new Types.ObjectId(branchId),
@@ -313,9 +334,64 @@ const registerPendingBoxCloseOperation = async (params: {
       fecha: normalizeOperationDate(operation?.fecha),
       source_key: sourceKey,
     },
-  });
+  };
+
+  const existing = await BoxClosePendingOperationRepository.findBySourceKey(sourceKey);
+  if (existing) {
+    if ((existing as any).applied_at) return { success: true, stored: true, target: "box_close" as const };
+    await BoxClosePendingOperationRepository.updatePendingBySourceKey(sourceKey, pendingPayload);
+  } else {
+    await BoxClosePendingOperationRepository.registerPendingOperation(pendingPayload);
+  }
 
   return { success: true, stored: true, target: "pending" as const };
+};
+
+const syncDeliveryCostBoxCloseOperation = async (shipping: any) => {
+  const shippingId = String(shipping?._id || "").trim();
+  const branchSource = shipping?.lugar_origen || shipping?.sucursal;
+  const branchId = typeof branchSource === "object"
+    ? String(branchSource?._id || branchSource?.id_sucursal || "").trim()
+    : String(branchSource || "").trim();
+  const amount = normalizeOperationAmount(shipping?.costo_delivery);
+  if (!shippingId || !branchId || !Types.ObjectId.isValid(branchId)) return { success: false, stored: false };
+
+  const now = dayjs();
+  const businessDate = now.format("YYYY-MM-DD");
+  const sourceKey = `delivery-cost-${shippingId}`;
+  const operation = {
+    tipo: "gasto" as const,
+    descripcion: `Costo de delivery · pedido ${String(shipping?.numero_guia || shippingId).slice(-12)}`,
+    concepto: "Costo de realizar delivery",
+    categoria: "Gasto (Cierre)",
+    monto: amount,
+    afecta_empresa: true,
+    fecha: now.toDate(),
+    id_sucursal: new Types.ObjectId(branchId),
+    source_key: sourceKey,
+    auto_generated: true,
+  };
+
+  const { start, end } = buildDayRange(businessDate);
+  const currentBoxClose = await BoxCloseRepository.findLatestBySucursalOnDay(branchId, start, end);
+  if (currentBoxClose) {
+    if (amount <= 0) return { success: true, stored: false, target: "box_close" as const };
+    const updated = await upsertOperationInBoxClose(currentBoxClose, operation);
+    if (updated) await createCompanyFinanceFluxForOperations(updated);
+    return { success: true, stored: Boolean(updated), target: "box_close" as const };
+  }
+
+  if (amount <= 0) {
+    await BoxClosePendingOperationRepository.deleteBySourceKey(sourceKey);
+    return { success: true, stored: false, target: "pending" as const };
+  }
+
+  return await registerPendingBoxCloseOperation({
+    sourceKey,
+    branchId,
+    businessDate,
+    operation,
+  });
 };
 
 const deletePendingBoxCloseOperation = async (sourceKey: string) => {
@@ -334,4 +410,5 @@ export const BoxCloseService = {
   getPendingOperationsForBranchAndDate,
   registerPendingBoxCloseOperation,
   deletePendingBoxCloseOperation,
+  syncDeliveryCostBoxCloseOperation,
 };

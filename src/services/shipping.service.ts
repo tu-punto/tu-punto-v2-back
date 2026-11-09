@@ -30,6 +30,7 @@ import { InventoryAuditActor } from "./inventoryAudit.service";
 import { FinanceStatsAggregateService } from "./financeStatsAggregate.service";
 import { AdelantoTuPuntoService } from "./adelantoTuPunto.service";
 import { AdelantoTuPuntoModel } from "../entities/implements/AdelantoTuPuntoSchema";
+import { BoxCloseService } from "./boxClose.service";
 
 const getAllShippings = async () => {
   return await ShippingRepository.findAll();
@@ -1201,6 +1202,9 @@ const registerShipping = async (shipping: any) => {
   }
   const savedShipping = await ShippingRepository.registerShipping(shipping);
   await AdelantoTuPuntoService.syncForShipping(savedShipping);
+  await BoxCloseService.syncDeliveryCostBoxCloseOperation(savedShipping).catch((error) => {
+    console.error("[shipping-service] delivery-cost-box-close:error", error);
+  });
   const trackingCode = await NotificationService.ensureBuyerTrackingCode(savedShipping);
 
   if (savedShipping && !(savedShipping as any).buyer_tracking_code) {
@@ -1661,6 +1665,9 @@ const updateShipping = async (
     await AdelantoTuPuntoService.syncForShipping(resShip, removedAdvance
       ? { reverted: true, reason: String(newData?.estado_pedido || "") === "Cancelado" ? "Pedido cancelado" : "Adelanto retirado del pedido" }
       : undefined);
+    await BoxCloseService.syncDeliveryCostBoxCloseOperation(resShip).catch((error) => {
+      console.error("[shipping-service] delivery-cost-box-close:error", error);
+    });
     if (
       (shipping as any)?.origen_pedido === "catalogo" &&
       fromStatus !== "Entregado" &&

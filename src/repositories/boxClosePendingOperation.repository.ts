@@ -47,10 +47,24 @@ const deleteBySourceKey = async (sourceKey: string) => {
   return Number(result?.deletedCount || 0) > 0;
 };
 
+const updatePendingBySourceKey = async (
+  sourceKey: string,
+  payload: Partial<IBoxClosePendingOperation>
+) => {
+  if (!String(sourceKey || "").trim()) return null;
+
+  return await BoxClosePendingOperationModel.findOneAndUpdate(
+    { source_key: sourceKey, applied_at: { $exists: false } },
+    payload,
+    { new: true }
+  ).exec();
+};
+
 export const BoxClosePendingOperationRepository = {
   findPendingByBranchAndBusinessDate,
   registerPendingOperation,
   markApplied,
   findBySourceKey,
   deleteBySourceKey,
+  updatePendingBySourceKey,
 };

@@ -10,7 +10,7 @@ export interface IBoxClosePendingOperation {
     concepto?: string;
     categoria?: string;
     cliente?: string;
-    metodo: "efectivo" | "qr";
+    metodo?: "efectivo" | "qr";
     monto: number;
     afecta_empresa?: boolean;
     fecha?: Date;

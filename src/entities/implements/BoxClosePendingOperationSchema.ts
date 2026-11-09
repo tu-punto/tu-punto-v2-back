@@ -19,7 +19,7 @@ const BoxClosePendingOperationSchema = new Schema<IBoxClosePendingOperationDocum
       metodo: {
         type: String,
         enum: ["efectivo", "qr"],
-        required: true,
+        required: false,
       },
       monto: { type: Number, required: true },
       afecta_empresa: { type: Boolean, default: true },
