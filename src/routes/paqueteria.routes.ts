@@ -5,6 +5,6 @@ import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 const router = Router();
 router.get("/me", requireAuth, requireRole("paqueteria"), getMyPaqueteria);
 router.get("/", requireAuth, requireRole("admin"), listPaqueterias);
-router.post("/", requireAuth, requireRole("superadmin"), createPaqueteria);
-router.put("/:id", requireAuth, requireRole("superadmin"), updatePaqueteria);
+router.post("/", requireAuth, requireRole("admin"), createPaqueteria);
+router.put("/:id", requireAuth, requireRole("admin"), updatePaqueteria);
 export default router;
