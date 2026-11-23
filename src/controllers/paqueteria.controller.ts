@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
+import { extname } from "path";
 import { PaqueteriaModel } from "../entities/implements/PaqueteriaSchema";
+import { uploadFileToAws } from "../services/bucket.service";
 
 const cleanNumber = (value: unknown, fallback = 0) => {
   const number = Number(value);
@@ -35,6 +37,19 @@ export const listPaqueterias = async (_req: Request, res: Response) => {
   return res.json({ success: true, data });
 };
 
+export const checkGuideCodeAvailability = async (req: Request, res: Response) => {
+  const codigoGuia = Math.floor(cleanNumber(req.query.codigo_guia));
+  const excludeId = String(req.query.excludeId || "").trim();
+  if (codigoGuia < 2) {
+    return res.status(400).json({ success: false, msg: "El codigo de guia debe ser 2 o mayor" });
+  }
+
+  const query: Record<string, unknown> = { codigo_guia: codigoGuia };
+  if (Types.ObjectId.isValid(excludeId)) query._id = { $ne: new Types.ObjectId(excludeId) };
+  const exists = await PaqueteriaModel.exists(query);
+  return res.json({ success: true, available: !exists });
+};
+
 export const createPaqueteria = async (req: Request, res: Response) => {
   try {
     const data = normalizePayload(req.body);
@@ -55,6 +70,28 @@ export const updatePaqueteria = async (req: Request, res: Response) => {
     return res.json({ success: true, data: updated });
   } catch (error: any) {
     return res.status(400).json({ success: false, msg: error?.code === 11000 ? "El codigo de guia ya existe" : error?.message });
+  }
+};
+
+export const uploadPaqueteriaLogo = async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, msg: "Debes enviar un logo" });
+
+    const paqueteria = await PaqueteriaModel.findById(req.params.id);
+    if (!paqueteria) return res.status(404).json({ success: false, msg: "Paqueteria no encontrada" });
+
+    const extension = extname(req.file.originalname).toLowerCase() || ".webp";
+    const logoUrl = await uploadFileToAws(
+      req.file.buffer,
+      `paqueterias/logos/${paqueteria._id}-${Date.now()}${extension}`,
+      req.file.mimetype,
+    );
+    paqueteria.logo_url = logoUrl;
+    await paqueteria.save();
+    return res.json({ success: true, data: paqueteria, logo_url: logoUrl });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({ success: false, msg: error?.message || "No se pudo subir el logo" });
   }
 };
 
