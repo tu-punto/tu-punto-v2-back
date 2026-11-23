@@ -22,6 +22,7 @@ const PaqueteriaSchema = new Schema<IPaqueteria>(
 );
 
 PaqueteriaSchema.index({ nombre: 1 });
+PaqueteriaSchema.index({ codigo_guia: 1 }, { unique: true, sparse: true });
 PaqueteriaSchema.index({ slug: 1 }, { unique: true, sparse: true });
 
 export const PaqueteriaModel = model<IPaqueteria>("Paqueteria", PaqueteriaSchema);

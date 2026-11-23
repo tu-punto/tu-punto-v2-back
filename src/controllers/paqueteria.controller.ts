@@ -42,6 +42,13 @@ export const listPaqueterias = async (_req: Request, res: Response) => {
   return res.json({ success: true, data });
 };
 
+export const getPublicPaqueteriaBySlug = async (req: Request, res: Response) => {
+  const slug = String(req.params.slug || "").trim().toLowerCase();
+  const data = await PaqueteriaModel.findOne({ slug, tipo: "externa", activo: true }).select("nombre slug logo_url color_primario color_secundario").lean();
+  if (!data) return res.status(404).json({ success: false, msg: "Paquetería no encontrada" });
+  return res.json({ success: true, data });
+};
+
 export const checkGuideCodeAvailability = async (req: Request, res: Response) => {
   const codigoGuia = Math.floor(cleanNumber(req.query.codigo_guia));
   const excludeId = String(req.query.excludeId || "").trim();
@@ -62,7 +69,8 @@ export const createPaqueteria = async (req: Request, res: Response) => {
     const created = await PaqueteriaModel.create(data);
     return res.status(201).json({ success: true, data: created });
   } catch (error: any) {
-    return res.status(400).json({ success: false, msg: error?.code === 11000 ? "El codigo de guia ya existe" : error?.message });
+    const duplicateMessage = error?.keyPattern?.slug ? "Ese enlace ya está en uso" : "El código de guía ya existe";
+    return res.status(400).json({ success: false, msg: error?.code === 11000 ? duplicateMessage : error?.message });
   }
 };
 
@@ -74,7 +82,8 @@ export const updatePaqueteria = async (req: Request, res: Response) => {
     if (!updated) return res.status(404).json({ success: false, msg: "Paqueteria no encontrada" });
     return res.json({ success: true, data: updated });
   } catch (error: any) {
-    return res.status(400).json({ success: false, msg: error?.code === 11000 ? "El codigo de guia ya existe" : error?.message });
+    const duplicateMessage = error?.keyPattern?.slug ? "Ese enlace ya está en uso" : "El código de guía ya existe";
+    return res.status(400).json({ success: false, msg: error?.code === 11000 ? duplicateMessage : error?.message });
   }
 };
 
