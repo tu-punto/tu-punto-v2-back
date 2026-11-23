@@ -12,13 +12,17 @@ const cleanNumber = (value: unknown, fallback = 0) => {
 const normalizePayload = (input: any) => ({
   nombre: String(input?.nombre || "").trim(),
   activo: input?.activo !== false,
-  codigo_guia: Math.floor(cleanNumber(input?.codigo_guia)),
+  tipo: input?.tipo === "externa" ? "externa" : "operativa",
+  codigo_guia: input?.codigo_guia === undefined || input?.codigo_guia === "" ? undefined : Math.floor(cleanNumber(input?.codigo_guia)),
+  slug: String(input?.slug || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+  formato_guia: ["libre", "tupunto", "personalizado"].includes(String(input?.formato_guia)) ? input.formato_guia : "libre",
+  prefijo_guia: String(input?.prefijo_guia || "").trim(),
   logo_url: String(input?.logo_url || "").trim(),
   color_primario: String(input?.color_primario || "").trim(),
   color_secundario: String(input?.color_secundario || "").trim(),
-  tarifa_fija: cleanNumber(input?.tarifa_fija),
-  multa_cada_dias: Math.floor(cleanNumber(input?.multa_cada_dias)),
-  monto_multa: cleanNumber(input?.monto_multa),
+  tarifa_fija: input?.tarifa_fija === undefined ? undefined : cleanNumber(input?.tarifa_fija),
+  multa_cada_dias: input?.multa_cada_dias === undefined ? undefined : Math.floor(cleanNumber(input?.multa_cada_dias)),
+  monto_multa: input?.monto_multa === undefined ? undefined : cleanNumber(input?.monto_multa),
   rutas_habilitadas: (Array.isArray(input?.rutas_habilitadas) ? input.rutas_habilitadas : [])
     .map(String)
     .filter(Types.ObjectId.isValid)
@@ -27,9 +31,10 @@ const normalizePayload = (input: any) => ({
 
 const validate = (data: ReturnType<typeof normalizePayload>) => {
   if (!data.nombre) throw new Error("El nombre es obligatorio");
-  if (data.codigo_guia < 2) throw new Error("El codigo de guia debe ser 2 o mayor");
-  if (data.tarifa_fija < 0 || data.monto_multa < 0) throw new Error("Los montos no pueden ser negativos");
-  if (data.multa_cada_dias < 1) throw new Error("La multa debe tener un intervalo de al menos un dia");
+  if (data.tipo === "externa") { if (!data.slug) throw new Error("El slug es obligatorio para una paquetería externa"); if (data.formato_guia === "personalizado" && !data.prefijo_guia) throw new Error("El prefijo es obligatorio"); return; }
+  if (!data.codigo_guia || data.codigo_guia < 2) throw new Error("El codigo de guia debe ser 2 o mayor");
+  if ((data.tarifa_fija || 0) < 0 || (data.monto_multa || 0) < 0) throw new Error("Los montos no pueden ser negativos");
+  if (!data.multa_cada_dias || data.multa_cada_dias < 1) throw new Error("La multa debe tener un intervalo de al menos un dia");
 };
 
 export const listPaqueterias = async (_req: Request, res: Response) => {

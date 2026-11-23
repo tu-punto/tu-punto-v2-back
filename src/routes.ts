@@ -43,6 +43,7 @@ import farmerDiscountRuleRouter from "./routes/farmerDiscountRule.routes";
 import contractDocumentRouter from "./routes/contractDocument.routes";
 import paqueteriaRouter from "./routes/paqueteria.routes";
 import paqueteriaPortalRouter from "./routes/paqueteriaPortal.routes";
+import paqueteriaExternaPortalRouter from "./routes/paqueteriaExternaPortal.routes";
 
 import shippingGuideRouter from "./routes/shippingGuide.routes";
 import reportsRouter from "./routes/reports.routes";
@@ -97,6 +98,7 @@ router.use("/terms-document", termsDocumentRouter);
 router.use("/contract-documents", contractDocumentRouter);
 router.use("/paqueterias", paqueteriaRouter);
 router.use("/paqueteria-portal", paqueteriaPortalRouter);
+router.use("/paqueteria-externa-portal", paqueteriaExternaPortalRouter);
 router.use("/maintenance-mode", maintenanceModeRouter);
 router.use("/whats", requireAuth, requireRole("admin"), whatsRouter);
 router.use("/boxClose", requireAuth, requireRole("admin", "operator"), boxCloseRouter);

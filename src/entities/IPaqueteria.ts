@@ -3,7 +3,11 @@ import { Types } from "mongoose";
 export interface IPaqueteria {
   nombre: string;
   activo: boolean;
-  codigo_guia: number;
+  codigo_guia?: number;
+  tipo?: "operativa" | "externa";
+  slug?: string;
+  formato_guia?: "libre" | "tupunto" | "personalizado";
+  prefijo_guia?: string;
   logo_url?: string;
   color_primario?: string;
   color_secundario?: string;
