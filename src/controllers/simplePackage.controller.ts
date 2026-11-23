@@ -73,7 +73,8 @@ export const upsertSimplePackageBranchPrice = async (req: Request, res: Response
 
     const data = await SimplePackageService.upsertSimplePackageBranchPrice({
       originBranchId: String(req.body?.originBranchId || req.body?.origen_sucursal_id || "").trim(),
-      destinationBranchId: String(req.body?.destinationBranchId || req.body?.destino_sucursal_id || "").trim(),
+      destinationId: String(req.body?.destinationId || req.body?.destinationBranchId || req.body?.destino_id || req.body?.destino_sucursal_id || "").trim(),
+      destinationType: String(req.body?.destinationType || req.body?.destino_tipo || "sucursal").trim(),
       precio: Number(req.body?.precio || 0),
     });
 

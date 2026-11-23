@@ -12,6 +12,15 @@ const SimplePackageBranchPriceSchema = new Schema(
       ref: "Sucursal",
       required: true,
     },
+    destino_tipo: {
+      type: String,
+      enum: ["sucursal", "paqueteria"],
+      default: "sucursal",
+    },
+    destino_paqueteria: {
+      type: Types.ObjectId,
+      ref: "Paqueteria",
+    },
     precio: {
       type: Number,
       required: true,

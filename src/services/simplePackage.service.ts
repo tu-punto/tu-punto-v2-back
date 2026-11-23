@@ -3,6 +3,7 @@ import moment from "moment-timezone";
 import { Types } from "mongoose";
 import { IVentaExterna, PackagePaymentMethod, PackageSize } from "../entities/IVentaExterna";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
+import { PaqueteriaModel } from "../entities/implements/PaqueteriaSchema";
 import { SellerRepository } from "../repositories/seller.repository";
 import { FinanceFluxRepository } from "../repositories/financeFlux.repository";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
@@ -691,24 +692,47 @@ const getSimplePackageBranchPrices = async (originBranchId?: string) => {
 
 const upsertSimplePackageBranchPrice = async (params: {
   originBranchId: string;
-  destinationBranchId: string;
+  destinationId: string;
+  destinationType?: string;
   precio: number;
 }) => {
   const originBranchId = toTrimmed(params.originBranchId);
-  const destinationBranchId = toTrimmed(params.destinationBranchId);
-  if (!Types.ObjectId.isValid(originBranchId) || !Types.ObjectId.isValid(destinationBranchId)) {
-    throw new Error("Debe seleccionar sucursales validas");
+  const destinationId = toTrimmed(params.destinationId);
+  const destinationType = toTrimmed(params.destinationType).toLowerCase() === "paqueteria" ? "paqueteria" : "sucursal";
+  if (!Types.ObjectId.isValid(originBranchId) || !Types.ObjectId.isValid(destinationId)) {
+    throw new Error("Debe seleccionar una sucursal de origen y un destino validos");
+  }
+
+  const origin = await SucursalModel.exists({ _id: originBranchId });
+  if (!origin) throw new Error("La sucursal de origen no existe");
+
+  if (destinationType === "paqueteria") {
+    const courier = await PaqueteriaModel.exists({ _id: destinationId, activo: { $ne: false } });
+    if (!courier) throw new Error("La paqueteria de destino no existe o esta inactiva");
+  } else {
+    const destination = await SucursalModel.exists({ _id: destinationId });
+    if (!destination) throw new Error("La sucursal de destino no existe");
   }
   const precio = roundCurrency(toNumber(params.precio, 0));
   if (precio < 0) {
     throw new Error("El precio entre sucursales no puede ser negativo");
   }
 
-  return await SimplePackageBranchPriceRepository.upsertBranchPrice(
+  const route = await SimplePackageBranchPriceRepository.upsertBranchPrice(
     originBranchId,
-    destinationBranchId,
-    precio
+    destinationId,
+    precio,
+    destinationType
   );
+
+  if (destinationType === "paqueteria" && route?._id) {
+    await PaqueteriaModel.updateOne(
+      { _id: destinationId },
+      { $addToSet: { rutas_habilitadas: route._id } }
+    );
+  }
+
+  return route;
 };
 
 const updateSimplePackageByID = async (params: {
