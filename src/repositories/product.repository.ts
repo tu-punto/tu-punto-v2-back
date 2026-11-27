@@ -91,17 +91,21 @@ const updateStockInSucursal = async (
   return await producto.save();
 };
 
-const updatePriceInSucursal = async (
+const updatePricesInSucursal = async (
   productId: string,
-  params: {
+  updates: {
     variantKey?: string;
     variantes?: Record<string, string>;
     precio: number;
-  }
+  }[]
 ): Promise<{ product: IProductoDocument; updatedBranches: number }> => {
   const producto = await ProductoModel.findById(productId);
   if (!producto) throw new Error("Producto no encontrado");
 
+  let updatedBranches = 0;
+  for (const params of updates) {
+  const nextPrice = Number(params.precio);
+  if (!Number.isFinite(nextPrice) || nextPrice < 0) throw new Error("Precio invalido");
   const normalizedInputVariants = Object.fromEntries(
     Object.entries(params.variantes || {}).map(([key, value]) => [
       String(key).trim(),
@@ -124,7 +128,6 @@ const updatePriceInSucursal = async (
     );
   };
 
-  let updatedBranches = 0;
   let matchedBranches = 0;
 
   for (const sucursal of producto.sucursales || []) {
@@ -147,10 +150,6 @@ const updatePriceInSucursal = async (
     if (!combinacion) continue;
     matchedBranches += 1;
 
-    const nextPrice = Number(params.precio);
-    if (!Number.isFinite(nextPrice) || nextPrice < 0) {
-      throw new Error("Precio invalido");
-    }
     if (Number(combinacion.precio) !== nextPrice) {
       combinacion.previousPrice = Number(combinacion.precio);
       combinacion.priceChangedAt = new Date();
@@ -161,6 +160,7 @@ const updatePriceInSucursal = async (
 
   if (!matchedBranches) {
     throw new Error("No se encontró la variante para actualizar el precio");
+  }
   }
 
   producto.markModified("sucursales");
@@ -1748,7 +1748,7 @@ export const ProductRepository = {
   getStockForSucursal,
   updateStockInSucursal,
   getAllStockByProductId,
-  updatePriceInSucursal,
+  updatePricesInSucursal,
   updateStockOfSubvariant,
   updateStockByVariantCombination,
   addVariantToProduct,

@@ -729,16 +729,15 @@ const updatePrice = async (
 ) => {
   const normalizedUpdates = Array.isArray(updates) ? updates : [updates];
   const result = [];
+  const byProduct = new Map<string, typeof normalizedUpdates>();
 
   for (const u of normalizedUpdates) {
-    const updated = await ProductRepository.updatePriceInSucursal(
-      u.productId,
-      {
-        variantKey: u.variantKey,
-        variantes: u.variantes,
-        precio: u.precio
-      }
-    );
+    const group = byProduct.get(u.productId) || [];
+    group.push(u);
+    byProduct.set(u.productId, group);
+  }
+  for (const [productId, productUpdates] of byProduct) {
+    const updated = await ProductRepository.updatePricesInSucursal(productId, productUpdates);
     result.push(updated);
   }
 
