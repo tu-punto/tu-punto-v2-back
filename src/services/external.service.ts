@@ -7,6 +7,8 @@ import { SellerRepository } from "../repositories/seller.repository";
 import { OrderGuideService } from "./orderGuide.service";
 import { SimplePackageBranchPriceRepository } from "../repositories/simplePackageBranchPrice.repository";
 import { SucursalModel } from "../entities/implements/SucursalSchema";
+import { PaqueteriaModel } from "../entities/implements/PaqueteriaSchema";
+import { SimplePackageBranchPriceModel } from "../entities/implements/SimplePackageBranchPriceSchema";
 import { OrderGuideWhatsappService } from "./orderGuideWhatsapp.service";
 import { PackageEscalationConfigService } from "./packageEscalationConfig.service";
 import { calculateLatePickupFee, resolveBranchPickupFeeStart } from "../utils/latePickupFee";
@@ -78,6 +80,7 @@ const getBusinessDayRange = (value: unknown) => {
 };
 
 const isBranchTransferSale = (row: any) => {
+  if (row?.destino_paqueteria) return true;
   const originId = toTrimmed((row?.origen_sucursal as any)?._id ?? row?.origen_sucursal ?? row?.sucursal);
   const destinationId = toTrimmed((row?.destino_sucursal as any)?._id ?? row?.destino_sucursal ?? row?.sucursal);
   return Boolean(originId && destinationId && originId !== destinationId);
@@ -503,6 +506,30 @@ const buildExternalRecord = async (input: any, index = 0): Promise<IVentaExterna
   const paid = normalizePaidStatus(input.esta_pagado);
   const originBranchId = toTrimmed(input.origen_sucursal_id ?? input.origen_sucursal ?? input.sucursal ?? input.id_sucursal);
   const destinationBranchId = toTrimmed(input.destino_sucursal_id ?? input.destino_sucursal ?? originBranchId);
+  const courierRoute: any = Types.ObjectId.isValid(originBranchId) && Types.ObjectId.isValid(destinationBranchId)
+    ? await SimplePackageBranchPriceModel.findOne({ origen_sucursal: originBranchId, destino_tipo: "paqueteria", destino_paqueteria: destinationBranchId }).lean()
+    : null;
+  const courier: any = courierRoute ? await PaqueteriaModel.findOne({ _id: destinationBranchId, activo: { $ne: false }, tipo: { $ne: "externa" } }).lean() : null;
+  if (courierRoute && !courier) throw new Error("La paquetería no está activa");
+  if (courier) {
+    const fixed = roundCurrency(Number(courier.tarifa_fija || 0));
+    const paid = normalizePaidStatus(input.esta_pagado);
+    const split = resolvePaymentSplit(paid, fixed, input.monto_paga_vendedor, input.monto_paga_comprador);
+    return {
+      paqueteria: courier._id, destino_paqueteria: courier._id, paqueteria_codigo_guia: courier.codigo_guia,
+      paqueteria_pricing_snapshot: { fixed_price: fixed, fine_every_days: courier.multa_cada_dias, fine_amount: courier.monto_multa },
+      carnet_vendedor: toTrimmed(input.carnet_vendedor ?? "SN"), vendedor: toTrimmed(input.vendedor ?? "Externo"),
+      telefono_vendedor: toTrimmed(input.telefono_vendedor) || undefined, numero_paquete: toNumber(input.numero_paquete, index + 1),
+      comprador: toTrimmed(input.comprador) || undefined, telefono_comprador: toTrimmed(input.telefono_comprador) || undefined,
+      descripcion_paquete: toTrimmed(input.descripcion_paquete ?? "Sin descripcion"), fecha_pedido: normalizeExternalDate(input.fecha_pedido) as unknown as Date,
+      sucursal: toObjectIdOrUndefined(originBranchId), origen_sucursal: toObjectIdOrUndefined(originBranchId), lugar_entrega: courier.nombre,
+      service_origin: "external", precio_paquete: fixed, precio_total: fixed, precio_entre_sucursal: 0, cargo_delivery: 0, costo_delivery: 0,
+      esta_pagado: paid, monto_paga_vendedor: split.montoPagaVendedor, monto_paga_comprador: split.montoPagaComprador,
+      deuda_comprador: split.saldoCobrar, saldo_cobrar: split.saldoCobrar, estado_pedido: "PARA ENVIAR A OTRA SUCURSAL", delivered: false, is_external: true,
+      metodo_pago: split.montoPagaVendedor > 0 ? normalizeSellerPaymentMethod(input.metodo_pago ?? input.paymentMethod ?? input.seller_payment_method) : "",
+      public_tracking_received_at: new Date(),
+    };
+  }
   const branchRoute = await resolveExternalBranchRoutePricing(originBranchId, destinationBranchId);
   const batchPackageCount = Math.max(1, toNumber(input.batch_package_count ?? input.numero_paquetes, 1));
   const requestedDeliverySpaces = Math.max(1, toNumber(input.delivery_spaces ?? 1, 1));
@@ -627,7 +654,7 @@ const registerExternalSale = async (externalSale: any) => {
   const created = await ExternalSaleRepository.registerExternalSale(record);
   await applyExternalMixedIncomeFromRecords([record]);
   const populatedCreated = await ExternalSaleRepository.getExternalSaleByID(String(created._id));
-  void OrderGuideWhatsappService.sendExternalRowsBestEffort([populatedCreated || created])
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort(record.paqueteria ? [] : [populatedCreated || created])
     .then(() => undefined)
     .catch((error) => {
       console.error("[external-service] whatsapp-dispatch:error", {
@@ -688,7 +715,7 @@ const registerExternalSalesByPackages = async (payload: any) => {
 
   const created = await ExternalSaleRepository.registerExternalSales(toCreate);
   await applyExternalMixedIncomeFromRecords(toCreate);
-  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created)
+  void OrderGuideWhatsappService.sendExternalRowsBestEffort(created.filter((row: any) => !row?.paqueteria))
     .then(() => undefined)
     .catch((error) => {
       console.error("[external-service] whatsapp-dispatch:error", {
@@ -790,6 +817,10 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
     Object.prototype.hasOwnProperty.call(externalSale, "origen_sucursal");
   const routeEditRequested = destinationEditRequested || originEditRequested;
   const actorRole = String(options?.actorRole || "").trim().toLowerCase();
+
+  if (existing.destino_paqueteria && routeEditRequested) {
+    throw new Error("No se puede cambiar la ruta de un pedido con destino a paquetería");
+  }
 
   if (routeEditRequested && !ALLOWED_DESTINATION_EDIT_ROLES.has(actorRole)) {
     throw new Error("No tienes permiso para cambiar la ruta de sucursal");
@@ -966,7 +997,7 @@ const updateExternalSaleByID = async (id: string, externalSale: any, options?: {
   const sellerPaymentMethod = montoPagaVendedor > 0
     ? normalizeSellerPaymentMethod(externalSale.metodo_pago ?? existing.metodo_pago) || (paymentEditRequested ? "efectivo" : "")
     : "";
-  if (montoPagaVendedor > 0 && !sellerPaymentMethod && !isLegacyMixedWithoutSellerMethod) {
+  if (montoPagaVendedor > 0 && !sellerPaymentMethod && !isLegacyMixedWithoutSellerMethod && !(usesCourierPricing && !paymentEditRequested)) {
     throw new Error("Debe seleccionar si el pago del vendedor sera efectivo o QR");
   }
   const deliveryPayment =

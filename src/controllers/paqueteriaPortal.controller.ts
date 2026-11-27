@@ -4,18 +4,28 @@ import { Types } from "mongoose";
 import { VentaExternaModel } from "../entities/implements/VentaExternaSchema";
 import { PaqueteriaModel } from "../entities/implements/PaqueteriaSchema";
 import { OrderGuideService } from "../services/orderGuide.service";
+import { SimplePackageBranchPriceModel } from "../entities/implements/SimplePackageBranchPriceSchema";
+import { SEND_TO_BRANCH_STATUS, IN_TRANSIT_STATUS } from "../utils/branchTransferStatus";
 
 const tz = "America/La_Paz";
 const money = (value: unknown) => +Math.max(0, Number(value || 0)).toFixed(2);
 const courierId = (res: Response) => String(res.locals.auth?.paqueteriaId || "");
 const getCourier = async (res: Response) => {
   const id = courierId(res);
-  return Types.ObjectId.isValid(id) ? PaqueteriaModel.findOne({ _id: id, activo: true }).lean() : null;
+  return Types.ObjectId.isValid(id) ? PaqueteriaModel.findOne({ _id: id, activo: true, tipo: { $ne: "externa" } }).lean() : null;
+};
+const editableStatuses = ["En Espera", SEND_TO_BRANCH_STATUS, IN_TRANSIT_STATUS];
+export const listMyCourierRoutes = async (_req: Request, res: Response) => {
+  const courier = await getCourier(res);
+  if (!courier) return res.status(403).json({ success: false, msg: "Paquetería no habilitada" });
+  const routes = await SimplePackageBranchPriceModel.find({ destino_tipo: "paqueteria", destino_paqueteria: courier._id })
+    .populate({ path: "origen_sucursal", select: "_id nombre" }).lean();
+  return res.json({ success: true, data: routes.filter((route: any) => route.origen_sucursal) });
 };
 const calculateFine = (row: any, now = new Date()) => {
   const snapshot = row?.paqueteria_pricing_snapshot;
   if (!snapshot?.fine_every_days || !row?.pickup_fee_started_at || row?.anulado || row?.delivered || row?.estado_pedido === "Entregado") return 0;
-  const days = moment.tz(now, tz).startOf("day").diff(moment.tz(row.pickup_fee_started_at, tz).startOf("day"), "days");
+  const days = moment.tz(now, tz).diff(moment.tz(row.pickup_fee_started_at, tz), "days");
   return money(Math.floor(Math.max(0, days) / Number(snapshot.fine_every_days)) * Number(snapshot.fine_amount || 0));
 };
 const present = (row: any) => {
@@ -45,22 +55,25 @@ export const createMyCourierOrders = async (req: Request, res: Response) => {
       const phone = String(input.telefono_comprador || "").trim();
       const description = String(input.descripcion_paquete || "").trim();
       if ((!buyer && !phone) || !description) throw new Error("Cada paquete requiere comprador o celular y descripcion");
+      const originId = String(input.origen_sucursal_id || "").trim();
+      if (!Types.ObjectId.isValid(originId)) throw new Error("Selecciona una ruta habilitada");
+      const route = await SimplePackageBranchPriceModel.exists({ origen_sucursal: originId, destino_tipo: "paqueteria", destino_paqueteria: courier._id });
+      if (!route) throw new Error("La ruta seleccionada no está habilitada para esta paquetería");
       const paid = normalizePayment(input.esta_pagado);
       const fixed = money(courier.tarifa_fija);
       const sellerAmount = paid === "si" ? fixed : paid === "mixto" ? money(input.monto_paga_vendedor) : 0;
       if (paid === "mixto" && (sellerAmount <= 0 || sellerAmount >= fixed)) throw new Error("El pago mixto debe dividir la tarifa");
       const buyerAmount = money(fixed - sellerAmount);
       const row: any = new VentaExternaModel({
-        paqueteria: courier._id, paqueteria_codigo_guia: courier.codigo_guia,
+        paqueteria: courier._id, creado_por_paqueteria: true, paqueteria_codigo_guia: courier.codigo_guia,
         paqueteria_pricing_snapshot: { fixed_price: fixed, fine_every_days: courier.multa_cada_dias, fine_amount: courier.monto_multa },
         carnet_vendedor: `PAQ-${courier.codigo_guia}`, vendedor: courier.nombre, telefono_vendedor: "",
         numero_paquete: index + 1, comprador: buyer, telefono_comprador: phone, descripcion_paquete: description,
         fecha_pedido: new Date(), service_origin: "external", precio_paquete: fixed, precio_paquete_unitario: fixed,
         precio_entre_sucursal: 0, precio_total: fixed, cargo_delivery: 0, costo_delivery: 0,
         esta_pagado: paid, monto_paga_vendedor: sellerAmount, monto_paga_comprador: buyerAmount,
-        deuda_comprador: buyerAmount, saldo_cobrar: buyerAmount, estado_pedido: "En Espera", delivered: false, is_external: true,
-        origen_sucursal: Types.ObjectId.isValid(input.origen_sucursal_id) ? input.origen_sucursal_id : undefined,
-        destino_sucursal: Types.ObjectId.isValid(input.destino_sucursal_id) ? input.destino_sucursal_id : undefined,
+        deuda_comprador: buyerAmount, saldo_cobrar: buyerAmount, estado_pedido: SEND_TO_BRANCH_STATUS, delivered: false, is_external: true,
+        sucursal: originId, origen_sucursal: originId, destino_paqueteria: courier._id, lugar_entrega: courier.nombre,
       });
       await OrderGuideService.assignOrderGuide(row);
       await row.save(); created.push(row.toObject());
@@ -70,7 +83,7 @@ export const createMyCourierOrders = async (req: Request, res: Response) => {
 };
 
 export const updateMyCourierOrder = async (req: Request, res: Response) => {
-  const row: any = await VentaExternaModel.findOne({ _id: req.params.id, paqueteria: courierId(res), estado_pedido: "En Espera", anulado: { $ne: true } });
+  const row: any = await VentaExternaModel.findOne({ _id: req.params.id, paqueteria: courierId(res), creado_por_paqueteria: true, estado_pedido: { $in: editableStatuses }, anulado: { $ne: true } });
   if (!row) return res.status(404).json({ success: false, msg: "Pedido no editable" });
   const allowed = ["comprador", "telefono_comprador", "descripcion_paquete"];
   allowed.forEach((key) => { if (req.body?.[key] !== undefined) row[key] = String(req.body[key] || "").trim(); });
@@ -79,7 +92,7 @@ export const updateMyCourierOrder = async (req: Request, res: Response) => {
 
 export const annulMyCourierOrder = async (req: Request, res: Response) => {
   const row: any = await VentaExternaModel.findOneAndUpdate(
-    { _id: req.params.id, paqueteria: courierId(res), estado_pedido: "En Espera", anulado: { $ne: true } },
+    { _id: req.params.id, paqueteria: courierId(res), creado_por_paqueteria: true, estado_pedido: { $in: editableStatuses }, anulado: { $ne: true } },
     { $set: { anulado: true, anulado_en: new Date(), anulado_por: String(res.locals.auth?.email || "paqueteria"), motivo_anulacion: String(req.body?.reason || "Anulado por paqueteria") } }, { new: true }
   ).lean();
   if (!row) return res.status(404).json({ success: false, msg: "Pedido no anulable" });

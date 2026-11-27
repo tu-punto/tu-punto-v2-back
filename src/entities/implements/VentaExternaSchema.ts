@@ -13,6 +13,7 @@ const VentaExternaSchema = new Schema({
         required: false,
         index: true,
     },
+    creado_por_paqueteria: { type: Boolean, default: false },
     paqueteria_codigo_guia: {
         type: Number,
         required: false,
@@ -152,6 +153,11 @@ const VentaExternaSchema = new Schema({
     destino_sucursal: {
         type: Schema.Types.ObjectId,
         ref: 'Sucursal',
+        required: false
+    },
+    destino_paqueteria: {
+        type: Schema.Types.ObjectId,
+        ref: 'Paqueteria',
         required: false
     },
     nombre_flota: {

@@ -11,7 +11,7 @@ const listBranchPrices = async (originBranchId?: string) => {
     .sort({ origen_sucursal: 1, destino_sucursal: 1 })
     .populate({ path: "origen_sucursal", select: "_id nombre" })
     .populate({ path: "destino_sucursal", select: "_id nombre" })
-    .populate({ path: "destino_paqueteria", select: "_id nombre activo" })
+    .populate({ path: "destino_paqueteria", select: "_id nombre activo tipo tarifa_fija" })
     .lean();
 };
 

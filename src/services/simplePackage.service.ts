@@ -707,7 +707,7 @@ const upsertSimplePackageBranchPrice = async (params: {
   if (!origin) throw new Error("La sucursal de origen no existe");
 
   if (destinationType === "paqueteria") {
-    const courier = await PaqueteriaModel.exists({ _id: destinationId, activo: { $ne: false } });
+    const courier = await PaqueteriaModel.exists({ _id: destinationId, activo: { $ne: false }, tipo: { $ne: "externa" } });
     if (!courier) throw new Error("La paqueteria de destino no existe o esta inactiva");
   } else {
     const destination = await SucursalModel.exists({ _id: destinationId });

@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { annulMyCourierOrder, createMyCourierOrders, listMyCourierOrders, updateMyCourierOrder } from "../controllers/paqueteriaPortal.controller";
+import { annulMyCourierOrder, createMyCourierOrders, listMyCourierOrders, listMyCourierRoutes, updateMyCourierOrder } from "../controllers/paqueteriaPortal.controller";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware";
 const router = Router();
 router.use(requireAuth, requireRole("paqueteria"));
+router.get("/routes", listMyCourierRoutes);
 router.get("/orders", listMyCourierOrders);
 router.post("/orders", createMyCourierOrders);
 router.put("/orders/:id", updateMyCourierOrder);

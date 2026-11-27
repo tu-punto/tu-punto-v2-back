@@ -91,6 +91,7 @@ export interface IVentaExterna {
     sucursal?: Types.ObjectId;
     origen_sucursal?: Types.ObjectId;
     destino_sucursal?: Types.ObjectId;
+    destino_paqueteria?: Types.ObjectId;
     nombre_flota?: string;
     precio_servicio?: number;
 }

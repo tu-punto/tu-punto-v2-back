@@ -9,12 +9,14 @@ const cleanNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const dataHasGuide = (input: any) => input?.tipo !== "externa" && input?.codigo_guia != null && input.codigo_guia !== "";
+
 const normalizePayload = (input: any) => ({
   nombre: String(input?.nombre || "").trim(),
   activo: input?.activo !== false,
   tipo: input?.tipo === "externa" ? "externa" : "operativa",
-  codigo_guia: input?.codigo_guia === undefined || input?.codigo_guia === "" ? undefined : Math.floor(cleanNumber(input?.codigo_guia)),
-  slug: String(input?.slug || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+  codigo_guia: !dataHasGuide(input) ? undefined : Math.floor(cleanNumber(input?.codigo_guia)),
+  slug: input?.tipo === "externa" ? String(input?.slug || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-") : undefined,
   formato_guia: ["libre", "tupunto", "personalizado"].includes(String(input?.formato_guia)) ? input.formato_guia : "libre",
   prefijo_guia: String(input?.prefijo_guia || "").trim(),
   logo_url: String(input?.logo_url || "").trim(),
@@ -69,7 +71,7 @@ export const createPaqueteria = async (req: Request, res: Response) => {
     const created = await PaqueteriaModel.create(data);
     return res.status(201).json({ success: true, data: created });
   } catch (error: any) {
-    const duplicateMessage = error?.keyPattern?.slug ? "Ese enlace ya está en uso" : "El código de guía ya existe";
+    const duplicateMessage = error?.keyPattern?.slug ? "Ese enlace ya está en uso" : error?.keyPattern?.codigo_guia && dataHasGuide(req.body) ? "El código de guía ya existe" : "No se pudo guardar: revisa los índices de paqueterías en la base de datos";
     return res.status(400).json({ success: false, msg: error?.code === 11000 ? duplicateMessage : error?.message });
   }
 };
@@ -82,7 +84,7 @@ export const updatePaqueteria = async (req: Request, res: Response) => {
     if (!updated) return res.status(404).json({ success: false, msg: "Paqueteria no encontrada" });
     return res.json({ success: true, data: updated });
   } catch (error: any) {
-    const duplicateMessage = error?.keyPattern?.slug ? "Ese enlace ya está en uso" : "El código de guía ya existe";
+    const duplicateMessage = error?.keyPattern?.slug ? "Ese enlace ya está en uso" : error?.keyPattern?.codigo_guia && dataHasGuide(req.body) ? "El código de guía ya existe" : "No se pudo guardar: revisa los índices de paqueterías en la base de datos";
     return res.status(400).json({ success: false, msg: error?.code === 11000 ? duplicateMessage : error?.message });
   }
 };
