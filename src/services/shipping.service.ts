@@ -1421,6 +1421,19 @@ const updateShipping = async (
   const isSimplePackageOrder =
     Boolean((shipping as any)?.simple_package_order) ||
     Boolean((shipping as any)?.simple_package_source_id);
+  const paidDeliveryOnly = newData?.solo_entrega_pagada === true;
+  if (paidDeliveryOnly) {
+    if (!(shipping as any)?.pagado_al_vendedor || !["LISTO PARA RECOGER", "En camino"].includes(String(shipping.estado_pedido)) || newData.estado_pedido !== "Entregado") {
+      throw new Error("Solo se puede registrar la entrega de un pedido pendiente pagado al vendedor");
+    }
+    if (isSimplePackageOrder) {
+      throw new Error("La entrega de paquetes simples debe procesarse por su flujo habitual");
+    }
+    newData = {
+      estado_pedido: "Entregado",
+      hora_entrega_real: moment().tz("America/La_Paz").format("YYYY-MM-DD HH:mm:ss"),
+    };
+  }
   const simplePackageDestinationEditRequested =
     isSimplePackageOrder &&
     (
@@ -1434,7 +1447,7 @@ const updateShipping = async (
   }
 
   const explicitRequestedStatus = normalizeStatusValue(newData?.estado_pedido);
-  normalizeOrderPaymentData(newData, shipping);
+  if (!paidDeliveryOnly) normalizeOrderPaymentData(newData, shipping);
   if (
     String((shipping as any)?.esta_pagado || "") !== "adelanto_tu_punto" &&
     String(newData?.esta_pagado || "") === "adelanto_tu_punto" &&
@@ -1451,7 +1464,7 @@ const updateShipping = async (
     newData.adelanto_tu_punto_qr = 0;
     newData.esta_pagado = "no";
   }
-  await normalizeShippingBranches(newData, shipping);
+  if (!paidDeliveryOnly) await normalizeShippingBranches(newData, shipping);
   const simplePackageDestination = isSimplePackageOrder
     ? simplePackageDestinationEditRequested
       ? null
@@ -1634,8 +1647,8 @@ const updateShipping = async (
           id_vendedor: sale.id_vendedor.toString(),
           utilidad: sale.utilidad,
           id_pedido: sale.id_pedido || shippingId,
-          subtotal: newData.pagado_al_vendedor ? 0 : subtotal,
-          pagado_al_vendedor: !!newData.pagado_al_vendedor,
+          subtotal: (newData.pagado_al_vendedor ?? (shipping as any).pagado_al_vendedor) ? 0 : subtotal,
+          pagado_al_vendedor: !!(newData.pagado_al_vendedor ?? (shipping as any).pagado_al_vendedor),
         });
       });
 
